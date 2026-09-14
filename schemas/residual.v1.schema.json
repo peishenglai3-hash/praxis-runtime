@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/residual.v1.schema.json",
+  "title": "Praxis Residual v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "kind",
+    "observed",
+    "field",
+    "confidence",
+    "persistence",
+    "effect",
+    "evidence",
+    "detectedAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "kind": {
+      "enum": [
+        "outcome",
+        "timing",
+        "rule",
+        "representation",
+        "relation",
+        "retrospective"
+      ]
+    },
+    "baseline": { "$ref": "#/$defs/reference" },
+    "observed": { "$ref": "#/$defs/reference" },
+    "field": { "$ref": "#/$defs/fieldContext" },
+    "magnitude": { "type": "number", "minimum": 0, "maximum": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "persistence": {
+      "enum": ["transient", "repeated", "persistent"]
+    },
+    "effect": {
+      "enum": ["harmful", "productive", "neutral", "unknown"]
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" }
+    },
+    "detectedAt": { "$ref": "#/$defs/utcTimestamp" }
+  },
+  "$defs": {
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "value"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 },
+        "value": { "$ref": "#/$defs/jsonValue" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin"],
+      "anyOf": [
+        { "required": ["eventId"] },
+        { "required": ["assetId"] },
+        { "required": ["artifactHash"] }
+      ],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "assetId": { "type": "string", "minLength": 1 },
+        "artifactHash": { "type": "string", "minLength": 1 },
+        "origin": {
+          "enum": ["direct", "declared", "inferred", "institutional"]
+        },
+        "exposureInfluenced": { "type": "boolean" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "enum": ["human", "agent", "system", "tool", "model"]
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "requiredEventTypes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "requiredCheckpoints": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "fieldContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "externalVerification",
+        "consequence",
+        "reversibility",
+        "feedbackLatency",
+        "actors",
+        "explicitRules"
+      ],
+      "properties": {
+        "taskType": { "type": "string", "minLength": 1 },
+        "externalVerification": { "enum": ["strong", "medium", "weak"] },
+        "consequence": { "enum": ["low", "medium", "high"] },
+        "reversibility": { "enum": ["easy", "partial", "hard"] },
+        "feedbackLatency": { "enum": ["short", "medium", "long"] },
+        "actors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/actor" }
+        },
+        "explicitRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        }
+      }
+    }
+  }
+}

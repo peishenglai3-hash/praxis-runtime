@@ -112,6 +112,19 @@ Phase 2 / EPIC-003 and EPIC-004 has passed the local implementation gate, condit
 
 The Phase 2 red-team review initially returned `NO-GO/HOLD`. The implementation then closed the reported stale projection overwrite, future cursor, incomplete plan/exposure binding, unverified source event, provenance, and silent `REUSE` fallback paths. A missing source-event fixture in the isolated scenario was also found by the final gate and corrected; it was recorded in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The Phase 2 local checkpoint is kept locally and has not been pushed.
 
+Phase 3 / EPIC-005 and EPIC-006 is now an implementation candidate, with the final gate pending two read-only reviews and a fresh full verification run:
+
+- `ResidualDetector` covers explicit-expectation outcome checks, subscription/seq/staleness timing checks, and declared rule event/checkpoint checks: `PASS` in targeted tests;
+- automatic residual `effect` remains `unknown`; magnitude, confidence, persistence, evidence, and field context remain separate;
+- `ReflectionController` returns deterministic `STOP` / `CONTINUE` / `ESCALATE` proposals with bounded hypotheses and hard budgets; it cannot write events, call Agents, execute Tools, or promote Assets;
+- `Phase3Runtime` records `residual.detected` and `reflection.proposed` only after explicit use-case calls, with matching evidence linkage and idempotent retry semantics;
+- low-level context EventWriter bypass protection is enforced by migration `0005_context_event_integrity.sql` and negative tests;
+- four-process same-database residual/reflection idempotency, concurrent no-false-positive, and no-self-call scenarios: `PASS`;
+- versioned residual/reflection interchange shapes are present in [`schemas/`](./schemas/), while external schema/runtime parity remains a gate;
+- trusted writer/ACL, human-control APIs, production CLI/daemon assembly, real author-owned golden cases, privacy/purge policy, and Node `22.13.0` runner evidence remain explicit pre-Phase-4 inputs in [`docs/PHASE-3-INPUTS.md`](./docs/PHASE-3-INPUTS.md).
+
+Phase 3 does not turn a permission label into authorization and does not claim production readiness. The initial concurrency actor mismatch and its resolution are preserved in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The current local Phase 3 checkpoint is not pushed.
+
 Phase 1 deliberately stores event materials rather than verified interpretations. Structured `evidence`, `links`, and required `provenance` round-trip as contract-bound references, while derived/candidate/confirmed record classification is deferred to the projection and context phases. The envelope actor is caller-declared, not an authenticated writer; runtime permissions are a later boundary.
 
 ## Development
@@ -123,7 +136,7 @@ pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-`pnpm verify` checks formatting, lint, explicit workspace dependencies, dependency direction, intentional cycle rejection, forbidden-direction fixtures, TypeScript project references, tests, all workspace builds, multi-process concurrency, operation lifecycle semantics, 10,000 append ordering/query/lookup, and crash recovery.
+`pnpm verify` checks formatting, lint, explicit workspace dependencies, dependency direction, intentional cycle rejection, forbidden-direction fixtures, TypeScript project references, tests, all workspace builds, multi-process concurrency, operation lifecycle semantics, 10,000 append ordering/query/lookup, crash recovery, Phase 2 replay/context behavior, and Phase 3 residual/reflection safety scenarios.
 
 When implementation and the Bible diverge, stop structural expansion and record an `RFC MISMATCH` with the requested state, observed state, impact, evidence, and decision required from the human owner.
 

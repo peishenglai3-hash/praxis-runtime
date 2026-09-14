@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/reflection-proposal.v1.schema.json",
+  "title": "Praxis Reflection Proposal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "residualId",
+    "decision",
+    "reasons",
+    "hypotheses",
+    "recommendedActions",
+    "budgetUsed"
+  ],
+  "properties": {
+    "residualId": { "type": "string", "minLength": 1 },
+    "decision": { "enum": ["STOP", "CONTINUE", "ESCALATE"] },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/hypothesis" }
+    },
+    "recommendedActions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "budgetUsed": { "$ref": "#/$defs/budgetUsage" }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin"],
+      "anyOf": [
+        { "required": ["eventId"] },
+        { "required": ["assetId"] },
+        { "required": ["artifactHash"] }
+      ],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "assetId": { "type": "string", "minLength": 1 },
+        "artifactHash": { "type": "string", "minLength": 1 },
+        "origin": {
+          "enum": ["direct", "declared", "inferred", "institutional"]
+        },
+        "exposureInfluenced": { "type": "boolean" }
+      }
+    },
+    "hypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement",
+        "support",
+        "counterevidence",
+        "testability",
+        "estimatedCost"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "statement": { "type": "string", "minLength": 1 },
+        "support": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "counterevidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "testability": { "type": "string", "minLength": 1 },
+        "estimatedCost": { "type": "number", "minimum": 0 }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "requiredPermission", "parameters"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": {
+          "enum": [
+            "collect-evidence",
+            "verify-external",
+            "request-human-confirmation"
+          ]
+        },
+        "requiredPermission": {
+          "enum": ["none", "external-verifier", "human-confirmation"]
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "budgetUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["depth", "hypotheses", "toolCalls", "elapsedMs"],
+      "properties": {
+        "depth": { "type": "integer", "minimum": 0 },
+        "hypotheses": { "type": "integer", "minimum": 0 },
+        "toolCalls": { "type": "integer", "minimum": 0 },
+        "elapsedMs": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
