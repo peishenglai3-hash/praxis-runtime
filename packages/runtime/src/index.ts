@@ -59,6 +59,14 @@ export class Phase2Runtime {
   }
 
   appendEvent(event: EventEnvelope): EventAppendResult {
+    if (
+      event.type === "context.plan.created" ||
+      event.type === "context.item.exposed"
+    ) {
+      throw new Error(
+        "context events must be recorded through the runtime context use-cases",
+      );
+    }
     return this.ports.events.append(event);
   }
 

@@ -293,10 +293,12 @@ export function createContextExposureEvent(input: {
     payload: {
       materialClassification: "inferred",
       rankingVersion: input.proposal.rankingVersion,
+      generatedAt: input.proposal.generatedAt,
       reason: input.proposal.reason,
       itemId: input.proposal.itemId,
       sourceId: input.proposal.sourceId,
       sourceEventId: input.proposal.sourceEventId,
+      sourceOrigin: input.proposal.sourceOrigin,
       stateSeq: input.proposal.stateSeq,
       planId,
     },

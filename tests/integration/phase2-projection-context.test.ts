@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { EventEnvelope } from "../../packages/contracts/src/index.js";
-import type { ContextSource } from "../../packages/context/src/index.js";
+import {
+  contextPlanEventId,
+  type ContextSource,
+} from "../../packages/context/src/index.js";
 import { Phase2Runtime } from "../../packages/runtime/src/index.js";
 import {
   ProjectionEngine,
@@ -311,6 +314,9 @@ describe("Phase 2 projection persistence", () => {
     expect(retriedPlanEvent.inserted).toBe(false);
     expect(exposureEvent.inserted).toBe(true);
     expect(retriedExposureEvent.inserted).toBe(false);
+    expect(() => runtime.appendEvent(planEvent.record)).toThrowError(
+      "context events must be recorded through the runtime context use-cases",
+    );
     expect(currentStore.getSince(1).map((event) => event.type)).toEqual([
       "context.plan.created",
       "context.item.exposed",
@@ -406,5 +412,63 @@ describe("Phase 2 projection persistence", () => {
         recordedAt: "2026-09-14T00:00:12.000Z",
       }),
     ).toThrowError("timestamps must be ordered");
+
+    const forgedPlan: EventEnvelope = makeEvent({
+      id: contextPlanEventId("low-level-forged-plan"),
+      type: "context.plan.created",
+      operationId: "low-level-forged-plan",
+      payload: {
+        classification: "candidate",
+        planId: "low-level-forged-plan",
+        stateSeq: plan.stateSeq,
+        candidateSources: [
+          {
+            ...plan.candidateSources[0]!,
+            seq: 999,
+          },
+        ],
+      },
+      provenance: { origin: "inferred", confidence: 1 },
+    });
+    expect(() => currentStore.append(forgedPlan)).toThrowError(
+      "context plan failed ledger integrity checks",
+    );
+
+    const forgedExposure: EventEnvelope = makeEvent({
+      id: "low-level-forged-exposure",
+      type: "context.item.exposed",
+      operationId: "context-exposure:runtime-plan:forged",
+      source: { kind: "context-planner", ref: "runtime-source" },
+      payload: {
+        materialClassification: "inferred",
+        rankingVersion: plan.rankingVersion,
+        reason: "forged proposal",
+        itemId: plan.exposureProposals[0]!.itemId,
+        sourceId: plan.exposureProposals[0]!.sourceId,
+        sourceEventId: plan.exposureProposals[0]!.sourceEventId,
+        stateSeq: plan.stateSeq,
+        planId: plan.planId,
+      },
+      evidence: [
+        {
+          eventId: plan.exposureProposals[0]!.sourceEventId,
+          origin: "direct",
+          exposureInfluenced: true,
+        },
+        {
+          eventId: contextPlanEventId(plan.planId),
+          origin: "inferred",
+          exposureInfluenced: true,
+        },
+      ],
+      links: {
+        derivedFrom: [plan.exposureProposals[0]!.sourceEventId],
+        respondsTo: [contextPlanEventId(plan.planId)],
+      },
+      provenance: { origin: "inferred", confidence: 1 },
+    });
+    expect(() => currentStore.append(forgedExposure)).toThrowError(
+      "context exposure failed ledger integrity checks",
+    );
   });
 });
