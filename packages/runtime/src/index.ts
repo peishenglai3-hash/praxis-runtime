@@ -26,6 +26,10 @@ import type {
   ContextPlannerInput,
   ContextExposureProposal,
 } from "@praxis/context";
+import type { ReflectionInput, ReflectionResult } from "@praxis/reflection";
+import { ReflectionController } from "@praxis/reflection";
+import type { Residual, ResidualDetectionBatch } from "@praxis/residual";
+import { ResidualDetector } from "@praxis/residual";
 import { ProjectionEngine, createCoreProjections } from "@praxis/state";
 import type { CatchUpResult, Projection } from "@praxis/state";
 
@@ -378,6 +382,278 @@ export class Phase2Runtime {
     }
     return value.toISOString();
   }
+}
+
+export type Phase3RuntimePorts = Phase2RuntimePorts;
+
+export function residualDetectedEventId(residualId: string): string {
+  return `residual-detected:${encodeURIComponent(residualId)}`;
+}
+
+export function reflectionProposalEventId(residualId: string): string {
+  return `reflection-proposed:${encodeURIComponent(residualId)}`;
+}
+
+/**
+ * Phase 3 adds pure detection/reflection and explicit event recording. The
+ * detector and controller only propose; this runtime still requires the
+ * caller to decide whether any later action is authorized.
+ */
+export class Phase3Runtime extends Phase2Runtime {
+  private readonly residualDetector = new ResidualDetector();
+  private readonly reflectionController = new ReflectionController();
+
+  constructor(private readonly phase3Ports: Phase3RuntimePorts) {
+    super(phase3Ports);
+  }
+
+  detectResiduals(input: ResidualDetectionBatch): Residual[] {
+    return this.residualDetector.detect(input);
+  }
+
+  runReflection(input: ReflectionInput): ReflectionResult {
+    return this.reflectionController.reflect(input);
+  }
+
+  recordResiduals(residuals: Residual[]): EventAppendResult[] {
+    const events = residuals.map((residual) =>
+      residualDetectedEvent(this.phase3Ports, residual),
+    );
+    return events.map((event) => this.phase3Ports.events.append(event));
+  }
+
+  recordReflectionProposal(
+    residual: Residual,
+    proposal: ReflectionResult,
+  ): EventAppendResult {
+    if (proposal.residualId !== residual.id) {
+      throw new Error("reflection proposal residualId does not match residual");
+    }
+    const residualEventId = residualDetectedEventId(residual.id);
+    const residualEvent = this.phase3Ports.events.getById(residualEventId);
+    if (
+      residualEvent === null ||
+      residualEvent.type !== "residual.detected" ||
+      residualEvent.operationId !== residual.id ||
+      stableStringify(residualEvent.payload) !==
+        stableStringify(residualPayload(residual))
+    ) {
+      throw new Error(
+        "reflection proposal requires a matching recorded residual.detected event",
+      );
+    }
+
+    const occurredAt = nowIsoAtLeast(
+      this.phase3Ports.clock,
+      residualEvent.recordedAt,
+    );
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: reflectionProposalEventId(residual.id),
+      type: "reflection.proposed",
+      occurredAt,
+      observedAt: occurredAt,
+      recordedAt: occurredAt,
+      actor: this.phase3Ports.actor,
+      operationId: `reflection:${residual.id}`,
+      source: { kind: "reflection-controller", ref: residual.id },
+      payload: reflectionProposalPayload(residual, proposal),
+      evidence: [
+        ...residual.evidence.map(copyEvidenceRef),
+        { eventId: residualEventId, origin: "inferred" },
+      ],
+      links: {
+        respondsTo: [residualEventId],
+        derivedFrom: [
+          residualEventId,
+          ...eventIdsFromEvidence(residual.evidence),
+        ],
+      },
+      provenance: { origin: "inferred", confidence: residual.confidence },
+    };
+    return this.phase3Ports.events.append(event);
+  }
+}
+
+function residualDetectedEvent(
+  ports: Phase3RuntimePorts,
+  residual: Residual,
+): EventEnvelope {
+  assertResidualForRecording(ports, residual);
+  const occurredAt = residual.detectedAt;
+  const recordedAt = nowIsoAtLeast(ports.clock, occurredAt);
+  return {
+    schemaVersion: "1",
+    eventVersion: "1",
+    id: residualDetectedEventId(residual.id),
+    type: "residual.detected",
+    occurredAt,
+    observedAt: occurredAt,
+    recordedAt,
+    actor: ports.actor,
+    operationId: residual.id,
+    source: { kind: "residual-detector", ref: residual.id },
+    payload: residualPayload(residual),
+    evidence: residual.evidence.map(copyEvidenceRef),
+    links: {
+      ...(eventIdsFromEvidence(residual.evidence).length === 0
+        ? {}
+        : { derivedFrom: eventIdsFromEvidence(residual.evidence) }),
+    },
+    provenance: { origin: "inferred", confidence: residual.confidence },
+  };
+}
+
+function reflectionProposalPayload(
+  residual: Residual,
+  proposal: ReflectionResult,
+): JsonObject {
+  return {
+    materialClassification: "inferred",
+    residualId: residual.id,
+    decision: proposal.decision,
+    reasons: [...proposal.reasons],
+    hypotheses: proposal.hypotheses.map((hypothesis) => ({
+      id: hypothesis.id,
+      statement: hypothesis.statement,
+      support: hypothesis.support.map(evidencePayload),
+      counterevidence: hypothesis.counterevidence.map(evidencePayload),
+      testability: hypothesis.testability,
+      estimatedCost: hypothesis.estimatedCost,
+    })),
+    recommendedActions: proposal.recommendedActions.map((action) => ({
+      id: action.id,
+      kind: action.kind,
+      requiredPermission: action.requiredPermission,
+      parameters: action.parameters,
+    })),
+    budgetUsed: proposal.budgetUsed,
+  } as unknown as JsonObject;
+}
+
+function residualPayload(residual: Residual): JsonObject {
+  return {
+    materialClassification: "inferred",
+    residualId: residual.id,
+    kind: residual.kind,
+    ...(residual.baseline === undefined
+      ? {}
+      : { baseline: referencePayload(residual.baseline) }),
+    observed: referencePayload(residual.observed),
+    field: fieldContextPayload(residual),
+    ...(residual.magnitude === undefined
+      ? {}
+      : { magnitude: residual.magnitude }),
+    confidence: residual.confidence,
+    persistence: residual.persistence,
+    effect: residual.effect,
+    evidence: residual.evidence.map(evidencePayload),
+    detectedAt: residual.detectedAt,
+  } as unknown as JsonObject;
+}
+
+function referencePayload(reference: {
+  kind: string;
+  id: string;
+  value: JsonValue;
+}): JsonObject {
+  return { kind: reference.kind, id: reference.id, value: reference.value };
+}
+
+function fieldContextPayload(residual: Residual): JsonObject {
+  const field = residual.field;
+  return {
+    ...(field.taskType === undefined ? {} : { taskType: field.taskType }),
+    externalVerification: field.externalVerification,
+    consequence: field.consequence,
+    reversibility: field.reversibility,
+    feedbackLatency: field.feedbackLatency,
+    actors: field.actors.map((actor) => ({
+      type: actor.type,
+      id: actor.id,
+    })),
+    explicitRules: field.explicitRules.map((rule) => ({
+      id: rule.id,
+      ...(rule.requiredEventTypes === undefined
+        ? {}
+        : { requiredEventTypes: [...rule.requiredEventTypes] }),
+      ...(rule.requiredCheckpoints === undefined
+        ? {}
+        : { requiredCheckpoints: [...rule.requiredCheckpoints] }),
+    })),
+  } as unknown as JsonObject;
+}
+
+function evidencePayload(evidence: EvidenceRef): JsonObject {
+  return {
+    ...(evidence.eventId === undefined ? {} : { eventId: evidence.eventId }),
+    ...(evidence.assetId === undefined ? {} : { assetId: evidence.assetId }),
+    ...(evidence.artifactHash === undefined
+      ? {}
+      : { artifactHash: evidence.artifactHash }),
+    origin: evidence.origin,
+    ...(evidence.exposureInfluenced === undefined
+      ? {}
+      : { exposureInfluenced: evidence.exposureInfluenced }),
+  };
+}
+
+function copyEvidenceRef(evidence: EvidenceRef): EvidenceRef {
+  return { ...evidence };
+}
+
+function eventIdsFromEvidence(evidence: EvidenceRef[]): string[] {
+  return [
+    ...new Set(
+      evidence.flatMap((item) =>
+        item.eventId === undefined ? [] : [item.eventId],
+      ),
+    ),
+  ];
+}
+
+function assertResidualForRecording(
+  ports: Phase3RuntimePorts,
+  residual: Residual,
+): void {
+  if (residual.id.length < 1) throw new Error("residual id is required");
+  if (residual.evidence.length < 1) {
+    throw new Error("residual recording requires evidence");
+  }
+  if (
+    !Number.isFinite(residual.confidence) ||
+    residual.confidence < 0 ||
+    residual.confidence > 1
+  ) {
+    throw new Error("residual confidence must be between 0 and 1");
+  }
+  assertCanonicalTimestamp(residual.detectedAt, "residual detectedAt");
+  for (const evidence of residual.evidence) {
+    if (evidence.eventId === undefined) continue;
+    const sourceEvent = ports.events.getById(evidence.eventId);
+    if (sourceEvent === null) {
+      throw new Error("residual evidence event is not present in the ledger");
+    }
+    if (sourceEvent.provenance.origin !== evidence.origin) {
+      throw new Error(
+        "residual evidence origin does not match ledger provenance",
+      );
+    }
+  }
+}
+
+function nowIsoAtLeast(clock: Clock, lowerBound: string): string {
+  const now = clock.now();
+  if (Number.isNaN(now.getTime()))
+    throw new Error("clock returned an invalid date");
+  const lowerBoundMilliseconds = Date.parse(lowerBound);
+  if (!Number.isSafeInteger(lowerBoundMilliseconds)) {
+    throw new Error("timestamp lower bound is not canonical");
+  }
+  return new Date(
+    Math.max(now.getTime(), lowerBoundMilliseconds),
+  ).toISOString();
 }
 
 function asJsonObject(value: JsonValue | undefined): JsonObject | null {
