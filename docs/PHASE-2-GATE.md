@@ -44,7 +44,7 @@ In addition to the Phase 0/1 checks, the Phase 2 suite currently covers 30 unit/
 
 ## Local evidence record
 
-The final local verification target is system Node.js `v24.15.0` and bundled Node.js `v24.19.0`, both with `node:sqlite` available. After the final source, fixture, and documentation updates, `pnpm verify` exited with code 0 on both runtimes. Each run reported 30 tests, Phase 1 concurrency/crash/10,000 append success, and the Phase 2 replay/rebuild/context plus same-database projection scenario; the recorded throughput was 33,285 ms on system Node and 43,473 ms on bundled Node. These timings are environment evidence, not a performance promise. Node.js `22.13.0` is not claimed locally because source code has not been uploaded to the private remote.
+The final local verification target is system Node.js `v24.15.0` and bundled Node.js `v24.19.0`, both with `node:sqlite` available. On the clean Phase 2 checkpoint, `pnpm verify` exited with code 0 on both runtimes. Each run reported 30 tests, Phase 1 concurrency/crash/10,000 append success, and the Phase 2 replay/rebuild/context plus same-database projection scenario; the recorded throughput was 32,711 ms on system Node and 33,259 ms on bundled Node. These timings are environment evidence, not a performance promise. Node.js `22.13.0` is not claimed locally because source code has not been uploaded to the private remote.
 
 ## Deferred gates
 
