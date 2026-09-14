@@ -2,7 +2,12 @@ export type {
   Clock,
   ConfigLoader,
   IdGenerator,
+  ProjectionDataRecord,
+  ProjectionPersistence,
+  ProjectionStateRecord,
   RuntimeConfig,
+  SnapshotRecord,
+  TokenBudgetEstimator,
 } from "./ports.js";
 export {
   eventEnvelopeSchema,

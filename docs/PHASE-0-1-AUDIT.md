@@ -2,7 +2,7 @@
 
 Date: 2026-09-14
 
-Status: CONDITIONAL PASS for the hardened local implementation; Phase 2 remains HOLD pending final three-way review, local immutable checkpoint, and Node 22.13.0 runner evidence.
+Status: PASS for the hardened local Phase 0/1 implementation; Node 22.13.0 remains separate external evidence, and Phase 2 is gated independently.
 
 ## Scope and source order
 
@@ -24,7 +24,7 @@ The first-generation public `codex-habit` repository remains a separate historic
 
 ## Previously recorded breakpoint recheck
 
-BP-001 through BP-016 document the native-driver failure, `node:sqlite` adoption, migration races, WAL startup ordering, dependency graph resolution, raw-handle exposure, timestamp and hash integrity, tooling drift, and the unavailable Node 22.13.0 runner. The remediation pass must re-run the relevant tests and update each affected entry with current evidence; a historical “fixed” sentence is not a substitute for a current verification result.
+BP-001 through BP-022 document the native-driver failure, `node:sqlite` adoption, migration races, WAL startup ordering, dependency graph resolution, raw-handle exposure, timestamp and hash integrity, tooling drift, Phase 1 strict-contract repairs, Phase 2 red-team repairs, and the unavailable Node 22.13.0 runner. The remediation pass re-ran the relevant tests and updated each affected entry with current evidence; a historical “fixed” sentence is not a substitute for a current verification result.
 
 ## Remediation evidence — 2026-09-14
 
@@ -35,7 +35,7 @@ BP-001 through BP-016 document the native-driver failure, `node:sqlite` adoption
 | AUD-003 | Resolved locally          | `pnpm phase1:throughput`: 10,000 appends, ordered seq, filtered query, and operation lookup pass; latest local run was 30,851 ms. This is a recorded environment result, not a performance promise. |
 | AUD-004 | Resolved locally          | `EventReader.query` uses parameterized exclusive seq cursors and type/session/trace/actor filters; integration coverage passes.                                                                     |
 | AUD-005 | Resolved locally          | Migration status is exposed by the store; applied migration holes are rejected; checksum and hole tests pass.                                                                                       |
-| AUD-006 | Pending checkpoint        | Remote tree remains README/LICENSE-only. A local immutable checkpoint must be created before Phase 2; the worktree is ready for that checkpoint.                                                    |
+| AUD-006 | Resolved locally          | Remote tree remains README/LICENSE-only by owner instruction; local immutable checkpoint `3517725` exists and provides the Phase 0/1 rollback boundary.                                             |
 | AUD-007 | Pending external evidence | System Node 24.15.0 and bundled Node 24.19.0 pass local probes; Node 22.13.0 CI has not run because source has not been uploaded.                                                                   |
 
 The first hardening test pass also recorded two repairable execution mismatches: a Jest-only `--runInBand` flag was rejected by Vitest, and the crash worker initially omitted the new NOT NULL provenance parameter. Neither changed production data; both were corrected and the intended tests were rerun successfully. A further migration preflight slice now rejects invalid legacy shape and hash before table replacement and proves rollback in integration tests.
@@ -43,9 +43,9 @@ The first hardening test pass also recorded two repairable execution mismatches:
 ## Rollback points
 
 - The remote repository is a separate README-only bootstrap. Its verified tree contains only `README.md` and `LICENSE`; no local source, lockfile, database, or test output has been uploaded.
-- The current worktree is still an uncommitted local implementation snapshot. Before Phase 2 code is accepted, create a local commit or an owner-approved archive checkpoint; a staged diff alone is reviewable but is not an immutable rollback point.
+- Local checkpoint `3517725` is the immutable Phase 0/1 rollback point. Phase 2 changes remain a separate local worktree slice until its own gate is closed; a staged diff alone is not treated as a rollback point.
 - Database migrations remain forward-only. The contract correction must be additive and transactional; a failed table rebuild must leave the prior database readable, and an applied migration file must not be edited in place.
 
 ## Gate decision
 
-Phase 2 remains closed until the local rollback checkpoint is established, the final three-way review accepts the hardening, and the Node status is reported without conflating Node 24 local evidence with Node 22.13.0 CI evidence.
+Phase 0/1 is closed locally. The review does not claim Node 22.13.0 compatibility evidence: that requires the configured external runner, which is intentionally unavailable while source code remains off GitHub. Phase 2 has its own gate and rollback point.

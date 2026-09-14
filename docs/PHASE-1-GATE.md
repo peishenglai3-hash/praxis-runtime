@@ -1,6 +1,6 @@
 # Phase 1 Gate Record
 
-Status: conditional pass for the hardened local ledger substrate; system and bundled local gates are closed, while Phase 2 remains held until the local immutable checkpoint is created. Node 22.13.0 remains separate external evidence.
+Status: conditional pass for the hardened local ledger substrate; system and bundled local gates are closed, and local immutable checkpoint `3517725` is established. Node 22.13.0 remains separate external evidence.
 
 ## Scope
 
@@ -39,7 +39,7 @@ The Node 22.13.0 CI runner is a separate evidence requirement. Node 22.5.0 intro
 
 The initial and final pre-correction two-agent reviews found and caused correction of the public raw SQLite handle, Node version declaration, invalid-date atomicity, `__proto__` loss in canonicalization and contract parsing, migration integrity, operation-id coverage, process cleanup, WAL startup ordering, and tooling path issues.
 
-The post-hardening review was reconciled against the final worktree rather than an earlier snapshot: the engineering report's stale pre-fix failures were re-run and closed by the final system/bundled gates; the theory reviewer confirmed `Phase 1 条件通过` and no core semantic drift. Both retain `CONDITIONAL PASS / Phase 2 HOLD` until the local checkpoint and later external/boundary gates are explicit.
+The post-hardening review was reconciled against the final worktree rather than an earlier snapshot: the engineering report's stale pre-fix failures were re-run and closed by the final system/bundled gates; the theory reviewer confirmed `Phase 1 条件通过` and no core semantic drift. Phase 2 is recorded separately as a bounded local pass after its own red-team and verification gate; Node 22.13.0 and later external/boundary gates remain explicit conditions.
 
 ## Deferred boundaries
 
@@ -47,4 +47,4 @@ The post-hardening review was reconciled against the final worktree rather than 
 - Derived/candidate/confirmed record classification belongs to the projection/context phases.
 - JSON Schema format assertion and runtime Zod validation must receive a parity gate before external producers are admitted.
 - Payload size/depth limits, production-scale WAL pressure, remote CI, privacy purge semantics, and legacy migration require later gates.
-- The remote private bootstrap remains README/LICENSE-only by owner instruction. A local immutable checkpoint is being created before Phase 2; no code will be pushed.
+- The remote private bootstrap remains README/LICENSE-only by owner instruction. Local immutable checkpoint `3517725` exists before Phase 2; no code will be pushed.

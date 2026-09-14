@@ -16,7 +16,11 @@ import type {
   EvidenceRef,
   OperationState,
   OperationStatus,
+  ProjectionDataRecord,
+  ProjectionPersistence,
+  ProjectionStateRecord,
   SourceRef,
+  SnapshotRecord,
   Provenance,
   JsonValue,
 } from "@praxis/contracts";
@@ -236,7 +240,9 @@ function rowToRecord(row: EventRow): EventRecord {
   };
 }
 
-export class SqliteEventStore implements EventReader, EventWriter {
+export class SqliteEventStore
+  implements EventReader, EventWriter, ProjectionPersistence
+{
   readonly migrationVersion: number;
   readonly migrationStatus: MigrationStatus;
   readonly #database: DatabaseSyncConnection;
@@ -501,6 +507,395 @@ export class SqliteEventStore implements EventReader, EventWriter {
     return requireNumber(row.last_seq, "last_seq");
   }
 
+  getProjectionState(projectionName: string): ProjectionStateRecord | null {
+    this.assertNonEmpty(projectionName, "projectionName");
+    const row = this.#database
+      .prepare("SELECT * FROM projection_state WHERE projection_name = ?")
+      .get(projectionName) as Record<string, unknown> | undefined;
+    if (row === undefined) return null;
+    const lastSeq = requireNumber(row.last_seq, "last_seq");
+    this.assertLedgerCursor(lastSeq);
+    return {
+      projectionName: requireString(row.projection_name, "projection_name"),
+      projectionVersion: requireNumber(
+        row.projection_version,
+        "projection_version",
+      ),
+      lastSeq,
+      state: readJson(
+        requireString(row.state_json, "state_json"),
+        "state_json",
+      ),
+      updatedAt: requireNumber(row.updated_at, "updated_at"),
+    };
+  }
+
+  saveProjectionState(
+    record: ProjectionStateRecord,
+    expectedLastSeq?: number,
+  ): void {
+    this.assertProjectionStateRecord(record);
+    if (
+      expectedLastSeq !== undefined &&
+      (!Number.isSafeInteger(expectedLastSeq) || expectedLastSeq < 0)
+    ) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "expectedLastSeq must be a non-negative safe integer",
+      );
+    }
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.assertLedgerCursor(record.lastSeq);
+      const existing = this.#database
+        .prepare(
+          "SELECT projection_version, last_seq, state_json, updated_at FROM projection_state WHERE projection_name = ?",
+        )
+        .get(record.projectionName) as Record<string, unknown> | undefined;
+      if (existing === undefined) {
+        if (expectedLastSeq !== undefined && expectedLastSeq !== 0) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "projection cursor compare-and-set failed: state is absent",
+            { expectedLastSeq, actualLastSeq: null },
+          );
+        }
+      } else {
+        const actualVersion = requireNumber(
+          existing.projection_version,
+          "projection_version",
+        );
+        const actualLastSeq = requireNumber(existing.last_seq, "last_seq");
+        const nextStateJson = stableStringify(record.state);
+        const actualStateJson = requireString(
+          existing.state_json,
+          "state_json",
+        );
+        const actualUpdatedAt = requireNumber(
+          existing.updated_at,
+          "updated_at",
+        );
+        if (
+          expectedLastSeq !== undefined &&
+          actualLastSeq !== expectedLastSeq
+        ) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "projection cursor compare-and-set failed",
+            { expectedLastSeq, actualLastSeq },
+          );
+        }
+        if (actualVersion !== record.projectionVersion) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "projection version changed during catch-up",
+            {
+              expectedVersion: record.projectionVersion,
+              actualVersion,
+            },
+          );
+        }
+        if (actualLastSeq > record.lastSeq) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "stale projection state cannot overwrite a newer cursor",
+            { actualLastSeq, incomingLastSeq: record.lastSeq },
+          );
+        }
+        if (actualLastSeq === record.lastSeq) {
+          if (
+            actualStateJson !== nextStateJson ||
+            actualUpdatedAt !== record.updatedAt
+          ) {
+            throw new StoreError(
+              "STORAGE_ERROR",
+              "projection state conflicts at the same cursor",
+              { lastSeq: record.lastSeq },
+            );
+          }
+          this.#database.exec("COMMIT");
+          return;
+        }
+      }
+      this.#database
+        .prepare(
+          `
+          INSERT INTO projection_state (
+            projection_name, projection_version, last_seq, state_json, updated_at
+          ) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(projection_name) DO UPDATE SET
+            projection_version = excluded.projection_version,
+            last_seq = excluded.last_seq,
+            state_json = excluded.state_json,
+            updated_at = excluded.updated_at
+        `,
+        )
+        .run(
+          record.projectionName,
+          record.projectionVersion,
+          record.lastSeq,
+          stableStringify(record.state),
+          record.updatedAt,
+        );
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original persistence error.
+      }
+      if (error instanceof StoreError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new StoreError("STORAGE_ERROR", message);
+    }
+  }
+
+  replaceProjection(
+    record: ProjectionStateRecord,
+    data: ProjectionDataRecord[],
+  ): void {
+    this.assertProjectionStateRecord(record);
+    for (const entity of data) this.assertProjectionDataRecord(entity, record);
+
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.assertLedgerCursor(record.lastSeq);
+      const existing = this.#database
+        .prepare(
+          "SELECT projection_version, last_seq, state_json, updated_at FROM projection_state WHERE projection_name = ?",
+        )
+        .get(record.projectionName) as Record<string, unknown> | undefined;
+      if (existing !== undefined) {
+        const actualVersion = requireNumber(
+          existing.projection_version,
+          "projection_version",
+        );
+        const actualLastSeq = requireNumber(existing.last_seq, "last_seq");
+        if (record.projectionVersion < actualVersion) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "older projection version cannot replace a newer version",
+            { actualVersion, incomingVersion: record.projectionVersion },
+          );
+        }
+        if (record.lastSeq < actualLastSeq) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "stale projection rebuild cannot overwrite a newer cursor",
+            { actualLastSeq, incomingLastSeq: record.lastSeq },
+          );
+        }
+        if (
+          record.projectionVersion === actualVersion &&
+          record.lastSeq === actualLastSeq &&
+          (requireString(existing.state_json, "state_json") !==
+            stableStringify(record.state) ||
+            requireNumber(existing.updated_at, "updated_at") !==
+              record.updatedAt)
+        ) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "projection rebuild conflicts at the same cursor",
+            { lastSeq: record.lastSeq },
+          );
+        }
+      }
+      this.#database.exec(`
+        CREATE TEMP TABLE IF NOT EXISTS projection_data_staging (
+          projection_name TEXT NOT NULL,
+          entity_key TEXT NOT NULL,
+          projection_version INTEGER NOT NULL,
+          last_seq INTEGER NOT NULL,
+          state_json TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          PRIMARY KEY (projection_name, entity_key)
+        )
+      `);
+      this.#database.exec("DELETE FROM temp.projection_data_staging");
+      const stagingInsert = this.#database.prepare(`
+        INSERT INTO temp.projection_data_staging (
+          projection_name, entity_key, projection_version,
+          last_seq, state_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      for (const entity of data) {
+        stagingInsert.run(
+          entity.projectionName,
+          entity.entityKey,
+          entity.projectionVersion,
+          entity.lastSeq,
+          stableStringify(entity.state),
+          entity.updatedAt,
+        );
+      }
+      this.#database
+        .prepare(
+          `
+          INSERT INTO projection_state (
+            projection_name, projection_version, last_seq, state_json, updated_at
+          ) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(projection_name) DO UPDATE SET
+            projection_version = excluded.projection_version,
+            last_seq = excluded.last_seq,
+            state_json = excluded.state_json,
+            updated_at = excluded.updated_at
+        `,
+        )
+        .run(
+          record.projectionName,
+          record.projectionVersion,
+          record.lastSeq,
+          stableStringify(record.state),
+          record.updatedAt,
+        );
+      this.#database
+        .prepare("DELETE FROM projection_data WHERE projection_name = ?")
+        .run(record.projectionName);
+      this.#database.exec(`
+        INSERT INTO projection_data (
+          projection_name, entity_key, projection_version,
+          last_seq, state_json, updated_at
+        )
+        SELECT projection_name, entity_key, projection_version,
+               last_seq, state_json, updated_at
+        FROM temp.projection_data_staging
+      `);
+      this.#database.exec("DROP TABLE temp.projection_data_staging");
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original persistence error.
+      }
+      if (error instanceof StoreError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new StoreError("STORAGE_ERROR", message);
+    }
+  }
+
+  clearProjectionData(projectionName: string): void {
+    this.assertNonEmpty(projectionName, "projectionName");
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.#database
+        .prepare("DELETE FROM projection_data WHERE projection_name = ?")
+        .run(projectionName);
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original persistence error.
+      }
+      if (error instanceof StoreError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new StoreError("STORAGE_ERROR", message);
+    }
+  }
+
+  getSnapshot(
+    projectionName: string,
+    projectionVersion: number,
+  ): SnapshotRecord | null {
+    this.assertNonEmpty(projectionName, "projectionName");
+    this.assertVersion(projectionVersion, "projectionVersion");
+    const row = this.#database
+      .prepare(
+        `
+        SELECT * FROM snapshots
+        WHERE projection_name = ? AND projection_version = ?
+        ORDER BY cursor_seq DESC
+        LIMIT 1
+      `,
+      )
+      .get(projectionName, projectionVersion) as
+      Record<string, unknown> | undefined;
+    if (row === undefined) return null;
+    const cursorSeq = requireNumber(row.cursor_seq, "cursor_seq");
+    this.assertLedgerCursor(cursorSeq);
+    return {
+      id: requireString(row.id, "id"),
+      projectionName: requireString(row.projection_name, "projection_name"),
+      projectionVersion: requireNumber(
+        row.projection_version,
+        "projection_version",
+      ),
+      cursorSeq,
+      state: readJson(
+        requireString(row.state_json, "state_json"),
+        "state_json",
+      ),
+      createdAt: requireNumber(row.created_at, "created_at"),
+    };
+  }
+
+  saveSnapshot(record: SnapshotRecord): void {
+    this.assertSnapshotRecord(record);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.assertLedgerCursor(record.cursorSeq);
+      const existing = this.#database
+        .prepare(
+          "SELECT projection_name, projection_version, cursor_seq, state_json, created_at FROM snapshots WHERE id = ?",
+        )
+        .get(record.id) as Record<string, unknown> | undefined;
+      if (existing !== undefined) {
+        const same =
+          requireString(existing.projection_name, "projection_name") ===
+            record.projectionName &&
+          requireNumber(existing.projection_version, "projection_version") ===
+            record.projectionVersion &&
+          requireNumber(existing.cursor_seq, "cursor_seq") ===
+            record.cursorSeq &&
+          requireString(existing.state_json, "state_json") ===
+            stableStringify(record.state) &&
+          requireNumber(existing.created_at, "created_at") === record.createdAt;
+        if (!same) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "snapshot id conflicts with existing snapshot content",
+            { id: record.id },
+          );
+        }
+        this.#database.exec("COMMIT");
+        return;
+      }
+      this.#database
+        .prepare(
+          `
+          INSERT INTO snapshots (
+            id, projection_name, projection_version, cursor_seq, state_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            projection_name = excluded.projection_name,
+            projection_version = excluded.projection_version,
+            cursor_seq = excluded.cursor_seq,
+            state_json = excluded.state_json,
+            created_at = excluded.created_at
+        `,
+        )
+        .run(
+          record.id,
+          record.projectionName,
+          record.projectionVersion,
+          record.cursorSeq,
+          stableStringify(record.state),
+          record.createdAt,
+        );
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original persistence error.
+      }
+      if (error instanceof StoreError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new StoreError("STORAGE_ERROR", message);
+    }
+  }
+
   private configureConnection(): void {
     this.#database.exec("PRAGMA busy_timeout = 5000");
     this.#database.exec("PRAGMA journal_mode = WAL");
@@ -556,6 +951,18 @@ export class SqliteEventStore implements EventReader, EventWriter {
     }
   }
 
+  private assertLedgerCursor(cursorSeq: number): void {
+    this.assertCursor(cursorSeq, "ledger");
+    const ledgerLastSeq = this.getLastSeq();
+    if (cursorSeq > ledgerLastSeq) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "derived cursor cannot be ahead of the event ledger",
+        { cursorSeq, ledgerLastSeq },
+      );
+    }
+  }
+
   private assertLimit(value: number): void {
     if (!Number.isSafeInteger(value) || value < 1 || value > 10_000) {
       throw new StoreError(
@@ -563,6 +970,58 @@ export class SqliteEventStore implements EventReader, EventWriter {
         "limit must be an integer between 1 and 10000",
       );
     }
+  }
+
+  private assertVersion(value: number, field: string): void {
+    if (!Number.isSafeInteger(value) || value < 1) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        `${field} must be a positive safe integer`,
+      );
+    }
+  }
+
+  private assertProjectionStateRecord(record: ProjectionStateRecord): void {
+    this.assertNonEmpty(record.projectionName, "projectionName");
+    this.assertVersion(record.projectionVersion, "projectionVersion");
+    this.assertCursor(record.lastSeq, "lastSeq");
+    this.assertCursor(record.updatedAt, "updatedAt");
+  }
+
+  private assertProjectionDataRecord(
+    record: ProjectionDataRecord,
+    state: ProjectionStateRecord,
+  ): void {
+    this.assertNonEmpty(record.projectionName, "projectionName");
+    this.assertNonEmpty(record.entityKey, "entityKey");
+    if (record.projectionName !== state.projectionName) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "Projection data belongs to a different projection",
+      );
+    }
+    if (record.projectionVersion !== state.projectionVersion) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "Projection data version does not match projection state",
+      );
+    }
+    if (record.lastSeq > state.lastSeq) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "Projection data cursor cannot be ahead of projection state",
+      );
+    }
+    this.assertCursor(record.lastSeq, "lastSeq");
+    this.assertCursor(record.updatedAt, "updatedAt");
+  }
+
+  private assertSnapshotRecord(record: SnapshotRecord): void {
+    this.assertNonEmpty(record.id, "id");
+    this.assertNonEmpty(record.projectionName, "projectionName");
+    this.assertVersion(record.projectionVersion, "projectionVersion");
+    this.assertCursor(record.cursorSeq, "cursorSeq");
+    this.assertCursor(record.createdAt, "createdAt");
   }
 
   private assertNonEmpty(value: string, field: string): void {

@@ -59,7 +59,7 @@ packages/reflection  bounded reflection proposals
 packages/assets      versioned reusable assets
 packages/agents      agent cursors and mailbox-facing ports
 packages/adapters    model/tool/clock/id/budget adapter ports
-packages/runtime     the only composition root
+packages/runtime     the only domain composition/use-case boundary
 apps/cli             runtime-facing command-line application
 apps/daemon          runtime-facing daemon application
 docs/                RFCs and ADRs
@@ -70,7 +70,7 @@ legacy/              isolated first-generation migration inputs
 labs/                experiments outside the core runtime
 ```
 
-The dependency direction is enforced in [`.dependency-cruiser.cjs`](./.dependency-cruiser.cjs): `contracts` is lowest, domain packages do not depend on apps, apps enter through `runtime`, and provider SDKs do not enter the core. Workspace dependencies must be declared explicitly and use `workspace:*`.
+The dependency direction is enforced in [`.dependency-cruiser.cjs`](./.dependency-cruiser.cjs): `contracts` is lowest, domain packages do not depend on apps, apps enter through `runtime`, and provider SDKs do not enter the core. Workspace dependencies must be declared explicitly and use `workspace:*`. Phase 2 provides the injectable runtime use-case boundary; production SQLite/config/clock/id/actor assembly and user-facing CLI/daemon workflows remain later work.
 
 The store intentionally exposes only the EventReader/EventWriter surface and safe migration metadata; its raw SQLite handle is private. Test-only crash injection uses an internal migration entry point and is not part of the public package export.
 
@@ -82,7 +82,7 @@ Phase 0 gate status is deliberately split:
 
 - implementation verification: `PASS`;
 - clean-copy frozen install: `PASS`;
-- immutable Git baseline: `PENDING`, temporarily permitted by the project owner.
+- immutable local Git rollback checkpoint: `PASS` at `3517725`; remote code upload remains intentionally deferred by the project owner.
 
 Phase 1 / EPIC-002 is now implemented and conditionally verified after the strict Bible re-audit:
 
@@ -96,9 +96,21 @@ Phase 1 / EPIC-002 is now implemented and conditionally verified after the stric
 - bundled Node.js `v24.19.0` full `pnpm verify`: `PASS`;
 - post-hardening engineering and theory review: `PASS` for the local Phase 1 scope, with later boundary conditions retained;
 - Node.js `22.13.0` CI runner evidence: `PENDING`;
-- immutable local Git checkpoint: being created before Phase 2; no code has been pushed.
+- immutable local Git checkpoint: `3517725` (`phase1: harden event ledger`); no code has been pushed.
 
 The Phase 1 implementation is therefore verified against the local runtime and recorded fixtures, but it does not claim remote CI or production-scale durability evidence until those checks are run.
+
+Phase 2 / EPIC-003 and EPIC-004 has passed the local implementation gate, conditional on the separate Node.js `22.13.0` runner evidence:
+
+- projection reducers, versioned persistence, CAS-protected `lastSeq`, ledger-bounded snapshots/cursors, safe rebuild, and core projection fixtures: `PASS` locally;
+- REUSE/REINDEX/REFRESH context planning, explainable ranking, token fallback, and explicit source-bound exposure proposals: `PASS` locally;
+- runtime use-case/composition boundary with complete plan snapshots, source-chain validation, and deterministic plan/exposure idempotency: `PASS` locally;
+- concurrent isolated replay/context scenario and same-database projection safety cases: `PASS`;
+- post-red-team engineering and theory review: `PASS` for the bounded local Phase 2 scope; authentication, human control APIs, and production app assembly remain deferred;
+- 30 tests and final `pnpm verify` on system Node.js `v24.15.0` and bundled Node.js `v24.19.0`: `PASS`;
+- Node.js `22.13.0` CI runner evidence: `PENDING` because source code has not been uploaded.
+
+The Phase 2 red-team review initially returned `NO-GO/HOLD`. The implementation then closed the reported stale projection overwrite, future cursor, incomplete plan/exposure binding, unverified source event, provenance, and silent `REUSE` fallback paths. A missing source-event fixture in the isolated scenario was also found by the final gate and corrected; it was recorded in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The Phase 2 local checkpoint is kept locally and has not been pushed.
 
 Phase 1 deliberately stores event materials rather than verified interpretations. Structured `evidence`, `links`, and required `provenance` round-trip as contract-bound references, while derived/candidate/confirmed record classification is deferred to the projection and context phases. The envelope actor is caller-declared, not an authenticated writer; runtime permissions are a later boundary.
 
