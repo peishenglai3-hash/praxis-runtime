@@ -95,9 +95,6 @@ importers:
       '@praxis/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@praxis/state':
-        specifier: workspace:*
-        version: link:../state
 
   packages/runtime:
     dependencies:

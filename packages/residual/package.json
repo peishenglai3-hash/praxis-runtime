@@ -9,8 +9,7 @@
     }
   },
   "dependencies": {
-    "@praxis/contracts": "workspace:*",
-    "@praxis/state": "workspace:*"
+    "@praxis/contracts": "workspace:*"
   },
   "scripts": {
     "build": "tsup src/index.ts --tsconfig ../../tsconfig.json --format esm --dts --out-dir dist"

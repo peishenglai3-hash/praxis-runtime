@@ -9,5 +9,5 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../contracts" }, { "path": "../state" }]
+  "references": [{ "path": "../contracts" }]
 }
