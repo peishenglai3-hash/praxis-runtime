@@ -1,0 +1,17 @@
+{
+  "name": "@praxis/store",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@praxis/contracts": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/migrations.ts --tsconfig ../../tsconfig.json --format esm --dts --out-dir dist"
+  }
+}

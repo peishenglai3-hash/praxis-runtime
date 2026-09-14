@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/contracts" },
+    { "path": "packages/store" },
+    { "path": "packages/state" },
+    { "path": "packages/context" },
+    { "path": "packages/residual" },
+    { "path": "packages/reflection" },
+    { "path": "packages/assets" },
+    { "path": "packages/adapters" },
+    { "path": "packages/agents" },
+    { "path": "packages/runtime" },
+    { "path": "apps/cli" },
+    { "path": "apps/daemon" }
+  ]
+}

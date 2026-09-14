@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/event-envelope.v1.schema.json",
+  "title": "Praxis Event Envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventVersion",
+    "id",
+    "type",
+    "occurredAt",
+    "observedAt",
+    "recordedAt",
+    "actor",
+    "source",
+    "payload",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "eventVersion": { "type": "string", "pattern": "^[0-9]+$" },
+    "id": { "type": "string", "minLength": 1 },
+    "type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z0-9_-]+)+$"
+    },
+    "occurredAt": { "$ref": "#/$defs/utcTimestamp" },
+    "observedAt": { "$ref": "#/$defs/utcTimestamp" },
+    "recordedAt": { "$ref": "#/$defs/utcTimestamp" },
+    "actor": { "$ref": "#/$defs/actor" },
+    "sessionId": { "type": "string", "minLength": 1 },
+    "traceId": { "type": "string", "minLength": 1 },
+    "operationId": { "type": "string", "minLength": 1 },
+    "source": { "$ref": "#/$defs/sourceRef" },
+    "payload": { "$ref": "#/$defs/jsonValue" },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidenceRef" }
+    },
+    "links": { "$ref": "#/$defs/eventLinks" },
+    "provenance": { "$ref": "#/$defs/provenance" }
+  },
+  "$defs": {
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "enum": ["human", "agent", "system", "tool", "model"]
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "provider": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin"],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "assetId": { "type": "string", "minLength": 1 },
+        "artifactHash": { "type": "string", "minLength": 1 },
+        "origin": {
+          "enum": ["direct", "declared", "inferred", "institutional"]
+        },
+        "exposureInfluenced": { "type": "boolean" }
+      }
+    },
+    "eventLinks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "causedBy": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "respondsTo": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "supersedes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "derivedFrom": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "confidence"],
+      "properties": {
+        "origin": {
+          "enum": ["direct", "declared", "inferred", "institutional"]
+        },
+        "confidence": { "type": "number" }
+      }
+    }
+  }
+}

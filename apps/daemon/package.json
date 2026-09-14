@@ -1,0 +1,11 @@
+{
+  "name": "@praxis/daemon",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@praxis/runtime": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --tsconfig ../../tsconfig.json --format esm --dts --out-dir dist"
+  }
+}

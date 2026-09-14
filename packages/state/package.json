@@ -1,0 +1,18 @@
+{
+  "name": "@praxis/state",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@praxis/contracts": "workspace:*",
+    "@praxis/store": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --tsconfig ../../tsconfig.json --format esm --dts --out-dir dist"
+  }
+}
