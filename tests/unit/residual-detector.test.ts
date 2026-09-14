@@ -141,6 +141,40 @@ describe("ResidualDetector", () => {
     ).toThrowError("require an explicit verification result");
   });
 
+  it("keeps outcome comparison inside the explicit expectation time window", () => {
+    const detector = new ResidualDetector();
+    expect(() =>
+      detector.detectOutcome({
+        expectation: expectation({
+          createdAt: "2026-09-14T00:00:05.000Z",
+        }),
+        observation: observation({
+          observedAt: "2026-09-14T00:00:04.000Z",
+        }),
+        field,
+        detectedAt,
+      }),
+    ).toThrowError("cannot precede expectation creation");
+    expect(() =>
+      detector.detectOutcome({
+        expectation: expectation({
+          validUntil: "2026-09-14T00:00:08.000Z",
+        }),
+        observation: observation(),
+        field,
+        detectedAt,
+      }),
+    ).toThrowError("outside the expectation validity window");
+    expect(() =>
+      detector.detectOutcome({
+        expectation: expectation(),
+        observation: observation(),
+        field,
+        detectedAt: "2026-09-14T00:00:10.000Z",
+      }),
+    ).not.toThrow();
+  });
+
   it("requires both relevant subscription and time/seq thresholds for timing residuals", () => {
     const detector = new ResidualDetector();
     const base: TimingDetectionInput = {

@@ -100,6 +100,14 @@ export interface EventWriter {
   append(event: EventEnvelope): EventAppendResult;
 }
 
+export interface EventBatchWriter {
+  /**
+   * Appends all events atomically: implementations must provide all-or-none
+   * semantics and return idempotent results only after the whole batch agrees.
+   */
+  appendBatch(events: EventEnvelope[]): EventAppendResult[];
+}
+
 function isJsonValue(
   value: unknown,
   ancestors = new WeakSet<object>(),
@@ -125,9 +133,10 @@ function isJsonValue(
   }
 }
 
-const jsonValueSchema: z.ZodType<JsonValue> = z.custom<JsonValue>(isJsonValue);
+export const jsonValueSchema: z.ZodType<JsonValue> =
+  z.custom<JsonValue>(isJsonValue);
 
-const utcTimestampSchema = z
+export const utcTimestampSchema = z
   .string()
   .regex(
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,

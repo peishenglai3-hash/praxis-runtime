@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://praxis-runtime.local/schemas/residual.v1.schema.json",
-  "title": "Praxis Residual v1",
+  "$id": "https://praxis-runtime.local/schemas/residual-detected-event.v1.schema.json",
+  "title": "Praxis residual.detected payload v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "id",
+    "materialClassification",
+    "residualId",
     "kind",
     "observed",
     "field",
@@ -16,7 +17,8 @@
     "detectedAt"
   ],
   "properties": {
-    "id": { "type": "string", "minLength": 1 },
+    "materialClassification": { "const": "inferred" },
+    "residualId": { "type": "string", "minLength": 1 },
     "kind": {
       "enum": [
         "outcome",
@@ -36,22 +38,21 @@
     "persistence": {
       "enum": ["transient", "repeated", "persistent"]
     },
-    "effect": {
-      "enum": ["harmful", "productive", "neutral", "unknown"]
-    },
+    "effect": { "const": "unknown" },
     "evidence": {
       "type": "array",
       "minItems": 1,
       "items": { "$ref": "#/$defs/evidence" }
     },
-    "detectedAt": { "$ref": "#/$defs/utcTimestamp" }
+    "detectedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    }
   },
   "allOf": [
     {
       "if": { "properties": { "kind": { "const": "outcome" } } },
-      "then": {
-        "required": ["baselineId", "baseline"]
-      }
+      "then": { "required": ["baselineId", "baseline"] }
     },
     {
       "if": { "properties": { "kind": { "const": "timing" } } },
@@ -77,11 +78,6 @@
     }
   ],
   "$defs": {
-    "utcTimestamp": {
-      "type": "string",
-      "format": "date-time",
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
-    },
     "jsonValue": {
       "anyOf": [
         { "type": "null" },
@@ -94,15 +90,6 @@
           "additionalProperties": { "$ref": "#/$defs/jsonValue" }
         }
       ]
-    },
-    "subject": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "id"],
-      "properties": {
-        "kind": { "type": "string", "minLength": 1 },
-        "id": { "type": "string", "minLength": 1 }
-      }
     },
     "reference": {
       "type": "object",
@@ -138,9 +125,7 @@
       "additionalProperties": false,
       "required": ["type", "id"],
       "properties": {
-        "type": {
-          "enum": ["human", "agent", "system", "tool", "model"]
-        },
+        "type": { "enum": ["human", "agent", "system", "tool", "model"] },
         "id": { "type": "string", "minLength": 1 }
       }
     },
@@ -177,10 +162,7 @@
         "consequence": { "enum": ["low", "medium", "high"] },
         "reversibility": { "enum": ["easy", "partial", "hard"] },
         "feedbackLatency": { "enum": ["short", "medium", "long"] },
-        "actors": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/actor" }
-        },
+        "actors": { "type": "array", "items": { "$ref": "#/$defs/actor" } },
         "explicitRules": {
           "type": "array",
           "items": { "$ref": "#/$defs/rule" }

@@ -3,6 +3,7 @@ import type {
   ActorRef,
   Clock,
   EventAppendResult,
+  EventBatchWriter,
   EventEnvelope,
   EventRecord,
   EventReader,
@@ -14,7 +15,10 @@ import type {
   JsonValue,
   ProjectionPersistence,
 } from "@praxis/contracts";
-import { stableStringify } from "@praxis/contracts";
+import {
+  stableStringify,
+  validatePhase3EventEnvelope,
+} from "@praxis/contracts";
 import {
   ContextPlanner,
   contextExposureOperationId,
@@ -26,9 +30,21 @@ import type {
   ContextPlannerInput,
   ContextExposureProposal,
 } from "@praxis/context";
-import type { ReflectionInput, ReflectionResult } from "@praxis/reflection";
-import { ReflectionController } from "@praxis/reflection";
-import type { Residual, ResidualDetectionBatch } from "@praxis/residual";
+import type {
+  ReflectionEvidenceDelta,
+  ReflectionInput,
+  ReflectionResult,
+} from "@praxis/reflection";
+import {
+  ReflectionController,
+  validateReflectionResult,
+} from "@praxis/reflection";
+import type {
+  Expectation,
+  Residual,
+  ResidualDetectionBatch,
+  TimingDetectionInput,
+} from "@praxis/residual";
 import { ResidualDetector } from "@praxis/residual";
 import { ProjectionEngine, createCoreProjections } from "@praxis/state";
 import type { CatchUpResult, Projection } from "@praxis/state";
@@ -69,6 +85,15 @@ export class Phase2Runtime {
     ) {
       throw new Error(
         "context events must be recorded through the runtime context use-cases",
+      );
+    }
+    if (
+      event.type === "expectation.registered" ||
+      event.type === "residual.detected" ||
+      event.type === "reflection.proposed"
+    ) {
+      throw new Error(
+        "domain events must be recorded through their runtime use-cases",
       );
     }
     return this.ports.events.append(event);
@@ -384,14 +409,28 @@ export class Phase2Runtime {
   }
 }
 
-export type Phase3RuntimePorts = Phase2RuntimePorts;
+export type Phase3RuntimePorts = Phase2RuntimePorts & {
+  events: Phase2RuntimePorts["events"] & EventBatchWriter;
+};
 
 export function residualDetectedEventId(residualId: string): string {
   return `residual-detected:${encodeURIComponent(residualId)}`;
 }
 
-export function reflectionProposalEventId(residualId: string): string {
-  return `reflection-proposed:${encodeURIComponent(residualId)}`;
+export function expectationRegisteredEventId(expectationId: string): string {
+  return `expectation-registered:${encodeURIComponent(expectationId)}`;
+}
+
+export function reflectionProposalEventId(
+  residualId: string,
+  evidenceToSeq: number,
+): string {
+  if (!Number.isSafeInteger(evidenceToSeq) || evidenceToSeq < 0) {
+    throw new Error(
+      "reflection proposal evidenceToSeq must be a non-negative safe integer",
+    );
+  }
+  return `reflection-proposed:${encodeURIComponent(residualId)}:${evidenceToSeq}`;
 }
 
 /**
@@ -408,27 +447,61 @@ export class Phase3Runtime extends Phase2Runtime {
   }
 
   detectResiduals(input: ResidualDetectionBatch): Residual[] {
+    validateTimingInputsAgainstLedger(this.phase3Ports, input.timings ?? []);
     return this.residualDetector.detect(input);
   }
 
   runReflection(input: ReflectionInput): ReflectionResult {
+    validateReflectionEvidenceDelta(this.phase3Ports, input.evidenceDelta);
     return this.reflectionController.reflect(input);
+  }
+
+  recordExpectation(expectation: Expectation): EventAppendResult {
+    assertExpectationForRecording(this.phase3Ports, expectation);
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: expectationRegisteredEventId(expectation.id),
+      type: "expectation.registered",
+      occurredAt: expectation.createdAt,
+      observedAt: expectation.createdAt,
+      recordedAt: expectation.createdAt,
+      actor: this.phase3Ports.actor,
+      ...(expectation.traceId === undefined
+        ? {}
+        : { traceId: expectation.traceId }),
+      operationId: expectation.id,
+      source: { kind: "expectation-registry", ref: expectation.id },
+      payload: expectationPayload(expectation),
+      evidence: expectation.evidence.map(copyEvidenceRef),
+      links: {
+        ...(eventIdsFromEvidence(expectation.evidence).length === 0
+          ? {}
+          : { derivedFrom: eventIdsFromEvidence(expectation.evidence) }),
+      },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase3EventEnvelope(event);
+    return this.phase3Ports.events.append(event);
   }
 
   recordResiduals(residuals: Residual[]): EventAppendResult[] {
     const events = residuals.map((residual) =>
       residualDetectedEvent(this.phase3Ports, residual),
     );
-    return events.map((event) => this.phase3Ports.events.append(event));
+    events.forEach(validatePhase3EventEnvelope);
+    return this.phase3Ports.events.appendBatch(events);
   }
 
   recordReflectionProposal(
     residual: Residual,
     proposal: ReflectionResult,
   ): EventAppendResult {
+    validateReflectionResult(proposal);
     if (proposal.residualId !== residual.id) {
       throw new Error("reflection proposal residualId does not match residual");
     }
+    validateReflectionEvidenceDelta(this.phase3Ports, proposal.evidenceDelta);
     const residualEventId = residualDetectedEventId(residual.id);
     const residualEvent = this.phase3Ports.events.getById(residualEventId);
     if (
@@ -443,35 +516,54 @@ export class Phase3Runtime extends Phase2Runtime {
       );
     }
 
-    const occurredAt = nowIsoAtLeast(
-      this.phase3Ports.clock,
-      residualEvent.recordedAt,
+    assertResidualForRecording(this.phase3Ports, residual);
+    const recordedAt = deterministicReflectionTimestamp(
+      this.phase3Ports,
+      residualEvent,
+      proposal.evidenceDelta,
+    );
+    const proposalEventId = reflectionProposalEventId(
+      residual.id,
+      proposal.evidenceDelta.toSeq,
+    );
+    const previousProposal = validateReflectionRound(
+      this.phase3Ports,
+      residualEvent,
+      proposal,
+      proposalEventId,
+    );
+    const proposalEvidence = mergeEvidence(
+      residual.evidence,
+      proposal.evidenceDelta.evidence,
+      [{ eventId: residualEventId, origin: "inferred" }],
     );
     const event: EventEnvelope = {
       schemaVersion: "1",
       eventVersion: "1",
-      id: reflectionProposalEventId(residual.id),
+      id: proposalEventId,
       type: "reflection.proposed",
-      occurredAt,
-      observedAt: occurredAt,
-      recordedAt: occurredAt,
+      occurredAt: recordedAt,
+      observedAt: recordedAt,
+      recordedAt,
       actor: this.phase3Ports.actor,
-      operationId: `reflection:${residual.id}`,
+      operationId: `reflection:${residual.id}:${proposal.evidenceDelta.toSeq}`,
       source: { kind: "reflection-controller", ref: residual.id },
       payload: reflectionProposalPayload(residual, proposal),
-      evidence: [
-        ...residual.evidence.map(copyEvidenceRef),
-        { eventId: residualEventId, origin: "inferred" },
-      ],
+      evidence: proposalEvidence,
       links: {
         respondsTo: [residualEventId],
-        derivedFrom: [
+        derivedFrom: uniqueStrings([
           residualEventId,
           ...eventIdsFromEvidence(residual.evidence),
-        ],
+          ...eventIdsFromEvidence(proposal.evidenceDelta.evidence),
+        ]),
+        ...(previousProposal === null
+          ? {}
+          : { supersedes: [previousProposal.id] }),
       },
       provenance: { origin: "inferred", confidence: residual.confidence },
     };
+    validatePhase3EventEnvelope(event);
     return this.phase3Ports.events.append(event);
   }
 }
@@ -482,7 +574,6 @@ function residualDetectedEvent(
 ): EventEnvelope {
   assertResidualForRecording(ports, residual);
   const occurredAt = residual.detectedAt;
-  const recordedAt = nowIsoAtLeast(ports.clock, occurredAt);
   return {
     schemaVersion: "1",
     eventVersion: "1",
@@ -490,7 +581,7 @@ function residualDetectedEvent(
     type: "residual.detected",
     occurredAt,
     observedAt: occurredAt,
-    recordedAt,
+    recordedAt: occurredAt,
     actor: ports.actor,
     operationId: residual.id,
     source: { kind: "residual-detector", ref: residual.id },
@@ -528,7 +619,34 @@ function reflectionProposalPayload(
       requiredPermission: action.requiredPermission,
       parameters: action.parameters,
     })),
+    budget: proposal.budget,
     budgetUsed: proposal.budgetUsed,
+    evidenceDelta: {
+      fromSeq: proposal.evidenceDelta.fromSeq,
+      toSeq: proposal.evidenceDelta.toSeq,
+      evidence: proposal.evidenceDelta.evidence.map(evidencePayload),
+    },
+  } as unknown as JsonObject;
+}
+
+function expectationPayload(expectation: Expectation): JsonObject {
+  return {
+    materialClassification: "declared",
+    expectationId: expectation.id,
+    subject: {
+      kind: expectation.subject.kind,
+      id: expectation.subject.id,
+    },
+    expected: expectation.expected,
+    verification: expectation.verification,
+    ...(expectation.predicateId === undefined
+      ? {}
+      : { predicateId: expectation.predicateId }),
+    createdAt: expectation.createdAt,
+    ...(expectation.validUntil === undefined
+      ? {}
+      : { validUntil: expectation.validUntil }),
+    evidence: expectation.evidence.map(evidencePayload),
   } as unknown as JsonObject;
 }
 
@@ -537,6 +655,9 @@ function residualPayload(residual: Residual): JsonObject {
     materialClassification: "inferred",
     residualId: residual.id,
     kind: residual.kind,
+    ...(residual.baselineId === undefined
+      ? {}
+      : { baselineId: residual.baselineId }),
     ...(residual.baseline === undefined
       ? {}
       : { baseline: referencePayload(residual.baseline) }),
@@ -613,6 +734,10 @@ function eventIdsFromEvidence(evidence: EvidenceRef[]): string[] {
   ];
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
 function assertResidualForRecording(
   ports: Phase3RuntimePorts,
   residual: Residual,
@@ -620,6 +745,17 @@ function assertResidualForRecording(
   if (residual.id.length < 1) throw new Error("residual id is required");
   if (residual.evidence.length < 1) {
     throw new Error("residual recording requires evidence");
+  }
+  if (residual.effect !== "unknown") {
+    throw new Error(
+      "residual recording requires an unknown effect until explicit adjudication",
+    );
+  }
+  if (
+    residual.kind === "outcome" &&
+    (residual.baselineId === undefined || residual.baselineId.length < 1)
+  ) {
+    throw new Error("outcome residual recording requires baselineId");
   }
   if (
     !Number.isFinite(residual.confidence) ||
@@ -641,19 +777,319 @@ function assertResidualForRecording(
       );
     }
   }
+  if (residual.kind === "outcome") {
+    const baselineId = residual.baselineId!;
+    const expectationEvent = ports.events.getById(
+      expectationRegisteredEventId(baselineId),
+    );
+    if (
+      expectationEvent === null ||
+      expectationEvent.type !== "expectation.registered" ||
+      expectationEvent.operationId !== baselineId ||
+      expectationEvent.provenance.origin !== "declared"
+    ) {
+      throw new Error(
+        "outcome residual requires a matching recorded expectation.registered event",
+      );
+    }
+    const expectation = asJsonObject(expectationEvent.payload);
+    const registeredSubject = expectation?.subject;
+    const registeredExpected = expectation?.expected;
+    if (
+      expectation === null ||
+      expectation.expectationId !== baselineId ||
+      residual.baseline === undefined ||
+      registeredSubject === undefined ||
+      registeredExpected === undefined ||
+      stableStringify(registeredSubject) !==
+        stableStringify({
+          kind: residual.baseline.kind,
+          id: residual.baseline.id,
+        }) ||
+      stableStringify(registeredExpected) !==
+        stableStringify(residual.baseline.value)
+    ) {
+      throw new Error(
+        "outcome residual baseline does not match the recorded expectation",
+      );
+    }
+  }
+  if (residual.kind === "timing") {
+    assertTimingResidualForRecording(ports, residual);
+  }
 }
 
-function nowIsoAtLeast(clock: Clock, lowerBound: string): string {
-  const now = clock.now();
-  if (Number.isNaN(now.getTime()))
-    throw new Error("clock returned an invalid date");
-  const lowerBoundMilliseconds = Date.parse(lowerBound);
-  if (!Number.isSafeInteger(lowerBoundMilliseconds)) {
-    throw new Error("timestamp lower bound is not canonical");
+function assertExpectationForRecording(
+  ports: Phase3RuntimePorts,
+  expectation: Expectation,
+): void {
+  if (expectation.id.length < 1) throw new Error("expectation id is required");
+  if (
+    expectation.subject.kind.length < 1 ||
+    expectation.subject.id.length < 1
+  ) {
+    throw new Error("expectation subject must have a kind and id");
   }
-  return new Date(
-    Math.max(now.getTime(), lowerBoundMilliseconds),
-  ).toISOString();
+  if (
+    expectation.verification !== "exact" &&
+    expectation.verification !== "predicate" &&
+    expectation.verification !== "external"
+  ) {
+    throw new Error("expectation verification is invalid");
+  }
+  if (expectation.verification === "predicate" && !expectation.predicateId) {
+    throw new Error("predicate expectations require predicateId");
+  }
+  assertCanonicalTimestamp(expectation.createdAt, "expectation createdAt");
+  if (expectation.validUntil !== undefined) {
+    assertCanonicalTimestamp(expectation.validUntil, "expectation validUntil");
+    if (
+      Date.parse(expectation.validUntil) < Date.parse(expectation.createdAt)
+    ) {
+      throw new Error("expectation validUntil cannot precede createdAt");
+    }
+  }
+  assertEvidenceRefs(ports, expectation.evidence, "expectation");
+}
+
+function assertEvidenceRefs(
+  ports: Phase3RuntimePorts,
+  evidence: EvidenceRef[],
+  label: string,
+): void {
+  if (evidence.length < 1) throw new Error(`${label} requires evidence`);
+  for (const item of evidence) {
+    if (
+      item.eventId === undefined &&
+      item.assetId === undefined &&
+      item.artifactHash === undefined
+    ) {
+      throw new Error(`${label} evidence must identify a source`);
+    }
+    if (item.eventId === undefined) continue;
+    const sourceEvent = ports.events.getById(item.eventId);
+    if (sourceEvent === null) {
+      throw new Error(`${label} evidence event is not present in the ledger`);
+    }
+    if (sourceEvent.provenance.origin !== item.origin) {
+      throw new Error(
+        `${label} evidence origin does not match ledger provenance`,
+      );
+    }
+  }
+}
+
+function validateTimingInputsAgainstLedger(
+  ports: Phase3RuntimePorts,
+  timings: TimingDetectionInput[],
+): void {
+  const lastSeq = ports.events.getLastSeq();
+  for (const timing of timings) {
+    if (timing.latestRelevantSeq > lastSeq) {
+      throw new Error(
+        "timing latest relevant sequence is ahead of the event ledger",
+      );
+    }
+    const eventEvidence = timing.evidence.filter(
+      (item) => item.eventId !== undefined,
+    );
+    if (eventEvidence.length === 0) {
+      throw new Error(
+        "timing detection requires a ledger event evidence reference",
+      );
+    }
+    if (
+      !eventEvidence.some((item) => {
+        const source = ports.events.getById(item.eventId!);
+        return source?.seq === timing.latestRelevantSeq;
+      })
+    ) {
+      throw new Error(
+        "timing evidence does not identify the latest relevant ledger event",
+      );
+    }
+  }
+}
+
+function assertTimingResidualForRecording(
+  ports: Phase3RuntimePorts,
+  residual: Residual,
+): void {
+  const observed = asJsonObject(residual.observed.value);
+  const cursorSeq = observed?.cursorSeq;
+  const latestRelevantSeq = observed?.latestRelevantSeq;
+  if (
+    typeof cursorSeq !== "number" ||
+    !Number.isSafeInteger(cursorSeq) ||
+    cursorSeq < 0 ||
+    typeof latestRelevantSeq !== "number" ||
+    !Number.isSafeInteger(latestRelevantSeq) ||
+    latestRelevantSeq < cursorSeq
+  ) {
+    throw new Error("timing residual cursor evidence is invalid");
+  }
+  const lastSeq = ports.events.getLastSeq();
+  if (latestRelevantSeq > lastSeq) {
+    throw new Error(
+      "timing residual latest relevant sequence is ahead of the event ledger",
+    );
+  }
+  const matchesLatest = residual.evidence.some((item) => {
+    if (item.eventId === undefined) return false;
+    const source = ports.events.getById(item.eventId);
+    return source?.seq === latestRelevantSeq;
+  });
+  if (!matchesLatest) {
+    throw new Error(
+      "timing residual evidence does not identify the latest relevant ledger event",
+    );
+  }
+}
+
+function validateReflectionEvidenceDelta(
+  ports: Phase3RuntimePorts,
+  delta: ReflectionEvidenceDelta,
+): void {
+  if (
+    !Number.isSafeInteger(delta.fromSeq) ||
+    delta.fromSeq < 0 ||
+    !Number.isSafeInteger(delta.toSeq) ||
+    delta.toSeq < 0
+  ) {
+    throw new Error(
+      "reflection evidence cursor must be a non-negative safe integer",
+    );
+  }
+  if (delta.toSeq < delta.fromSeq) {
+    throw new Error("reflection evidence toSeq cannot precede fromSeq");
+  }
+  const lastSeq = ports.events.getLastSeq();
+  if (delta.toSeq > lastSeq) {
+    throw new Error("reflection evidence cursor is ahead of the event ledger");
+  }
+  if (delta.fromSeq > lastSeq) {
+    throw new Error("reflection evidence fromSeq is ahead of the event ledger");
+  }
+  if (delta.toSeq > delta.fromSeq && delta.evidence.length === 0) {
+    throw new Error("reflection evidence delta requires evidence");
+  }
+  if (delta.toSeq === delta.fromSeq && delta.evidence.length > 0) {
+    throw new Error("reflection evidence without a sequence delta is invalid");
+  }
+  if (delta.toSeq === delta.fromSeq) return;
+  const eventEvidence = delta.evidence.filter(
+    (item) => item.eventId !== undefined,
+  );
+  if (eventEvidence.length === 0) {
+    throw new Error(
+      "reflection evidence delta requires a ledger event reference",
+    );
+  }
+  for (const item of eventEvidence) {
+    const sourceEvent = ports.events.getById(item.eventId!);
+    if (sourceEvent === null) {
+      throw new Error("reflection evidence event is not present in the ledger");
+    }
+    if (sourceEvent.seq <= delta.fromSeq || sourceEvent.seq > delta.toSeq) {
+      throw new Error(
+        "reflection evidence event is outside its sequence delta",
+      );
+    }
+    if (sourceEvent.provenance.origin !== item.origin) {
+      throw new Error(
+        "reflection evidence origin does not match ledger provenance",
+      );
+    }
+  }
+}
+
+function validateReflectionRound(
+  ports: Phase3RuntimePorts,
+  residualEvent: EventRecord,
+  proposal: ReflectionResult,
+  proposalEventId: string,
+): EventRecord | null {
+  const existing = ports.events.getById(proposalEventId);
+  if (existing !== null) {
+    if (
+      existing.type !== "reflection.proposed" ||
+      existing.operationId !==
+        `reflection:${proposal.residualId}:${proposal.evidenceDelta.toSeq}`
+    ) {
+      throw new Error(
+        "reflection proposal id is already used by another event",
+      );
+    }
+    return null;
+  }
+
+  const previous = ports.events
+    .query({ type: "reflection.proposed", limit: 10_000 })
+    .filter((event) => {
+      const payload = asJsonObject(event.payload);
+      const delta = asJsonObject(payload?.evidenceDelta);
+      return (
+        payload?.residualId === proposal.residualId &&
+        delta !== null &&
+        typeof delta.toSeq === "number"
+      );
+    })
+    .sort((left, right) => left.seq - right.seq)
+    .at(-1);
+
+  if (previous === undefined) {
+    if (proposal.evidenceDelta.fromSeq !== residualEvent.seq) {
+      throw new Error(
+        "first reflection round must start at the residual event cursor",
+      );
+    }
+    return null;
+  }
+
+  const previousPayload = asJsonObject(previous.payload);
+  const previousDelta = asJsonObject(previousPayload?.evidenceDelta);
+  const previousToSeq = previousDelta?.toSeq;
+  if (typeof previousToSeq !== "number") {
+    throw new Error("recorded reflection round has no valid end cursor");
+  }
+  if (proposal.evidenceDelta.fromSeq !== previousToSeq) {
+    throw new Error(
+      "reflection round must start at the previous accepted end cursor",
+    );
+  }
+  if (proposal.evidenceDelta.toSeq <= previousToSeq) {
+    throw new Error("reflection round cursor must advance monotonically");
+  }
+  return previous;
+}
+
+function deterministicReflectionTimestamp(
+  ports: Phase3RuntimePorts,
+  residualEvent: EventRecord,
+  delta: ReflectionEvidenceDelta,
+): string {
+  let timestamp = Date.parse(residualEvent.recordedAt);
+  for (const item of delta.evidence) {
+    if (item.eventId === undefined) continue;
+    const source = ports.events.getById(item.eventId);
+    if (source === null) continue;
+    timestamp = Math.max(timestamp, Date.parse(source.recordedAt));
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function mergeEvidence(...groups: EvidenceRef[][]): EvidenceRef[] {
+  const result: EvidenceRef[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const item of group) {
+      const key = stableStringify(evidencePayload(item));
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(copyEvidenceRef(item));
+    }
+  }
+  return result;
 }
 
 function asJsonObject(value: JsonValue | undefined): JsonObject | null {

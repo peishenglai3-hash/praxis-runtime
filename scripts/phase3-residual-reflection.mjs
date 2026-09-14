@@ -4,7 +4,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execPath } from "node:process";
-import { clearTimeout, setTimeout as setTimer } from "node:timers";
+import {
+  clearTimeout,
+  setImmediate as scheduleImmediate,
+  setTimeout as setTimer,
+} from "node:timers";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
@@ -29,6 +33,7 @@ function runWorker(filename, workerId) {
     let output = "";
     let errorOutput = "";
     let settled = false;
+    let timedOut = false;
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
@@ -39,9 +44,8 @@ function runWorker(filename, workerId) {
     });
     const timeout = setTimer(() => {
       if (settled) return;
-      settled = true;
       child.kill();
-      rejectWorker(new Error(`phase3 worker ${workerId} timed out`));
+      timedOut = true;
     }, workerTimeoutMs);
     child.once("error", (error) => {
       if (settled) return;
@@ -53,6 +57,10 @@ function runWorker(filename, workerId) {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (timedOut) {
+        rejectWorker(new Error(`phase3 worker ${workerId} timed out`));
+        return;
+      }
       if (code !== 0) {
         rejectWorker(
           new Error(
@@ -112,7 +120,7 @@ async function sameDatabaseConcurrencyScenario() {
         (event) => event.type === "reflection.proposed",
       );
       if (
-        events.length !== 3 ||
+        events.length !== 5 ||
         residualEvents.length !== 1 ||
         proposalEvents.length !== 1 ||
         workers.filter((worker) => worker.residualInserted).length !== 1 ||
@@ -176,35 +184,43 @@ async function pureSafetyScenario() {
     evidence: [{ eventId: "phase3-safe-source", origin: "direct" }],
   };
   const results = await Promise.all(
-    Array.from({ length: 12 }, () =>
-      Promise.resolve({
-        outcome: detector.detect({ outcomes: [exactOutcome] }),
-        timing: detector.detect({ timings: [timingWithoutSubscription] }),
-        reflection: controller.reflect({
-          residual: {
-            id: "phase3-safe-residual",
-            kind: "outcome",
-            observed: {
-              kind: "task",
-              id: "phase3-task",
-              value: { status: "failed" },
-            },
-            field,
-            confidence: 1,
-            persistence: "transient",
-            effect: "unknown",
-            evidence: [{ eventId: "phase3-safe-source", origin: "direct" }],
-            detectedAt: "2026-09-14T00:00:10.000Z",
-          },
-          budget: {
-            maxDepth: 1,
-            maxHypotheses: 1,
-            maxToolCalls: 0,
-            maxElapsedMs: 100,
-          },
-          newEvidenceAvailable: false,
+    Array.from(
+      { length: 12 },
+      () =>
+        new Promise((resolveResult) => {
+          scheduleImmediate(() => {
+            resolveResult({
+              outcome: detector.detect({ outcomes: [exactOutcome] }),
+              timing: detector.detect({ timings: [timingWithoutSubscription] }),
+              reflection: controller.reflect({
+                residual: {
+                  id: "phase3-safe-residual",
+                  kind: "outcome",
+                  observed: {
+                    kind: "task",
+                    id: "phase3-task",
+                    value: { status: "failed" },
+                  },
+                  field,
+                  confidence: 1,
+                  persistence: "transient",
+                  effect: "unknown",
+                  evidence: [
+                    { eventId: "phase3-safe-source", origin: "direct" },
+                  ],
+                  detectedAt: "2026-09-14T00:00:10.000Z",
+                },
+                budget: {
+                  maxDepth: 1,
+                  maxHypotheses: 1,
+                  maxToolCalls: 0,
+                  maxElapsedMs: 100,
+                },
+                evidenceDelta: { fromSeq: 0, toSeq: 0, evidence: [] },
+              }),
+            });
+          });
         }),
-      }),
     ),
   );
   if (
@@ -218,7 +234,7 @@ async function pureSafetyScenario() {
   ) {
     throw new Error(`phase3 pure safety mismatch: ${JSON.stringify(results)}`);
   }
-  return "concurrent no-false-positive and no-self-call checks";
+  return "repeated pure no-false-positive and no-self-call checks";
 }
 
 const results = await Promise.all([

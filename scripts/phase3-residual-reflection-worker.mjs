@@ -37,18 +37,20 @@ try {
     ids: { next: () => `phase3-worker-${workerId}` },
     actor: { type: "system", id: "phase3-coordinator" },
   });
+  const expectation = {
+    id: "phase3-shared-expectation",
+    traceId: "phase3-shared-trace",
+    subject: { kind: "task", id: "phase3-task" },
+    expected: { status: "complete" },
+    verification: "exact",
+    createdAt: "2026-09-14T00:00:00.000Z",
+    evidence: [{ eventId: "phase3-shared-source", origin: "direct" }],
+  };
+  runtime.recordExpectation(expectation);
   const [residual] = runtime.detectResiduals({
     outcomes: [
       {
-        expectation: {
-          id: "phase3-shared-expectation",
-          traceId: "phase3-shared-trace",
-          subject: { kind: "task", id: "phase3-task" },
-          expected: { status: "complete" },
-          verification: "exact",
-          createdAt: "2026-09-14T00:00:00.000Z",
-          evidence: [{ eventId: "phase3-shared-source", origin: "direct" }],
-        },
+        expectation,
         observation: {
           id: "phase3-shared-observation",
           traceId: "phase3-shared-trace",
@@ -73,6 +75,20 @@ try {
     throw new Error("phase3 worker found no residual");
 
   const residualResult = runtime.recordResiduals([residual])[0];
+  const feedbackResult = store.append({
+    schemaVersion: "1",
+    eventVersion: "1",
+    id: "phase3-shared-feedback",
+    type: "task.rechecked",
+    occurredAt: "2026-09-14T00:00:11.000Z",
+    observedAt: "2026-09-14T00:00:12.000Z",
+    recordedAt: "2026-09-14T00:00:12.000Z",
+    actor: { type: "human", id: "phase3-user" },
+    traceId: "phase3-shared-trace",
+    source: { kind: "phase3-concurrency", ref: "shared-feedback" },
+    payload: { status: "rechecked" },
+    provenance: { origin: "direct", confidence: 1 },
+  });
   const proposal = runtime.runReflection({
     residual,
     budget: {
@@ -81,7 +97,11 @@ try {
       maxToolCalls: 1,
       maxElapsedMs: 1_000,
     },
-    newEvidenceAvailable: true,
+    evidenceDelta: {
+      fromSeq: residualResult.record.seq,
+      toSeq: feedbackResult.record.seq,
+      evidence: [{ eventId: feedbackResult.record.id, origin: "direct" }],
+    },
   });
   const proposalResult = runtime.recordReflectionProposal(residual, proposal);
   stdout.write(

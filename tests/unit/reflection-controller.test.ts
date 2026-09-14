@@ -25,6 +25,18 @@ const budget: ReflectionBudget = {
   maxElapsedMs: 1_000,
 };
 
+const evidenceDelta = {
+  fromSeq: 1,
+  toSeq: 2,
+  evidence: [{ eventId: "new-evidence-1", origin: "direct" as const }],
+};
+
+const noEvidenceDelta = {
+  fromSeq: 2,
+  toSeq: 2,
+  evidence: [],
+};
+
 function residual(overrides: Partial<Residual> = {}): Residual {
   return {
     id: "residual:outcome:expectation-1:observation-1",
@@ -56,7 +68,7 @@ describe("ReflectionController", () => {
     const result = controller.reflect({
       residual: residual(),
       budget,
-      newEvidenceAvailable: true,
+      evidenceDelta,
     });
 
     expect(result).toMatchObject({
@@ -88,7 +100,7 @@ describe("ReflectionController", () => {
     const result = new ReflectionController().reflect({
       residual: residual(),
       budget,
-      newEvidenceAvailable: false,
+      evidenceDelta: noEvidenceDelta,
     });
 
     expect(result.decision).toBe("STOP");
@@ -108,7 +120,7 @@ describe("ReflectionController", () => {
         },
       }),
       budget,
-      newEvidenceAvailable: true,
+      evidenceDelta,
     });
 
     expect(result.decision).toBe("ESCALATE");
@@ -150,7 +162,7 @@ describe("ReflectionController", () => {
       const result = controller.reflect({
         residual: residual(),
         budget: testCase.budget,
-        newEvidenceAvailable: true,
+        evidenceDelta,
         ...(testCase.usage === undefined ? {} : { usage: testCase.usage }),
       });
       expect(result.decision, testCase.message).toBe("STOP");
@@ -164,7 +176,7 @@ describe("ReflectionController", () => {
     const result = new ReflectionController().reflect({
       residual: residual({ kind: "representation" }),
       budget,
-      newEvidenceAvailable: true,
+      evidenceDelta,
     });
 
     expect(result.decision).toBe("ESCALATE");

@@ -470,5 +470,25 @@ describe("Phase 2 projection persistence", () => {
     expect(() => currentStore.append(forgedExposure)).toThrowError(
       "context exposure failed ledger integrity checks",
     );
+
+    const futureEmptyPlan: EventEnvelope = makeEvent({
+      id: contextPlanEventId("future-empty-plan"),
+      type: "context.plan.created",
+      operationId: "future-empty-plan",
+      payload: {
+        classification: "candidate",
+        planId: "future-empty-plan",
+        stateSeq: 999,
+        candidateSources: [],
+        selected: [],
+        reasons: [],
+        exposureProposals: [],
+      },
+      links: { derivedFrom: [] },
+      provenance: { origin: "inferred", confidence: 1 },
+    });
+    expect(() => currentStore.append(futureEmptyPlan)).toThrowError(
+      "context plan failed ledger integrity checks",
+    );
   });
 });

@@ -3,10 +3,15 @@ import { createRequire } from "node:module";
 import type { DatabaseSync as DatabaseSyncConnection } from "node:sqlite";
 import type * as Sqlite from "node:sqlite";
 
-import { eventEnvelopeSchema, stableStringify } from "@praxis/contracts";
+import {
+  eventEnvelopeSchema,
+  stableStringify,
+  validatePhase3EventEnvelope,
+} from "@praxis/contracts";
 import type {
   ActorRef,
   EventAppendResult,
+  EventBatchWriter,
   EventEnvelope,
   EventLinks,
   EventQuery,
@@ -241,7 +246,7 @@ function rowToRecord(row: EventRow): EventRecord {
 }
 
 export class SqliteEventStore
-  implements EventReader, EventWriter, ProjectionPersistence
+  implements EventReader, EventWriter, EventBatchWriter, ProjectionPersistence
 {
   readonly migrationVersion: number;
   readonly migrationStatus: MigrationStatus;
@@ -323,85 +328,105 @@ export class SqliteEventStore
   }
 
   append(event: EventEnvelope): EventAppendResult {
-    const parsed = eventEnvelopeSchema.safeParse(event);
-    if (!parsed.success) {
-      throw new StoreError(
-        "INVALID_EVENT",
-        "Event does not satisfy the v1 envelope",
-        {
-          issues: parsed.error.issues,
-        },
-      );
-    }
+    return this.appendBatch([event])[0]!;
+  }
 
-    const normalized = parsed.data as EventEnvelope;
-    const contentHash = hashEvent(normalized);
-    try {
-      this.#database.exec("BEGIN IMMEDIATE");
-      const existingById = this.findById(normalized.id);
-      if (existingById !== null) {
-        this.assertSameEvent(existingById, contentHash, "EVENT_ID_CONFLICT");
-        this.#database.exec("COMMIT");
-        return { record: existingById, inserted: false };
-      }
-
-      if (normalized.operationId !== undefined) {
-        const existingByOperationAndType = this.findByOperationAndType(
-          normalized.operationId,
-          normalized.type,
-        );
-        if (existingByOperationAndType !== null) {
-          this.assertSameEvent(
-            existingByOperationAndType,
-            contentHash,
-            "OPERATION_ID_CONFLICT",
-          );
-          this.#database.exec("COMMIT");
-          return { record: existingByOperationAndType, inserted: false };
-        }
-      }
-
-      const insertResult = this.insertStatement.run(
-        normalized.id,
-        normalized.schemaVersion,
-        normalized.eventVersion,
-        normalized.type,
-        epochMilliseconds(normalized.occurredAt),
-        epochMilliseconds(normalized.observedAt),
-        epochMilliseconds(normalized.recordedAt),
-        normalized.actor.type,
-        normalized.actor.id,
-        normalized.sessionId ?? null,
-        normalized.traceId ?? null,
-        normalized.operationId ?? null,
-        stableStringify(normalized.source as unknown as JsonValue),
-        stableStringify(normalized.payload),
-        normalized.evidence === undefined
-          ? null
-          : stableStringify(normalized.evidence as unknown as JsonValue),
-        normalized.links === undefined
-          ? null
-          : stableStringify(normalized.links as unknown as JsonValue),
-        normalized.provenance === undefined
-          ? null
-          : stableStringify(normalized.provenance as unknown as JsonValue),
-        contentHash,
-      );
-      const seq = Number(insertResult.lastInsertRowid);
-      const row = this.selectBySeqStatement.get(seq);
-      if (row === undefined) {
+  appendBatch(events: EventEnvelope[]): EventAppendResult[] {
+    if (events.length === 0) return [];
+    const normalizedEvents = events.map((event) => {
+      const parsed = eventEnvelopeSchema.safeParse(event);
+      if (!parsed.success) {
         throw new StoreError(
-          "STORAGE_ERROR",
-          "Inserted event could not be read back",
+          "INVALID_EVENT",
+          "Event does not satisfy the v1 envelope",
           {
-            id: normalized.id,
-            seq,
+            issues: parsed.error.issues,
           },
         );
       }
-      const record = rowToRecord(asEventRow(row));
+      const normalized = parsed.data as EventEnvelope;
+      try {
+        validatePhase3EventEnvelope(normalized);
+      } catch (error) {
+        throw new StoreError(
+          "INVALID_EVENT",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      return { normalized, contentHash: hashEvent(normalized) };
+    });
+    const results: EventAppendResult[] = [];
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      for (const { normalized, contentHash } of normalizedEvents) {
+        const existingById = this.findById(normalized.id);
+        if (existingById !== null) {
+          this.assertSameEvent(existingById, contentHash, "EVENT_ID_CONFLICT");
+          results.push({ record: existingById, inserted: false });
+          continue;
+        }
+
+        if (normalized.operationId !== undefined) {
+          const existingByOperationAndType = this.findByOperationAndType(
+            normalized.operationId,
+            normalized.type,
+          );
+          if (existingByOperationAndType !== null) {
+            this.assertSameEvent(
+              existingByOperationAndType,
+              contentHash,
+              "OPERATION_ID_CONFLICT",
+            );
+            results.push({
+              record: existingByOperationAndType,
+              inserted: false,
+            });
+            continue;
+          }
+        }
+
+        const insertResult = this.insertStatement.run(
+          normalized.id,
+          normalized.schemaVersion,
+          normalized.eventVersion,
+          normalized.type,
+          epochMilliseconds(normalized.occurredAt),
+          epochMilliseconds(normalized.observedAt),
+          epochMilliseconds(normalized.recordedAt),
+          normalized.actor.type,
+          normalized.actor.id,
+          normalized.sessionId ?? null,
+          normalized.traceId ?? null,
+          normalized.operationId ?? null,
+          stableStringify(normalized.source as unknown as JsonValue),
+          stableStringify(normalized.payload),
+          normalized.evidence === undefined
+            ? null
+            : stableStringify(normalized.evidence as unknown as JsonValue),
+          normalized.links === undefined
+            ? null
+            : stableStringify(normalized.links as unknown as JsonValue),
+          normalized.provenance === undefined
+            ? null
+            : stableStringify(normalized.provenance as unknown as JsonValue),
+          contentHash,
+        );
+        const seq = Number(insertResult.lastInsertRowid);
+        const row = this.selectBySeqStatement.get(seq);
+        if (row === undefined) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "Inserted event could not be read back",
+            {
+              id: normalized.id,
+              seq,
+            },
+          );
+        }
+        results.push({ record: rowToRecord(asEventRow(row)), inserted: true });
+      }
       this.#database.exec("COMMIT");
-      return { record, inserted: true };
+      return results;
     } catch (error) {
       try {
         this.#database.exec("ROLLBACK");

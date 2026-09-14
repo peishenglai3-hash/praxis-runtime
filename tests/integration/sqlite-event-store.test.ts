@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { appendFileSync, copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,8 +10,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import type {
   EventEnvelope,
   JsonObject,
+  JsonValue,
 } from "../../packages/contracts/src/index.js";
 import { SqliteEventStore } from "../../packages/store/src/index.js";
+import { stableStringify } from "../../packages/contracts/src/index.js";
 
 const migrationsDir = resolve(
   fileURLToPath(new URL("../../migrations", import.meta.url)),
@@ -30,6 +33,50 @@ const makeEvent = (overrides: Partial<EventEnvelope> = {}): EventEnvelope => ({
   provenance: { origin: "direct", confidence: 1 },
   ...overrides,
 });
+
+function insertRawEvent(filename: string, event: EventEnvelope): void {
+  const database = new DatabaseSync(filename);
+  try {
+    database
+      .prepare(
+        `INSERT INTO events (
+          id, schema_version, event_version, type,
+          occurred_at, observed_at, recorded_at,
+          actor_type, actor_id, session_id, trace_id, operation_id,
+          source_json, payload_json, evidence_json, links_json,
+          provenance_json, content_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        event.id,
+        event.schemaVersion,
+        event.eventVersion,
+        event.type,
+        Date.parse(event.occurredAt),
+        Date.parse(event.observedAt),
+        Date.parse(event.recordedAt),
+        event.actor.type,
+        event.actor.id,
+        event.sessionId ?? null,
+        event.traceId ?? null,
+        event.operationId ?? null,
+        stableStringify(event.source as unknown as JsonValue),
+        stableStringify(event.payload),
+        event.evidence === undefined
+          ? null
+          : stableStringify(event.evidence as unknown as JsonValue),
+        event.links === undefined
+          ? null
+          : stableStringify(event.links as unknown as JsonValue),
+        stableStringify(event.provenance as unknown as JsonValue),
+        createHash("sha256")
+          .update(stableStringify(event as unknown as JsonValue))
+          .digest("hex"),
+      );
+  } finally {
+    database.close();
+  }
+}
 
 let temporaryDirectory: string | undefined;
 let store: SqliteEventStore | undefined;
@@ -82,10 +129,10 @@ describe("SqliteEventStore", () => {
       synchronous: 2,
       busyTimeout: 5000,
     });
-    expect(currentStore.migrationVersion).toBe(5);
+    expect(currentStore.migrationVersion).toBe(6);
     expect(currentStore.migrationStatus).toEqual({
-      currentVersion: 5,
-      latestVersion: 5,
+      currentVersion: 6,
+      latestVersion: 6,
       pendingVersions: [],
     });
     expect(currentStore.getLastSeq()).toBe(0);
@@ -406,8 +453,199 @@ describe("SqliteEventStore", () => {
       legacyStore.close();
 
       store = new SqliteEventStore({ filename, migrationsDir });
-      expect(store.migrationVersion).toBe(5);
+      expect(store.migrationVersion).toBe(6);
       expect(store.getById(legacyRecord.id)).toEqual(legacyRecord);
+    } finally {
+      rmSync(migrationDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("aborts the Phase 3 integrity migration on malformed legacy derived material", () => {
+    temporaryDirectory = mkdtempSync(
+      join(tmpdir(), "praxis-phase3-legacy-invalid-"),
+    );
+    const migrationDirectory = mkdtempSync(
+      join(tmpdir(), "praxis-phase3-legacy-invalid-migrations-"),
+    );
+    const filename = join(temporaryDirectory, "events.db");
+    try {
+      for (const migration of [
+        "0001_init.sql",
+        "0002_operation_lifecycle.sql",
+      ]) {
+        copyFileSync(
+          join(migrationsDir, migration),
+          join(migrationDirectory, migration),
+        );
+      }
+      const legacyStore = new SqliteEventStore({
+        filename,
+        migrationsDir: migrationDirectory,
+      });
+      legacyStore.append(
+        makeEvent({
+          id: "legacy-phase3-source",
+          operationId: "legacy-phase3-source-operation",
+        }),
+      );
+      legacyStore.close();
+
+      const legacyPayload = {
+        materialClassification: "inferred",
+        residualId: "residual:legacy-forged",
+        kind: "outcome",
+        baselineId: "missing-expectation",
+        baseline: {
+          kind: "task",
+          id: "task-1",
+          value: { status: "complete" },
+        },
+        observed: {
+          kind: "task",
+          id: "task-1",
+          value: { status: "failed" },
+        },
+        field: {},
+        confidence: 1,
+        persistence: "transient",
+        effect: "harmful",
+        evidence: [{ eventId: "missing-event", origin: "direct" }],
+        detectedAt: "2026-09-14T00:00:10.000Z",
+      };
+      const legacyEnvelope: EventEnvelope = {
+        schemaVersion: "1",
+        eventVersion: "1",
+        id: "residual-detected:legacy-forged",
+        type: "residual.detected",
+        occurredAt: "2026-09-14T00:00:10.000Z",
+        observedAt: "2026-09-14T00:00:10.000Z",
+        recordedAt: "2026-09-14T00:00:10.000Z",
+        actor: { type: "system", id: "legacy-fixture" },
+        operationId: "residual:legacy-forged",
+        source: { kind: "legacy-fixture", ref: "residual:legacy-forged" },
+        payload: legacyPayload,
+        evidence: [{ eventId: "missing-event", origin: "direct" }],
+        provenance: { origin: "inferred", confidence: 1 },
+      };
+      const legacyDatabase = new DatabaseSync(filename);
+      try {
+        legacyDatabase
+          .prepare(
+            `INSERT INTO events (
+              id, schema_version, event_version, type,
+              occurred_at, observed_at, recorded_at,
+              actor_type, actor_id, session_id, trace_id, operation_id,
+              source_json, payload_json, evidence_json, links_json,
+              provenance_json, content_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            legacyEnvelope.id,
+            legacyEnvelope.schemaVersion,
+            legacyEnvelope.eventVersion,
+            legacyEnvelope.type,
+            Date.parse(legacyEnvelope.occurredAt),
+            Date.parse(legacyEnvelope.observedAt),
+            Date.parse(legacyEnvelope.recordedAt),
+            legacyEnvelope.actor.type,
+            legacyEnvelope.actor.id,
+            null,
+            null,
+            legacyEnvelope.operationId ?? null,
+            stableStringify(legacyEnvelope.source as unknown as JsonValue),
+            stableStringify(legacyEnvelope.payload),
+            stableStringify(legacyEnvelope.evidence as unknown as JsonValue),
+            null,
+            stableStringify(legacyEnvelope.provenance as unknown as JsonValue),
+            createHash("sha256")
+              .update(stableStringify(legacyEnvelope as unknown as JsonValue))
+              .digest("hex"),
+          );
+      } finally {
+        legacyDatabase.close();
+      }
+
+      expect(
+        () => new SqliteEventStore({ filename, migrationsDir }),
+      ).toThrowError(expect.objectContaining({ code: "MIGRATION_ERROR" }));
+
+      const inspectionDatabase = new DatabaseSync(filename);
+      try {
+        expect(
+          inspectionDatabase
+            .prepare("SELECT version FROM schema_migrations ORDER BY version")
+            .all(),
+        ).toEqual([{ version: 1 }, { version: 2 }]);
+      } finally {
+        inspectionDatabase.close();
+      }
+    } finally {
+      rmSync(migrationDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects legacy derived evidence that points to a future ledger event", () => {
+    temporaryDirectory = mkdtempSync(join(tmpdir(), "praxis-phase3-future-"));
+    const migrationDirectory = mkdtempSync(
+      join(tmpdir(), "praxis-phase3-future-migrations-"),
+    );
+    const filename = join(temporaryDirectory, "events.db");
+    try {
+      for (const migration of [
+        "0001_init.sql",
+        "0002_operation_lifecycle.sql",
+      ]) {
+        copyFileSync(
+          join(migrationsDir, migration),
+          join(migrationDirectory, migration),
+        );
+      }
+      const legacyStore = new SqliteEventStore({
+        filename,
+        migrationsDir: migrationDirectory,
+      });
+      legacyStore.close();
+
+      const expectationId = "future-evidence-expectation";
+      insertRawEvent(filename, {
+        schemaVersion: "1",
+        eventVersion: "1",
+        id: `expectation-registered:${expectationId}`,
+        type: "expectation.registered",
+        occurredAt: "2026-09-14T00:00:00.000Z",
+        observedAt: "2026-09-14T00:00:00.000Z",
+        recordedAt: "2026-09-14T00:00:00.000Z",
+        actor: { type: "human", id: "legacy-owner" },
+        operationId: expectationId,
+        source: { kind: "legacy-fixture", ref: expectationId },
+        payload: {
+          materialClassification: "declared",
+          expectationId,
+          subject: { kind: "task", id: "future-task" },
+          expected: { status: "complete" },
+          verification: "exact",
+          createdAt: "2026-09-14T00:00:00.000Z",
+          evidence: [{ eventId: "future-source", origin: "direct" }],
+        },
+        evidence: [{ eventId: "future-source", origin: "direct" }],
+        provenance: { origin: "declared", confidence: 1 },
+      });
+      insertRawEvent(
+        filename,
+        makeEvent({
+          id: "future-source",
+          operationId: "future-source-operation",
+        }),
+      );
+
+      expect(
+        () => new SqliteEventStore({ filename, migrationsDir }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "MIGRATION_ERROR",
+          message: expect.stringContaining("future"),
+        }),
+      );
     } finally {
       rmSync(migrationDirectory, { recursive: true, force: true });
     }

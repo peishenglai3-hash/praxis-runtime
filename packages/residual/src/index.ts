@@ -123,6 +123,7 @@ export interface ResidualDetectionBatch {
 export interface Residual {
   id: string;
   kind: ResidualKind;
+  baselineId?: string;
   baseline?: ResidualReference;
   observed: ResidualReference;
   field: FieldContext;
@@ -157,6 +158,7 @@ export class ResidualDetector {
     validateOutcomeObservation(input.observation);
     validateFieldContext(input.field);
     assertCanonicalTimestamp(input.detectedAt, "detectedAt");
+    validateOutcomeTimeline(input);
     if (
       input.expectation.traceId !== undefined &&
       input.observation.traceId !== input.expectation.traceId
@@ -182,6 +184,7 @@ export class ResidualDetector {
     return {
       id: `residual:outcome:${encodeURIComponent(input.expectation.id)}:${encodeURIComponent(input.observation.id)}`,
       kind: "outcome",
+      baselineId: input.expectation.id,
       baseline: toReference(
         input.expectation.subject,
         input.expectation.expected,
@@ -205,10 +208,16 @@ export class ResidualDetector {
 
   detectTiming(input: TimingDetectionInput): Residual | null {
     validateSubject(input.subject, "timing subject");
+    if (input.agentId.length < 1) throw new Error("agentId is required");
     validateFieldContext(input.field);
-    validateEvidence(input.evidence, "timing detection");
+    assertEvidence(input.evidence, "timing detection");
     assertCanonicalTimestamp(input.observedAt, "timing observedAt");
     assertCanonicalTimestamp(input.detectedAt, "timing detectedAt");
+    if (!input.evidence.some((item) => item.eventId !== undefined)) {
+      throw new Error(
+        "timing detection requires a ledger event evidence reference",
+      );
+    }
     assertNonNegativeSafeInteger(input.cursorSeq, "cursorSeq");
     assertNonNegativeSafeInteger(input.latestRelevantSeq, "latestRelevantSeq");
     if (input.latestRelevantSeq < input.cursorSeq) {
@@ -273,7 +282,7 @@ export class ResidualDetector {
     validateRule(input.rule);
     validateSubject({ kind: "rule", id: input.rule.id }, "rule subject");
     validateFieldContext(input.field);
-    validateEvidence(input.evidence, "rule detection");
+    assertEvidence(input.evidence, "rule detection");
     assertCanonicalTimestamp(input.detectedAt, "detectedAt");
     if (input.traceId.length < 1) throw new Error("traceId must not be empty");
 
@@ -379,6 +388,26 @@ function validateOutcomeObservation(observation: OutcomeObservation): void {
   validateSubject(observation.subject, "outcome observation subject");
   assertCanonicalTimestamp(observation.observedAt, "observation observedAt");
   validateEvidence(observation.evidence, "outcome observation");
+}
+
+function validateOutcomeTimeline(input: OutcomeDetectionInput): void {
+  const createdAt = Date.parse(input.expectation.createdAt);
+  const observedAt = Date.parse(input.observation.observedAt);
+  const detectedAt = Date.parse(input.detectedAt);
+  if (observedAt < createdAt) {
+    throw new Error("outcome observation cannot precede expectation creation");
+  }
+  if (
+    input.expectation.validUntil !== undefined &&
+    observedAt > Date.parse(input.expectation.validUntil)
+  ) {
+    throw new Error(
+      "outcome observation is outside the expectation validity window",
+    );
+  }
+  if (detectedAt < observedAt) {
+    throw new Error("outcome detection cannot precede the observation");
+  }
 }
 
 function validateOutcomeVerification(

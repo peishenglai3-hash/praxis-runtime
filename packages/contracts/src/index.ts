@@ -18,6 +18,7 @@ export type {
   ActorRef,
   ActorType,
   EventAppendResult,
+  EventBatchWriter,
   EventEnvelope,
   EventLinks,
   EventQuery,
@@ -33,3 +34,9 @@ export type {
 } from "./events.js";
 export { stableStringify } from "./json.js";
 export type { JsonObject, JsonPrimitive, JsonValue } from "./json.js";
+export {
+  phase3PayloadAsObject,
+  validatePhase3EventEnvelope,
+  validatePhase3EventPayload,
+} from "./phase3-events.js";
+export type { Phase3EventPayload } from "./phase3-events.js";

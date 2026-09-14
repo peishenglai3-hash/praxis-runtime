@@ -1,10 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://praxis-runtime.local/schemas/reflection-proposal.v1.schema.json",
-  "title": "Praxis Reflection Proposal v1",
+  "$id": "https://praxis-runtime.local/schemas/reflection-proposed-event.v1.schema.json",
+  "title": "Praxis reflection.proposed payload v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "materialClassification",
     "residualId",
     "decision",
     "reasons",
@@ -15,6 +16,7 @@
     "evidenceDelta"
   ],
   "properties": {
+    "materialClassification": { "const": "inferred" },
     "residualId": { "type": "string", "minLength": 1 },
     "decision": { "enum": ["STOP", "CONTINUE", "ESCALATE"] },
     "reasons": {
@@ -123,10 +125,7 @@
         "requiredPermission": {
           "enum": ["none", "external-verifier", "human-confirmation"]
         },
-        "parameters": {
-          "type": "object",
-          "additionalProperties": true
-        }
+        "parameters": { "type": "object", "additionalProperties": true }
       },
       "allOf": [
         {
@@ -161,17 +160,6 @@
         }
       ]
     },
-    "budgetUsage": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["depth", "hypotheses", "toolCalls", "elapsedMs"],
-      "properties": {
-        "depth": { "type": "integer", "minimum": 0 },
-        "hypotheses": { "type": "integer", "minimum": 0 },
-        "toolCalls": { "type": "integer", "minimum": 0 },
-        "elapsedMs": { "type": "integer", "minimum": 0 }
-      }
-    },
     "budget": {
       "type": "object",
       "additionalProperties": false,
@@ -181,6 +169,17 @@
         "maxHypotheses": { "type": "integer", "minimum": 0 },
         "maxToolCalls": { "type": "integer", "minimum": 0 },
         "maxElapsedMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "budgetUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["depth", "hypotheses", "toolCalls", "elapsedMs"],
+      "properties": {
+        "depth": { "type": "integer", "minimum": 0 },
+        "hypotheses": { "type": "integer", "minimum": 0 },
+        "toolCalls": { "type": "integer", "minimum": 0 },
+        "elapsedMs": { "type": "integer", "minimum": 0 }
       }
     },
     "evidenceDelta": {

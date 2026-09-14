@@ -1,4 +1,5 @@
 import type { EvidenceRef, JsonObject } from "@praxis/contracts";
+import { stableStringify } from "@praxis/contracts";
 import type { Residual, ResidualKind } from "@praxis/residual";
 
 export type ReflectionDecision = "STOP" | "CONTINUE" | "ESCALATE";
@@ -15,6 +16,12 @@ export interface ReflectionBudgetUsage {
   hypotheses: number;
   toolCalls: number;
   elapsedMs: number;
+}
+
+export interface ReflectionEvidenceDelta {
+  fromSeq: number;
+  toSeq: number;
+  evidence: EvidenceRef[];
 }
 
 export type ReflectionActionKind =
@@ -42,7 +49,7 @@ export interface ReflectionHypothesis {
 export interface ReflectionInput {
   residual: Residual;
   budget: ReflectionBudget;
-  newEvidenceAvailable: boolean;
+  evidenceDelta: ReflectionEvidenceDelta;
   usage?: Partial<ReflectionBudgetUsage>;
 }
 
@@ -52,7 +59,9 @@ export interface ReflectionResult {
   reasons: string[];
   hypotheses: ReflectionHypothesis[];
   recommendedActions: ReflectionAction[];
+  budget: ReflectionBudget;
   budgetUsed: ReflectionBudgetUsage;
+  evidenceDelta: ReflectionEvidenceDelta;
 }
 
 /**
@@ -64,30 +73,67 @@ export class ReflectionController {
     validateResidual(input.residual);
     const budget = validateBudget(input.budget);
     const current = validateUsage(input.usage ?? {}, budget);
+    const evidenceDelta = validateEvidenceDelta(input.evidenceDelta);
     const budgetUsed: ReflectionBudgetUsage = { ...current };
     const reasons: string[] = [];
 
-    if (!input.newEvidenceAvailable) {
+    if (!hasNewEvidence(evidenceDelta)) {
       reasons.push(
         "no new evidence or event is available; the same residual cannot self-call",
       );
-      return result(input.residual.id, "STOP", reasons, [], [], budgetUsed);
+      return result(
+        input.residual.id,
+        "STOP",
+        reasons,
+        [],
+        [],
+        budget,
+        budgetUsed,
+        evidenceDelta,
+      );
     }
 
     if (current.depth >= budget.maxDepth) {
       reasons.push("maximum reflection depth has been reached");
-      return result(input.residual.id, "STOP", reasons, [], [], budgetUsed);
+      return result(
+        input.residual.id,
+        "STOP",
+        reasons,
+        [],
+        [],
+        budget,
+        budgetUsed,
+        evidenceDelta,
+      );
     }
 
     if (current.elapsedMs >= budget.maxElapsedMs) {
       reasons.push("maximum reflection elapsed-time budget has been reached");
-      return result(input.residual.id, "STOP", reasons, [], [], budgetUsed);
+      return result(
+        input.residual.id,
+        "STOP",
+        reasons,
+        [],
+        [],
+        budget,
+        budgetUsed,
+        evidenceDelta,
+      );
     }
 
     const availableHypotheses = budget.maxHypotheses - current.hypotheses;
     if (availableHypotheses < 1) {
       reasons.push("maximum hypothesis budget has been reached");
-      return result(input.residual.id, "STOP", reasons, [], [], budgetUsed);
+      return result(
+        input.residual.id,
+        "STOP",
+        reasons,
+        [],
+        [],
+        budget,
+        budgetUsed,
+        evidenceDelta,
+      );
     }
 
     const hypotheses = [createHypothesis(input.residual)];
@@ -103,7 +149,9 @@ export class ReflectionController {
         reasons,
         hypotheses,
         [createHumanAction(input.residual.id, escalationReasons[0]!)],
+        budget,
         budgetUsed,
+        evidenceDelta,
       );
     }
 
@@ -116,8 +164,45 @@ export class ReflectionController {
       reasons,
       hypotheses,
       [createNextEvidenceAction(input.residual)],
+      budget,
       budgetUsed,
+      evidenceDelta,
     );
+  }
+}
+
+export function validateReflectionResult(result: ReflectionResult): void {
+  if (result.residualId.length < 1) {
+    throw new Error("reflection result residualId is required");
+  }
+  if (!isDecision(result.decision)) {
+    throw new Error("reflection result decision is invalid");
+  }
+  if (
+    result.reasons.length < 1 ||
+    result.reasons.some((reason) => reason.length < 1)
+  ) {
+    throw new Error("reflection result reasons are required");
+  }
+  const budget = validateBudget(result.budget);
+  const budgetUsed = validateUsage(result.budgetUsed, budget);
+  validateEvidenceDelta(result.evidenceDelta);
+  if (budgetUsed.hypotheses < result.hypotheses.length) {
+    throw new Error("reflection result hypothesis usage is inconsistent");
+  }
+  if (result.hypotheses.length > budget.maxHypotheses) {
+    throw new Error("reflection result exceeds the hypothesis budget");
+  }
+  for (const hypothesis of result.hypotheses) validateHypothesis(hypothesis);
+  for (const action of result.recommendedActions) validateAction(action);
+  if (result.decision === "STOP") {
+    if (result.hypotheses.length > 0 || result.recommendedActions.length > 0) {
+      throw new Error("STOP reflection result cannot recommend further work");
+    }
+  } else if (result.budgetUsed.depth < 1) {
+    throw new Error("non-STOP reflection must consume at least one depth unit");
+  } else if (result.hypotheses.length === 0) {
+    throw new Error("non-STOP reflection result requires a hypothesis");
   }
 }
 
@@ -127,16 +212,22 @@ function result(
   reasons: string[],
   hypotheses: ReflectionHypothesis[],
   recommendedActions: ReflectionAction[],
+  budget: ReflectionBudget,
   budgetUsed: ReflectionBudgetUsage,
+  evidenceDelta: ReflectionEvidenceDelta,
 ): ReflectionResult {
-  return {
+  const output: ReflectionResult = {
     residualId,
     decision,
     reasons: [...reasons],
     hypotheses: hypotheses.map(copyHypothesis),
     recommendedActions: recommendedActions.map(copyAction),
+    budget: { ...budget },
     budgetUsed: { ...budgetUsed },
+    evidenceDelta: copyEvidenceDelta(evidenceDelta),
   };
+  validateReflectionResult(output);
+  return output;
 }
 
 function validateResidual(residual: Residual): void {
@@ -151,10 +242,17 @@ function validateResidual(residual: Residual): void {
   ) {
     throw new Error("residual confidence must be between 0 and 1");
   }
+  validateEvidence(residual.evidence, "residual");
 }
 
 function validateBudget(budget: ReflectionBudget): ReflectionBudget {
-  for (const [name, value] of Object.entries(budget)) {
+  for (const name of [
+    "maxDepth",
+    "maxHypotheses",
+    "maxToolCalls",
+    "maxElapsedMs",
+  ] as const) {
+    const value = budget[name];
     if (!Number.isSafeInteger(value) || value < 0) {
       throw new Error(`${name} must be a non-negative safe integer`);
     }
@@ -163,7 +261,7 @@ function validateBudget(budget: ReflectionBudget): ReflectionBudget {
 }
 
 function validateUsage(
-  usage: Partial<ReflectionBudgetUsage>,
+  usage: Partial<ReflectionBudgetUsage> | ReflectionBudgetUsage,
   budget: ReflectionBudget,
 ): ReflectionBudgetUsage {
   const normalized: ReflectionBudgetUsage = {
@@ -192,12 +290,129 @@ function validateUsage(
   return normalized;
 }
 
+function validateEvidenceDelta(
+  delta: ReflectionEvidenceDelta,
+): ReflectionEvidenceDelta {
+  assertNonNegativeSafeInteger(delta.fromSeq, "reflection evidence fromSeq");
+  assertNonNegativeSafeInteger(delta.toSeq, "reflection evidence toSeq");
+  if (delta.toSeq < delta.fromSeq) {
+    throw new Error("reflection evidence toSeq cannot precede fromSeq");
+  }
+  validateEvidence(
+    delta.evidence,
+    "reflection evidence delta",
+    delta.toSeq === delta.fromSeq,
+  );
+  if (delta.toSeq === delta.fromSeq && delta.evidence.length > 0) {
+    throw new Error("reflection evidence without a sequence delta is invalid");
+  }
+  if (delta.toSeq > delta.fromSeq && delta.evidence.length === 0) {
+    throw new Error("reflection evidence delta requires evidence");
+  }
+  return copyEvidenceDelta(delta);
+}
+
+function hasNewEvidence(delta: ReflectionEvidenceDelta): boolean {
+  return delta.toSeq > delta.fromSeq && delta.evidence.length > 0;
+}
+
+function validateHypothesis(hypothesis: ReflectionHypothesis): void {
+  if (hypothesis.id.length < 1 || hypothesis.statement.length < 1) {
+    throw new Error("reflection hypothesis id and statement are required");
+  }
+  if (hypothesis.testability.length < 1) {
+    throw new Error("reflection hypothesis testability is required");
+  }
+  if (
+    !Number.isFinite(hypothesis.estimatedCost) ||
+    hypothesis.estimatedCost < 0
+  ) {
+    throw new Error("reflection hypothesis estimatedCost is invalid");
+  }
+  validateEvidence(hypothesis.support, "reflection hypothesis support");
+  validateEvidence(
+    hypothesis.counterevidence,
+    "reflection hypothesis counterevidence",
+    true,
+  );
+}
+
+function validateAction(action: ReflectionAction): void {
+  if (action.id.length < 1) throw new Error("reflection action id is required");
+  const permissionByKind: Record<ReflectionActionKind, ReflectionPermission> = {
+    "collect-evidence": "none",
+    "verify-external": "external-verifier",
+    "request-human-confirmation": "human-confirmation",
+  };
+  if (
+    !isActionKind(action.kind) ||
+    permissionByKind[action.kind] !== action.requiredPermission
+  ) {
+    throw new Error("reflection action permission does not match its kind");
+  }
+  stableStringify(action.parameters);
+}
+
+function validateEvidence(
+  evidence: EvidenceRef[],
+  label: string,
+  allowEmpty = false,
+): void {
+  if (!allowEmpty && evidence.length < 1) {
+    throw new Error(`${label} requires evidence`);
+  }
+  for (const item of evidence) {
+    if (
+      item.eventId === undefined &&
+      item.assetId === undefined &&
+      item.artifactHash === undefined
+    ) {
+      throw new Error(
+        `${label} evidence must identify an event, asset, or artifact`,
+      );
+    }
+    if (!isEvidenceOrigin(item.origin)) {
+      throw new Error(`${label} evidence origin is invalid`);
+    }
+  }
+}
+
+function escalationReasonsFor(residual: Residual): string[] {
+  const reasons: string[] = [];
+  if (residual.effect === "harmful") {
+    reasons.push(
+      "harmful effect requires an explicit human or verifier judgment",
+    );
+  }
+  if (
+    residual.field.consequence === "high" &&
+    residual.field.reversibility === "hard"
+  ) {
+    reasons.push(
+      "high-consequence and hard-to-reverse work requires human control",
+    );
+  }
+  if (residual.field.externalVerification === "weak") {
+    reasons.push("external verification is weak for this field");
+  }
+  if (
+    residual.kind === "representation" ||
+    residual.kind === "relation" ||
+    residual.kind === "retrospective"
+  ) {
+    reasons.push(
+      `${residual.kind} residuals are not automatically adjudicated`,
+    );
+  }
+  return reasons;
+}
+
 function createHypothesis(residual: Residual): ReflectionHypothesis {
   const language = hypothesisLanguage(residual.kind);
   return {
     id: `hypothesis:${encodeURIComponent(residual.id)}:1`,
     statement: language.statement,
-    support: residual.evidence.map(copyEvidence),
+    support: residual.evidence.map(copyEvidenceRef),
     counterevidence: [],
     testability: language.testability,
     estimatedCost: 1,
@@ -254,36 +469,6 @@ function hypothesisLanguage(kind: ResidualKind): {
   }
 }
 
-function escalationReasonsFor(residual: Residual): string[] {
-  const reasons: string[] = [];
-  if (residual.effect === "harmful") {
-    reasons.push(
-      "harmful effect requires an explicit human or verifier judgment",
-    );
-  }
-  if (
-    residual.field.consequence === "high" &&
-    residual.field.reversibility === "hard"
-  ) {
-    reasons.push(
-      "high-consequence and hard-to-reverse work requires human control",
-    );
-  }
-  if (residual.field.externalVerification === "weak") {
-    reasons.push("external verification is weak for this field");
-  }
-  if (
-    residual.kind === "representation" ||
-    residual.kind === "relation" ||
-    residual.kind === "retrospective"
-  ) {
-    reasons.push(
-      `${residual.kind} residuals are not automatically adjudicated`,
-    );
-  }
-  return reasons;
-}
-
 function createHumanAction(
   residualId: string,
   reason: string,
@@ -314,8 +499,18 @@ function createNextEvidenceAction(residual: Residual): ReflectionAction {
   };
 }
 
-function copyEvidence(evidence: EvidenceRef): EvidenceRef {
+function copyEvidenceRef(evidence: EvidenceRef): EvidenceRef {
   return { ...evidence };
+}
+
+function copyEvidenceDelta(
+  delta: ReflectionEvidenceDelta,
+): ReflectionEvidenceDelta {
+  return {
+    fromSeq: delta.fromSeq,
+    toSeq: delta.toSeq,
+    evidence: delta.evidence.map(copyEvidenceRef),
+  };
 }
 
 function copyHypothesis(
@@ -323,11 +518,38 @@ function copyHypothesis(
 ): ReflectionHypothesis {
   return {
     ...hypothesis,
-    support: hypothesis.support.map(copyEvidence),
-    counterevidence: hypothesis.counterevidence.map(copyEvidence),
+    support: hypothesis.support.map(copyEvidenceRef),
+    counterevidence: hypothesis.counterevidence.map(copyEvidenceRef),
   };
 }
 
 function copyAction(action: ReflectionAction): ReflectionAction {
   return { ...action, parameters: { ...action.parameters } };
+}
+
+function isDecision(value: string): value is ReflectionDecision {
+  return value === "STOP" || value === "CONTINUE" || value === "ESCALATE";
+}
+
+function isActionKind(value: string): value is ReflectionActionKind {
+  return (
+    value === "collect-evidence" ||
+    value === "verify-external" ||
+    value === "request-human-confirmation"
+  );
+}
+
+function isEvidenceOrigin(value: string): boolean {
+  return (
+    value === "direct" ||
+    value === "declared" ||
+    value === "inferred" ||
+    value === "institutional"
+  );
+}
+
+function assertNonNegativeSafeInteger(value: number, field: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative safe integer`);
+  }
 }
