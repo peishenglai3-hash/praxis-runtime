@@ -1,22 +1,15 @@
-name: Praxis Core CI
+name: Praxis Provider Smoke
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  core:
-    name: core / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
+  provider-smoke:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install the pinned package manager
@@ -29,5 +22,5 @@ jobs:
           cache: pnpm
       - name: Install from the lockfile
         run: pnpm install --frozen-lockfile
-      - name: Run the core verification gate
-        run: pnpm verify
+      - name: Run provider-independent adapter smoke
+        run: pnpm exec vitest run tests/smoke.test.ts

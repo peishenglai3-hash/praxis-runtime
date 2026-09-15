@@ -3,12 +3,19 @@ import type {
   EventEnvelope,
   EventReader,
   EventRecord,
+  LedgerSeqGap,
   JsonValue,
   ProjectionDataRecord,
   ProjectionPersistence,
   ProjectionStateRecord,
   SnapshotRecord,
 } from "@praxis/contracts";
+import {
+  expectationStatusSchema,
+  parseExpectationRecord,
+  parseVerificationResult,
+} from "@praxis/contracts";
+import type { ExpectationRecord } from "@praxis/contracts";
 
 export interface Projection<TState> {
   name: string;
@@ -65,6 +72,17 @@ export interface AgentCursor {
 
 export interface AgentState {
   cursors: Record<string, AgentCursor>;
+}
+
+export interface ExpectationProjectionEntry extends ExpectationRecord {
+  cancelled?: boolean;
+  cancelledAt?: string;
+  lastVerificationRequestId?: string;
+  lastEventSeq: number;
+}
+
+export interface ExpectationState {
+  expectations: Record<string, ExpectationProjectionEntry>;
 }
 
 export class ProjectionEngine {
@@ -283,7 +301,16 @@ export class ProjectionEngine {
   }
 
   private assertNextSeq(eventSeq: number, previousSeq: number): void {
-    if (eventSeq !== previousSeq + 1) {
+    if (eventSeq === previousSeq + 1) return;
+    const missingStart = previousSeq + 1;
+    const missingEnd = eventSeq - 1;
+    if (
+      missingEnd >= missingStart &&
+      this.isPurgedRange(missingStart, missingEnd)
+    ) {
+      return;
+    }
+    {
       throw new Error(
         "event sequence is not contiguous: expected " +
           (previousSeq + 1) +
@@ -291,6 +318,24 @@ export class ProjectionEngine {
           eventSeq,
       );
     }
+  }
+
+  private isPurgedRange(startSeq: number, endSeq: number): boolean {
+    const reader = this.reader as EventReader & {
+      getPurgedSeqRanges?: () => LedgerSeqGap[];
+    };
+    if (reader.getPurgedSeqRanges === undefined) return false;
+    const ranges = [...reader.getPurgedSeqRanges()].sort(
+      (left, right) => left.startSeq - right.startSeq,
+    );
+    let cursor = startSeq;
+    for (const range of ranges) {
+      if (range.endSeq < cursor) continue;
+      if (range.startSeq > cursor) return false;
+      cursor = Math.max(cursor, range.endSeq + 1);
+      if (cursor > endSeq) return true;
+    }
+    return false;
   }
 }
 
@@ -394,13 +439,254 @@ export function createAgentProjection(): Projection<AgentState> {
   };
 }
 
+export function createExpectationProjection(): Projection<ExpectationState> {
+  return {
+    name: "expectations_current",
+    version: 1,
+    initial: () => ({ expectations: {} }),
+    apply: (state, event) => {
+      if (event.type === "expectation.registered") {
+        const entry = legacyExpectationEntry(event);
+        return {
+          expectations: {
+            ...state.expectations,
+            [entry.id]: entry,
+          },
+        };
+      }
+      if (
+        event.type === "expectation.created" ||
+        event.type === "expectation.updated"
+      ) {
+        const entry = expectationEntryFromPayload(event.payload, event.seq);
+        const previous = state.expectations[entry.id];
+        if (event.type === "expectation.created" && previous !== undefined) {
+          throw new Error(`expectation ${entry.id} was created more than once`);
+        }
+        if (event.type === "expectation.updated" && previous === undefined) {
+          throw new Error(
+            `expectation ${entry.id} was updated before creation`,
+          );
+        }
+        return {
+          expectations: {
+            ...state.expectations,
+            [entry.id]: {
+              ...entry,
+              ...(previous?.cancelled === true
+                ? {
+                    cancelled: true,
+                    ...(previous.cancelledAt === undefined
+                      ? {}
+                      : { cancelledAt: previous.cancelledAt }),
+                  }
+                : {}),
+              ...(previous?.lastVerificationRequestId === undefined
+                ? {}
+                : {
+                    lastVerificationRequestId:
+                      previous.lastVerificationRequestId,
+                  }),
+            },
+          },
+        };
+      }
+      if (event.type === "expectation.cancelled") {
+        const payload = objectPayloadValue(
+          event.payload,
+          "expectation cancellation payload",
+        );
+        const id = requiredPayloadString(payload, "expectationId");
+        const cancelledAt = requiredPayloadString(payload, "cancelledAt");
+        const previous = requireExpectation(state, id);
+        return {
+          expectations: {
+            ...state.expectations,
+            [id]: {
+              ...previous,
+              cancelled: true,
+              cancelledAt,
+              lastEventSeq: event.seq,
+            },
+          },
+        };
+      }
+      if (event.type === "verification.requested") {
+        const payload = objectPayloadValue(
+          event.payload,
+          "verification request payload",
+        );
+        const id = requiredPayloadString(payload, "expectationId");
+        const requestId = requiredPayloadString(payload, "requestId");
+        const previous = requireExpectation(state, id);
+        return {
+          expectations: {
+            ...state.expectations,
+            [id]: {
+              ...previous,
+              lastVerificationRequestId: requestId,
+              lastEventSeq: event.seq,
+            },
+          },
+        };
+      }
+      if (event.type === "verification.completed") {
+        const payload = objectPayloadValue(
+          event.payload,
+          "verification completion payload",
+        );
+        const result = objectPayloadValue(
+          payload.result ?? null,
+          "verification result payload",
+        );
+        const normalized = parseVerificationResult(result);
+        const id = normalized.expectationId;
+        const outcome = normalized.outcome;
+        if (
+          !(["satisfied", "violated", "unknown"] as string[]).includes(outcome)
+        ) {
+          throw new Error(
+            `verification outcome is invalid for expectation ${id}`,
+          );
+        }
+        const previous = requireExpectation(state, id);
+        return {
+          expectations: {
+            ...state.expectations,
+            [id]: {
+              ...previous,
+              status: outcome,
+              updatedAt: normalized.observedAt,
+              lastEventSeq: event.seq,
+            },
+          },
+        };
+      }
+      if (event.type === "expectation.status.changed") {
+        const payload = objectPayloadValue(
+          event.payload,
+          "expectation status payload",
+        );
+        const id = requiredPayloadString(payload, "expectationId");
+        const from = requiredPayloadString(payload, "from");
+        const to = requiredPayloadString(payload, "to");
+        const previous = requireExpectation(state, id);
+        if (previous.status !== from) {
+          throw new Error(
+            `expectation ${id} status changed from ${from}, current status is ${previous.status}`,
+          );
+        }
+        const parsedStatus = expectationStatusSchema.safeParse(to);
+        if (!parsedStatus.success) {
+          throw new Error(`expectation ${id} status target is invalid`);
+        }
+        return {
+          expectations: {
+            ...state.expectations,
+            [id]: {
+              ...previous,
+              status: parsedStatus.data,
+              updatedAt: requiredPayloadString(payload, "changedAt"),
+              lastEventSeq: event.seq,
+            },
+          },
+        };
+      }
+      return state;
+    },
+  };
+}
+
 export function createCoreProjections(): Projection<unknown>[] {
   return [
     createProjectProjection() as unknown as Projection<unknown>,
     createRuleProjection() as unknown as Projection<unknown>,
     createAssetProjection() as unknown as Projection<unknown>,
     createAgentProjection() as unknown as Projection<unknown>,
+    createExpectationProjection() as unknown as Projection<unknown>,
   ];
+}
+
+function legacyExpectationEntry(
+  event: EventRecord,
+): ExpectationProjectionEntry {
+  const payload = objectPayloadValue(event.payload, "payload");
+  const id = requiredPayloadString(payload, "expectationId");
+  const createdAt = requiredPayloadString(payload, "createdAt");
+  const expected = payload.expected;
+  if (expected === undefined)
+    throw new Error(`legacy expectation ${id} has no expected value`);
+  const verification = requiredPayloadString(payload, "verification");
+  return {
+    id,
+    ...(event.traceId === undefined ? {} : { traceId: event.traceId }),
+    source: { kind: event.source.kind, id: event.source.ref ?? event.id },
+    subject: objectPayloadValue(
+      payload.subject ?? null,
+      "legacy expectation subject",
+    ) as ExpectationRecord["subject"],
+    expected,
+    verification: {
+      mode: verification === "external" ? "external" : "state",
+      criterion: expected,
+    },
+    createdAt,
+    validFrom: createdAt,
+    ...(typeof payload.validUntil === "string"
+      ? { evaluateBy: payload.validUntil, expiresAt: payload.validUntil }
+      : {}),
+    evidence:
+      (payload.evidence as unknown as ExpectationRecord["evidence"]) ?? [],
+    status: "pending",
+    updatedAt: event.recordedAt,
+    lastEventSeq: event.seq,
+  };
+}
+
+function expectationEntryFromPayload(
+  payload: JsonValue,
+  lastEventSeq: number,
+): ExpectationProjectionEntry {
+  // Structured lifecycle events use the event payload itself. The legacy
+  // expectation.registered adapter is the only format with a nested payload.
+  const object = objectPayloadValue(payload, "expectation lifecycle payload");
+  const { materialClassification: _classification, ...record } = object;
+  const entry = parseExpectationRecord(record);
+  return { ...entry, lastEventSeq };
+}
+
+function objectPayloadValue(
+  value: JsonValue,
+  label: string,
+): Record<string, JsonValue> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return value as Record<string, JsonValue>;
+}
+
+function requiredPayloadString(
+  payload: Record<string, JsonValue>,
+  key: string,
+): string {
+  const value = payload[key];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(
+      `expectation payload ${key} must be a non-empty string (keys: ${Object.keys(payload).join(",")})`,
+    );
+  }
+  return value;
+}
+
+function requireExpectation(
+  state: ExpectationState,
+  id: string,
+): ExpectationProjectionEntry {
+  const previous = state.expectations[id];
+  if (previous === undefined) {
+    throw new Error(`expectation ${id} is not present in the projection`);
+  }
+  return previous;
 }
 
 function payloadString(event: EventEnvelope, key: string): string | undefined {

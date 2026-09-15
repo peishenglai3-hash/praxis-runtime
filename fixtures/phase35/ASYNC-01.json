@@ -1,0 +1,10 @@
+{
+  "id": "ASYNC-01",
+  "classification": "synthetic-until-author-supplies-sanitized-case",
+  "scenario": "valid delayed success before evaluateBy",
+  "expected": {
+    "status": "satisfied",
+    "timingResidual": false,
+    "outcomeResidual": false
+  }
+}

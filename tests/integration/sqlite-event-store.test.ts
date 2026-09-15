@@ -11,6 +11,11 @@ import type {
   EventEnvelope,
   JsonObject,
   JsonValue,
+  WriterContext,
+} from "../../packages/contracts/src/index.js";
+import {
+  migrationWriterContext,
+  permissionScopes,
 } from "../../packages/contracts/src/index.js";
 import { SqliteEventStore } from "../../packages/store/src/index.js";
 import { stableStringify } from "../../packages/contracts/src/index.js";
@@ -18,6 +23,19 @@ import { stableStringify } from "../../packages/contracts/src/index.js";
 const migrationsDir = resolve(
   fileURLToPath(new URL("../../migrations", import.meta.url)),
 );
+
+const testWriter: WriterContext = {
+  writerId: "test:sqlite-event-store",
+  kind: "runtime",
+  role: "OWNER",
+  authn: "embedded-local",
+  scopes: [...permissionScopes],
+  policyVersion: 1,
+};
+
+function appendEvent(store: SqliteEventStore, event: EventEnvelope) {
+  return store.append(event, testWriter);
+}
 
 const makeEvent = (overrides: Partial<EventEnvelope> = {}): EventEnvelope => ({
   schemaVersion: "1",
@@ -129,10 +147,10 @@ describe("SqliteEventStore", () => {
       synchronous: 2,
       busyTimeout: 5000,
     });
-    expect(currentStore.migrationVersion).toBe(6);
+    expect(currentStore.migrationVersion).toBe(9);
     expect(currentStore.migrationStatus).toEqual({
-      currentVersion: 6,
-      latestVersion: 6,
+      currentVersion: 9,
+      latestVersion: 9,
       pendingVersions: [],
     });
     expect(currentStore.getLastSeq()).toBe(0);
@@ -141,10 +159,12 @@ describe("SqliteEventStore", () => {
 
   it("appends in seq order and reads with an exclusive cursor", () => {
     const currentStore = openStore();
-    const first = currentStore.append(
+    const first = appendEvent(
+      currentStore,
       makeEvent({ id: "event-1", operationId: "op-1" }),
     );
-    const second = currentStore.append(
+    const second = appendEvent(
+      currentStore,
       makeEvent({
         id: "event-2",
         operationId: "op-2",
@@ -167,18 +187,40 @@ describe("SqliteEventStore", () => {
     expect(currentStore.getSince(2)).toEqual([]);
   });
 
+  it("persists writer provenance separately from the actor and rejects unauthorized writes", () => {
+    const currentStore = openStore();
+    const actor = { type: "human" as const, id: "different-actor" };
+    const event = makeEvent({ id: "writer-event", actor });
+    const record = appendEvent(currentStore, event).record;
+
+    expect(record.actor).toEqual(actor);
+    expect(record.writer).toEqual(testWriter);
+
+    expect(() =>
+      currentStore.append(event, {
+        ...testWriter,
+        writerId: "test:observer",
+        role: "OBSERVER",
+        scopes: ["event.read"],
+      }),
+    ).toThrowError(expect.objectContaining({ code: "AUTHORIZATION_ERROR" }));
+    expect(currentStore.getLastSeq()).toBe(1);
+    expect(currentStore.query()).toHaveLength(1);
+  });
+
   it("makes retries idempotent and rejects key reuse with different content", () => {
     const currentStore = openStore();
     const event = makeEvent({ id: "event-1", operationId: "op-1" });
-    const first = currentStore.append(event);
-    const retry = currentStore.append(event);
+    const first = appendEvent(currentStore, event);
+    const retry = appendEvent(currentStore, event);
 
     expect(retry).toEqual({ record: first.record, inserted: false });
     expect(currentStore.getLastSeq()).toBe(1);
     expect(first.record.contentHash).toMatch(/^[a-f0-9]{64}$/);
 
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         makeEvent({
           id: "event-1",
           operationId: "op-2",
@@ -187,7 +229,8 @@ describe("SqliteEventStore", () => {
       ),
     ).toThrowError(expect.objectContaining({ code: "EVENT_ID_CONFLICT" }));
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         makeEvent({
           id: "event-2",
           operationId: "op-1",
@@ -200,7 +243,8 @@ describe("SqliteEventStore", () => {
   it("supports one operation across tool lifecycle events", () => {
     const currentStore = openStore();
     const operationId = "tool-operation-1";
-    const requested = currentStore.append(
+    const requested = appendEvent(
+      currentStore,
       makeEvent({
         id: "tool-requested-1",
         type: "tool.requested",
@@ -208,7 +252,8 @@ describe("SqliteEventStore", () => {
         payload: { status: "requested" },
       }),
     );
-    const succeeded = currentStore.append(
+    const succeeded = appendEvent(
+      currentStore,
       makeEvent({
         id: "tool-succeeded-1",
         type: "tool.succeeded",
@@ -216,7 +261,8 @@ describe("SqliteEventStore", () => {
         payload: { status: "succeeded" },
       }),
     );
-    const failed = currentStore.append(
+    const failed = appendEvent(
+      currentStore,
       makeEvent({
         id: "tool-failed-1",
         type: "tool.failed",
@@ -234,7 +280,8 @@ describe("SqliteEventStore", () => {
       status: "failed",
     });
     expect(
-      currentStore.append(
+      appendEvent(
+        currentStore,
         makeEvent({
           id: "tool-succeeded-1",
           type: "tool.succeeded",
@@ -244,7 +291,8 @@ describe("SqliteEventStore", () => {
       ),
     ).toEqual({ record: succeeded.record, inserted: false });
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         makeEvent({
           id: "tool-succeeded-2",
           type: "tool.succeeded",
@@ -257,7 +305,8 @@ describe("SqliteEventStore", () => {
 
   it("queries by seq cursor and indexed event dimensions", () => {
     const currentStore = openStore();
-    currentStore.append(
+    appendEvent(
+      currentStore,
       makeEvent({
         id: "query-1",
         type: "context.selected",
@@ -266,7 +315,8 @@ describe("SqliteEventStore", () => {
         actor: { type: "agent", id: "agent-1" },
       }),
     );
-    currentStore.append(
+    appendEvent(
+      currentStore,
       makeEvent({
         id: "query-2",
         type: "tool.requested",
@@ -276,7 +326,8 @@ describe("SqliteEventStore", () => {
         operationId: "query-operation-2",
       }),
     );
-    currentStore.append(
+    appendEvent(
+      currentStore,
       makeEvent({
         id: "query-3",
         type: "context.selected",
@@ -310,12 +361,12 @@ describe("SqliteEventStore", () => {
   it("recovers idempotency after reopening the same file", () => {
     const currentStore = openStore();
     const event = makeEvent({ id: "event-1", operationId: "op-1" });
-    const first = currentStore.append(event);
+    const first = appendEvent(currentStore, event);
     const filename = join(temporaryDirectory as string, "events.db");
     currentStore.close();
     store = new SqliteEventStore({ filename, migrationsDir });
 
-    expect(store.append(event)).toEqual({
+    expect(appendEvent(store, event)).toEqual({
       record: first.record,
       inserted: false,
     });
@@ -346,7 +397,7 @@ describe("SqliteEventStore", () => {
       links: { respondsTo: ["source-event"] },
       provenance: { origin: "declared", confidence: 0.9 },
     });
-    const stored = currentStore.append(event).record;
+    const stored = appendEvent(currentStore, event).record;
 
     expect(stored.evidence).toEqual(event.evidence);
     expect(stored.links).toEqual(event.links);
@@ -374,6 +425,38 @@ describe("SqliteEventStore", () => {
     expect(() => reopenedStore.getById(event.id)).toThrowError(
       expect.objectContaining({ code: "STORAGE_ERROR" }),
     );
+  });
+
+  it("keeps writer provenance and content hashes immutable at the SQL boundary", () => {
+    const currentStore = openStore();
+    const event = makeEvent({ id: "writer-immutable" });
+    const stored = appendEvent(currentStore, event).record;
+    const filename = join(temporaryDirectory as string, "events.db");
+    currentStore.close();
+    store = undefined;
+
+    const database = new DatabaseSync(filename);
+    try {
+      expect(() =>
+        database
+          .prepare("UPDATE events SET writer_json = ? WHERE id = ?")
+          .run(
+            JSON.stringify({ ...testWriter, writerId: "tampered" }),
+            event.id,
+          ),
+      ).toThrow();
+      expect(() =>
+        database
+          .prepare("UPDATE events SET content_hash = ? WHERE id = ?")
+          .run("tampered", event.id),
+      ).toThrow();
+    } finally {
+      database.close();
+    }
+
+    const reopenedStore = new SqliteEventStore({ filename, migrationsDir });
+    store = reopenedStore;
+    expect(reopenedStore.getById(event.id)).toEqual(stored);
   });
 
   it("rejects a changed migration after it has been applied", () => {
@@ -447,14 +530,18 @@ describe("SqliteEventStore", () => {
         filename,
         migrationsDir: migrationDirectory,
       });
-      const legacyRecord = legacyStore.append(
+      const legacyRecord = appendEvent(
+        legacyStore,
         makeEvent({ id: "legacy-valid-event", operationId: "legacy-valid-op" }),
       ).record;
       legacyStore.close();
 
       store = new SqliteEventStore({ filename, migrationsDir });
-      expect(store.migrationVersion).toBe(6);
-      expect(store.getById(legacyRecord.id)).toEqual(legacyRecord);
+      expect(store.migrationVersion).toBe(9);
+      expect(store.getById(legacyRecord.id)).toEqual({
+        ...legacyRecord,
+        writer: migrationWriterContext,
+      });
     } finally {
       rmSync(migrationDirectory, { recursive: true, force: true });
     }
@@ -482,7 +569,8 @@ describe("SqliteEventStore", () => {
         filename,
         migrationsDir: migrationDirectory,
       });
-      legacyStore.append(
+      appendEvent(
+        legacyStore,
         makeEvent({
           id: "legacy-phase3-source",
           operationId: "legacy-phase3-source-operation",
@@ -671,7 +759,8 @@ describe("SqliteEventStore", () => {
         filename,
         migrationsDir: migrationDirectory,
       });
-      legacyStore.append(
+      appendEvent(
+        legacyStore,
         makeEvent({
           id: "legacy-invalid-event",
           operationId: "legacy-invalid-op",
@@ -741,10 +830,11 @@ describe("SqliteEventStore", () => {
     const currentStore = openStore();
 
     expect(() =>
-      currentStore.append(makeEvent({ type: "not-an-event-type" })),
+      appendEvent(currentStore, makeEvent({ type: "not-an-event-type" })),
     ).toThrowError(expect.objectContaining({ code: "INVALID_EVENT" }));
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         makeEvent({ occurredAt: "2026-02-30T00:00:00.000Z" }),
       ),
     ).toThrowError(expect.objectContaining({ code: "INVALID_EVENT" }));

@@ -1,0 +1,10 @@
+{
+  "id": "ASYNC-04",
+  "classification": "synthetic-until-author-supplies-sanitized-case",
+  "scenario": "explicit verifier reports an outcome mismatch",
+  "expected": {
+    "status": "violated",
+    "timingResidual": false,
+    "outcomeResidual": true
+  }
+}

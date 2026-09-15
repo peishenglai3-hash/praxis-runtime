@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/verification-result.v1.schema.json",
+  "title": "Praxis VerificationResult v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "expectationId",
+    "verifier",
+    "observedAt",
+    "outcome",
+    "evidence"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "expectationId": { "type": "string", "minLength": 1 },
+    "verifier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "observedAt": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "outcome": { "enum": ["satisfied", "violated", "unknown"] },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["origin"],
+        "anyOf": [
+          { "required": ["eventId"] },
+          { "required": ["assetId"] },
+          { "required": ["artifactHash"] }
+        ],
+        "properties": {
+          "eventId": { "type": "string", "minLength": 1 },
+          "assetId": { "type": "string", "minLength": 1 },
+          "artifactHash": { "type": "string", "minLength": 1 },
+          "origin": {
+            "enum": ["direct", "declared", "inferred", "institutional"]
+          },
+          "exposureInfluenced": { "type": "boolean" }
+        }
+      }
+    },
+    "details": {
+      "type": ["null", "string", "number", "boolean", "array", "object"]
+    }
+  }
+}

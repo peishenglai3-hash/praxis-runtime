@@ -70,7 +70,7 @@ legacy/              isolated first-generation migration inputs
 labs/                experiments outside the core runtime
 ```
 
-The dependency direction is enforced in [`.dependency-cruiser.cjs`](./.dependency-cruiser.cjs): `contracts` is lowest, domain packages do not depend on apps, apps enter through `runtime`, and provider SDKs do not enter the core. Workspace dependencies must be declared explicitly and use `workspace:*`. Phase 2 provides the injectable runtime use-case boundary; production SQLite/config/clock/id/actor assembly and user-facing CLI/daemon workflows remain later work.
+The dependency direction is enforced in [`.dependency-cruiser.cjs`](./.dependency-cruiser.cjs): `contracts` is lowest, domain packages do not depend on apps, and provider SDKs do not enter the core. `apps/cli` and `apps/daemon` are the production composition roots; they may assemble `runtime`, `store`, and `contracts`, while domain packages remain environment-independent. Workspace dependencies must be declared explicitly and use `workspace:*`.
 
 The store intentionally exposes only the EventReader/EventWriter surface and safe migration metadata; its raw SQLite handle is private. Test-only crash injection uses an internal migration entry point and is not part of the public package export.
 
@@ -125,6 +125,32 @@ Phase 3 / EPIC-005 and EPIC-006 is implemented and locally verified as a bounded
 - trusted writer/ACL, human-control APIs, expectation-time policy, author-owned asynchronous golden cases, production CLI/daemon assembly, privacy/purge policy, and Node `22.13.0` runner evidence remain one explicitly bounded set of pre-Phase-4 owner inputs in [`docs/PHASE-3-INPUTS.md`](./docs/PHASE-3-INPUTS.md).
 
 Phase 3 does not turn a permission label into authorization and does not claim production readiness. The initial concurrency actor mismatch, the malformed JSON trigger, and the low-level hardening sequence are preserved in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The current local Phase 3 checkpoint is not pushed.
+
+Phase 3.5 / Author Decision Freeze correction work is implemented as a bounded
+local candidate before Phase 4:
+
+- `WriterContext`, capability scopes, namespace ACL, separate actor/writer
+  provenance, frozen roles/policy version, human OWNER guards, and migrations
+  `0007`/`0009`: `PASS` within the local capability boundary (not OS or
+  enterprise identity proof);
+- structured Expectation/Verification contracts, lifecycle events,
+  `expectations_current` replay, and ASYNC-01~04 regression fixtures: `PASS`;
+- CLI/daemon composition root with a private low-level store, one-writer lock
+  and explicit stale-lock recovery, online `VACUUM INTO` backup, staged
+  manifest/checksum restore plus post-restore doctor/replay, fail-closed daemon
+  startup, confirmed session purge, audited sequence gaps, transaction-first
+  pending-backup cleanup, asset invalidation receipts, projection rebuild, and
+  doctor checks: `PASS` locally;
+- exact Node `22.13.0` and Ubuntu/Windows CI workflows are pinned, but an
+  actual Node 22 runner result remains `PENDING`;
+- the requested Phase 3.5 ADR numbers collided with existing ADR history and
+  were not overwritten; the unique Phase 3.5 ADR set and both compatibility
+  mismatches are recorded in [`docs/PHASE-3.5-GATE.md`](./docs/PHASE-3.5-GATE.md).
+
+Phase 4 remains `NO-GO` while Gate D or the bounded owner-input package is
+pending. The current Phase 3.5 worktree is local only and has not been pushed.
+The asset invalidation record after physical purge is intentionally receipt-
+based; a separate non-content lifecycle event is still an owner policy choice.
 
 Phase 1 deliberately stores event materials rather than verified interpretations. Structured `evidence`, `links`, and required `provenance` round-trip as contract-bound references, while derived/candidate/confirmed record classification is deferred to the projection and context phases. The envelope actor is caller-declared, not an authenticated writer; runtime permissions are a later boundary.
 

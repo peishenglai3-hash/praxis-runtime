@@ -1,0 +1,10 @@
+{
+  "id": "ASYNC-03",
+  "classification": "synthetic-until-author-supplies-sanitized-case",
+  "scenario": "stale agent cursor behind a relevant requirement event",
+  "expected": {
+    "status": "pending",
+    "timingResidual": true,
+    "outcomeResidual": false
+  }
+}

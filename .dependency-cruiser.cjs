@@ -32,7 +32,7 @@ module.exports = {
       from: { path: "^apps/" },
       to: {
         path: "^packages/",
-        pathNot: "^packages/runtime/",
+        pathNot: "^packages/(runtime|store|contracts)/",
       },
     },
     {

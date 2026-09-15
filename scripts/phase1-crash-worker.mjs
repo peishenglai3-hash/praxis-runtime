@@ -24,8 +24,8 @@ database
       id, schema_version, event_version, type,
       occurred_at, observed_at, recorded_at,
       actor_type, actor_id, source_json, payload_json,
-      provenance_json, content_hash
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      provenance_json, writer_json, content_hash
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
   )
   .run(
@@ -41,6 +41,7 @@ database
     "{}",
     "{}",
     '{"origin":"direct","confidence":1}',
+    '{"writerId":"system:phase1-crash","kind":"runtime","role":"OWNER","authn":"system","scopes":["event.append","system.migrate"],"policyVersion":1}',
     "0".repeat(64),
   );
 stdout.write("CRASH_WORKER_INSERTED_UNCOMMITTED\n", () => exit(17));

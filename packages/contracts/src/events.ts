@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { JsonValue } from "./json.js";
+import type { WriterContext } from "./authorization.js";
 
 export type ActorType = "human" | "agent" | "system" | "tool" | "model";
 
@@ -62,6 +63,13 @@ export interface EventRecord<
 > extends EventEnvelope<TPayload> {
   seq: number;
   contentHash: string;
+  writer: WriterContext;
+}
+
+export interface LedgerSeqGap {
+  startSeq: number;
+  endSeq: number;
+  receiptId: string;
 }
 
 export interface EventAppendResult {
@@ -97,7 +105,7 @@ export interface OperationState {
 }
 
 export interface EventWriter {
-  append(event: EventEnvelope): EventAppendResult;
+  append(event: EventEnvelope, writer: WriterContext): EventAppendResult;
 }
 
 export interface EventBatchWriter {
@@ -105,7 +113,10 @@ export interface EventBatchWriter {
    * Appends all events atomically: implementations must provide all-or-none
    * semantics and return idempotent results only after the whole batch agrees.
    */
-  appendBatch(events: EventEnvelope[]): EventAppendResult[];
+  appendBatch(
+    events: EventEnvelope[],
+    writer: WriterContext,
+  ): EventAppendResult[];
 }
 
 function isJsonValue(

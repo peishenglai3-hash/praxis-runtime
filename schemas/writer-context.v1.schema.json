@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/writer-context.v1.schema.json",
+  "title": "Praxis WriterContext v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["writerId", "kind", "role", "authn", "scopes", "policyVersion"],
+  "properties": {
+    "writerId": { "type": "string", "minLength": 1 },
+    "kind": { "enum": ["human", "runtime", "agent", "adapter", "importer"] },
+    "role": {
+      "enum": [
+        "OWNER",
+        "OBSERVER",
+        "ANALYZER",
+        "VERIFIER",
+        "COORDINATOR",
+        "ADAPTER",
+        "IMPORTER",
+        "MIGRATION"
+      ]
+    },
+    "authn": { "enum": ["embedded-local", "daemon-token", "system"] },
+    "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "event.read",
+          "event.append",
+          "state.read",
+          "residual.propose",
+          "tool.execute",
+          "asset.propose",
+          "asset.activate",
+          "asset.contest",
+          "asset.disable",
+          "asset.fork",
+          "history.export",
+          "history.purge",
+          "system.migrate"
+        ]
+      }
+    },
+    "policyVersion": { "const": 1 }
+  }
+}

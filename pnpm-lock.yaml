@@ -38,15 +38,27 @@ importers:
 
   apps/cli:
     dependencies:
+      '@praxis/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@praxis/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@praxis/store':
+        specifier: workspace:*
+        version: link:../../packages/store
 
   apps/daemon:
     dependencies:
+      '@praxis/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@praxis/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@praxis/store':
+        specifier: workspace:*
+        version: link:../../packages/store
 
   packages/adapters:
     dependencies:

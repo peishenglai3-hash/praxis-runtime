@@ -10,6 +10,54 @@ export type {
   TokenBudgetEstimator,
 } from "./ports.js";
 export {
+  AuthorizationError,
+  authorizeHumanControl,
+  authorizeEventAppend,
+  authorizeWriterScope,
+  migrationWriterContext,
+  parseWriterContext,
+  permissionScopes,
+  requiredScopeForEventType,
+  validateWriterContext,
+  writerContextSchema,
+} from "./authorization.js";
+export {
+  expectationDefinitionSchema,
+  expectationRecordSchema,
+  expectationStatusSchema,
+  parseExpectationDefinition,
+  parseExpectationRecord,
+  parseVerificationResult,
+  verificationModeSchema,
+  verificationOutcomeSchema,
+  verificationPolicySchema,
+  verificationResultSchema,
+} from "./expectations.js";
+export type {
+  ExpectationCancelledPayload,
+  ExpectationCreatedPayload,
+  ExpectationDefinition,
+  ExpectationEventPayload,
+  ExpectationReference,
+  ExpectationRecord,
+  ExpectationStatus,
+  ExpectationStatusChangedPayload,
+  ExpectationUpdatedPayload,
+  VerificationCompletedPayload,
+  VerificationMode,
+  VerificationOutcome,
+  VerificationPolicy,
+  VerificationRequestedPayload,
+  VerificationResult,
+} from "./expectations.js";
+export type {
+  PermissionScope,
+  WriterAuthn,
+  WriterContext,
+  WriterKind,
+  WriterRole,
+} from "./authorization.js";
+export {
   eventEnvelopeSchema,
   isEventEnvelope,
   parseEventEnvelope,
@@ -25,6 +73,7 @@ export type {
   EventReader,
   EventRecord,
   EventWriter,
+  LedgerSeqGap,
   EvidenceOrigin,
   EvidenceRef,
   OperationState,

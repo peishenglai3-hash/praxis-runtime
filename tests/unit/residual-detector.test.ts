@@ -71,6 +71,14 @@ function event(
     provenance: { origin: "direct", confidence: 1 },
     seq,
     contentHash: "0".repeat(64),
+    writer: {
+      writerId: "test:residual",
+      kind: "runtime",
+      role: "OWNER",
+      authn: "embedded-local",
+      scopes: ["event.read"],
+      policyVersion: 1,
+    },
   };
 }
 

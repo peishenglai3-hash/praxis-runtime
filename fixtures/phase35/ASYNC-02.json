@@ -1,0 +1,10 @@
+{
+  "id": "ASYNC-02",
+  "classification": "synthetic-until-author-supplies-sanitized-case",
+  "scenario": "evaluateBy exceeded and later success before expiresAt",
+  "expected": {
+    "status": "satisfied",
+    "timingResidual": true,
+    "outcomeResidual": false
+  }
+}

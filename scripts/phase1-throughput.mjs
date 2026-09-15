@@ -7,6 +7,29 @@ import { fileURLToPath } from "node:url";
 
 import { SqliteEventStore } from "../packages/store/dist/index.js";
 
+const writer = {
+  writerId: "system:phase1-throughput",
+  kind: "runtime",
+  role: "OWNER",
+  authn: "system",
+  scopes: [
+    "event.read",
+    "event.append",
+    "state.read",
+    "residual.propose",
+    "tool.execute",
+    "asset.propose",
+    "asset.activate",
+    "asset.contest",
+    "asset.disable",
+    "asset.fork",
+    "history.export",
+    "history.purge",
+    "system.migrate",
+  ],
+  policyVersion: 1,
+};
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "..");
 const migrationsDir = join(rootDir, "migrations");
@@ -20,9 +43,10 @@ let store;
 let failure;
 try {
   store = new SqliteEventStore({ filename, migrationsDir });
+  const appendEvent = (event) => store.append(event, writer);
   const startedAt = performance.now();
   for (let index = 0; index < count; index += 1) {
-    const result = store.append({
+    const result = appendEvent({
       schemaVersion: "1",
       eventVersion: "1",
       id: `throughput-event-${index}`,

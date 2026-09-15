@@ -10,7 +10,9 @@ import type {
   Clock,
   EventEnvelope,
   JsonValue,
+  WriterContext,
 } from "../../packages/contracts/src/index.js";
+import { permissionScopes } from "../../packages/contracts/src/index.js";
 import type {
   Expectation,
   FieldContext,
@@ -28,6 +30,14 @@ const migrationsDir = resolve(
   fileURLToPath(new URL("../../migrations", import.meta.url)),
 );
 const detectedAt = "2026-09-14T00:00:10.000Z";
+const testWriter: WriterContext = {
+  writerId: "test:phase3",
+  kind: "runtime",
+  role: "OWNER",
+  authn: "embedded-local",
+  scopes: [...permissionScopes],
+  policyVersion: 1,
+};
 const evidence = [
   { eventId: "phase3-source-event", origin: "direct" as const },
 ];
@@ -116,7 +126,12 @@ function runtimeFor(
     clock,
     ids: { next: () => "phase3-id" },
     actor: { type: "system", id: "phase3-runtime" },
+    writer: testWriter,
   });
+}
+
+function appendEvent(store: SqliteEventStore, event: EventEnvelope) {
+  return store.append(event, testWriter);
 }
 
 function detectOutcome(runtime: Phase3Runtime): Residual {
@@ -138,13 +153,14 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("records residuals and proposals as separate idempotent events", () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    currentStore.append(event());
+    appendEvent(currentStore, event());
     runtime.recordExpectation(expectation());
 
     const residual = detectOutcome(runtime);
     const residualEvent = runtime.recordResiduals([residual])[0]!;
     const retriedResidualEvent = runtime.recordResiduals([residual])[0]!;
-    const feedbackEvent = currentStore.append(
+    const feedbackEvent = appendEvent(
+      currentStore,
       event({
         id: "phase3-feedback-event",
         recordedAt: "2026-09-14T00:00:12.000Z",
@@ -209,7 +225,7 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("stops or escalates without executing any proposal", () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    currentStore.append(event());
+    appendEvent(currentStore, event());
     runtime.recordExpectation(expectation());
     const residual = detectOutcome(runtime);
 
@@ -268,7 +284,7 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("rejects missing evidence and proposals detached from the recorded residual", () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    currentStore.append(event());
+    appendEvent(currentStore, event());
     runtime.recordExpectation(expectation());
     const residual = detectOutcome(runtime);
     const residualEvent = runtime.recordResiduals([residual])[0]!;
@@ -322,7 +338,7 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("keeps concurrent pure detection independent and records no false positive", async () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    currentStore.append(event());
+    appendEvent(currentStore, event());
 
     const results = await Promise.all(
       Array.from({ length: 8 }, () =>
@@ -350,7 +366,7 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("binds timing residuals to a current ledger cursor and evidence event", () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    const source = currentStore.append(event()).record;
+    const source = appendEvent(currentStore, event()).record;
     const timing = {
       id: "phase3-timing-check",
       subject: { kind: "agent", id: "phase3-agent" },
@@ -387,7 +403,8 @@ describe("Phase 3 residual and reflection runtime", () => {
       cursorSeq: -1,
     };
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         event({
           id: "forged-negative-timing",
           type: "residual.detected",
@@ -455,8 +472,8 @@ describe("Phase 3 residual and reflection runtime", () => {
               occurred_at, observed_at, recorded_at,
               actor_type, actor_id, session_id, trace_id, operation_id,
               source_json, payload_json, evidence_json, links_json,
-              provenance_json, content_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              provenance_json, writer_json, content_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             "forged-negative-timing-raw",
@@ -476,6 +493,7 @@ describe("Phase 3 residual and reflection runtime", () => {
             JSON.stringify(forgedPayload.evidence),
             null,
             JSON.stringify({ origin: "inferred", confidence: 1 }),
+            JSON.stringify(testWriter),
             "forged-hash",
           ),
       ).toThrowError("residual detection failed ledger integrity checks");
@@ -487,7 +505,7 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("anchors outcomes to a registered expectation and rejects forged effects", () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    currentStore.append(event());
+    appendEvent(currentStore, event());
 
     const declared = expectation();
     expect(runtime.recordExpectation(declared).inserted).toBe(true);
@@ -504,7 +522,7 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("rolls back an entire residual batch when one event conflicts", () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    currentStore.append(event());
+    appendEvent(currentStore, event());
     runtime.recordExpectation(expectation());
     const residual = detectOutcome(runtime);
     const conflicting = {
@@ -522,11 +540,12 @@ describe("Phase 3 residual and reflection runtime", () => {
     const currentStore = openStore();
     let now = new Date("2026-09-14T00:00:00.000Z");
     const runtime = runtimeFor(currentStore, { now: () => new Date(now) });
-    currentStore.append(event());
+    appendEvent(currentStore, event());
     runtime.recordExpectation(expectation());
     const residual = detectOutcome(runtime);
     const residualResult = runtime.recordResiduals([residual])[0]!;
-    const firstSource = currentStore.append(
+    const firstSource = appendEvent(
+      currentStore,
       event({
         id: "phase3-first-round-source",
         recordedAt: "2026-09-14T00:00:12.000Z",
@@ -562,7 +581,8 @@ describe("Phase 3 residual and reflection runtime", () => {
       currentStore.getById(firstProposalResult.record.id)?.recordedAt,
     ).toBe(firstProposalResult.record.recordedAt);
 
-    const secondSource = currentStore.append(
+    const secondSource = appendEvent(
+      currentStore,
       event({
         id: "phase3-source-event-2",
         recordedAt: "2026-09-14T00:00:14.000Z",
@@ -603,10 +623,11 @@ describe("Phase 3 residual and reflection runtime", () => {
   it("rejects malformed derived events at the generic low-level writer", () => {
     const currentStore = openStore();
     const runtime = runtimeFor(currentStore);
-    currentStore.append(event());
+    appendEvent(currentStore, event());
 
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         event({
           id: "forged-residual-event",
           type: "residual.detected",
@@ -628,7 +649,8 @@ describe("Phase 3 residual and reflection runtime", () => {
     );
 
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         event({
           id: "forged-reflection-event",
           type: "reflection.proposed",
@@ -672,7 +694,8 @@ describe("Phase 3 residual and reflection runtime", () => {
       evidence: [{ eventId: "missing-event", origin: "direct" as const }],
     };
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         event({
           id: expectationRegisteredEventId(declared.id),
           type: "expectation.registered",
@@ -712,7 +735,8 @@ describe("Phase 3 residual and reflection runtime", () => {
       },
     };
     expect(() =>
-      currentStore.append(
+      appendEvent(
+        currentStore,
         event({
           id: residualDetectedEventId(forgedResidualId),
           type: "residual.detected",

@@ -2,6 +2,29 @@ import { Phase3Runtime } from "../packages/runtime/dist/index.js";
 import { SqliteEventStore } from "../packages/store/dist/index.js";
 import { argv, stdout } from "node:process";
 
+const writer = {
+  writerId: "system:phase3-coordinator",
+  kind: "runtime",
+  role: "OWNER",
+  authn: "system",
+  scopes: [
+    "event.read",
+    "event.append",
+    "state.read",
+    "residual.propose",
+    "tool.execute",
+    "asset.propose",
+    "asset.activate",
+    "asset.contest",
+    "asset.disable",
+    "asset.fork",
+    "history.export",
+    "history.purge",
+    "system.migrate",
+  ],
+  policyVersion: 1,
+};
+
 const [, , filename, migrationsDir, workerId] = argv;
 if (
   filename === undefined ||
@@ -14,8 +37,9 @@ if (
 }
 
 const store = new SqliteEventStore({ filename, migrationsDir });
+const appendEvent = (event) => store.append(event, writer);
 try {
-  store.append({
+  appendEvent({
     schemaVersion: "1",
     eventVersion: "1",
     id: "phase3-shared-source",
@@ -36,6 +60,7 @@ try {
     clock: { now: () => new Date("2026-09-14T00:00:00.000Z") },
     ids: { next: () => `phase3-worker-${workerId}` },
     actor: { type: "system", id: "phase3-coordinator" },
+    writer,
   });
   const expectation = {
     id: "phase3-shared-expectation",
@@ -75,7 +100,7 @@ try {
     throw new Error("phase3 worker found no residual");
 
   const residualResult = runtime.recordResiduals([residual])[0];
-  const feedbackResult = store.append({
+  const feedbackResult = appendEvent({
     schemaVersion: "1",
     eventVersion: "1",
     id: "phase3-shared-feedback",

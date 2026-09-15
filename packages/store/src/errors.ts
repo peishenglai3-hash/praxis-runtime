@@ -2,6 +2,7 @@ export type StoreErrorCode =
   | "INVALID_EVENT"
   | "EVENT_ID_CONFLICT"
   | "OPERATION_ID_CONFLICT"
+  | "AUTHORIZATION_ERROR"
   | "MIGRATION_ERROR"
   | "STORAGE_ERROR";
 

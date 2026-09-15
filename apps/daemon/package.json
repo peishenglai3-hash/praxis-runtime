@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@praxis/runtime": "workspace:*"
+    "@praxis/contracts": "workspace:*",
+    "@praxis/runtime": "workspace:*",
+    "@praxis/store": "workspace:*"
   },
   "scripts": {
     "build": "tsup src/index.ts --tsconfig ../../tsconfig.json --format esm --dts --out-dir dist"

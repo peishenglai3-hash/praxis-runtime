@@ -25,6 +25,31 @@ import {
 } from "../packages/state/dist/index.js";
 import { SqliteEventStore } from "../packages/store/dist/index.js";
 
+const writer = {
+  writerId: "system:phase2-scenario",
+  kind: "runtime",
+  role: "OWNER",
+  authn: "system",
+  scopes: [
+    "event.read",
+    "event.append",
+    "state.read",
+    "residual.propose",
+    "tool.execute",
+    "asset.propose",
+    "asset.activate",
+    "asset.contest",
+    "asset.disable",
+    "asset.fork",
+    "history.export",
+    "history.purge",
+    "system.migrate",
+  ],
+  policyVersion: 1,
+};
+
+const appendEvent = (store, event) => store.append(event, writer);
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "..");
 const migrationsDir = join(rootDir, "migrations");
@@ -56,16 +81,19 @@ async function replayScenario() {
     migrationsDir,
   });
   try {
-    store.append(
+    appendEvent(
+      store,
       makeEvent("scenario-rule", "rule.registered", { id: "rule-1" }),
     );
-    store.append(
+    appendEvent(
+      store,
       makeEvent("scenario-asset", "asset.candidate", {
         id: "asset-1",
         revision: 1,
       }),
     );
-    store.append(
+    appendEvent(
+      store,
       makeEvent("scenario-agent", "agent.cursor.updated", {
         agentId: "agent-1",
         lastSeq: 2,
@@ -107,10 +135,12 @@ async function contextScenario() {
     migrationsDir,
   });
   try {
-    store.append(
+    appendEvent(
+      store,
       makeEvent("scenario-rule", "rule.registered", { id: "rule-1" }),
     );
-    store.append(
+    appendEvent(
+      store,
       makeEvent("scenario-asset", "asset.candidate", {
         id: "asset-1",
         revision: 1,
@@ -124,6 +154,7 @@ async function contextScenario() {
         clock: { now: () => new Date("2026-09-14T00:00:00.000Z") },
         ids: { next: () => `scenario-context-${++id}` },
         actor: { type: "system", id: "phase2-scenario" },
+        writer,
       },
       new ContextPlanner(),
     );
@@ -241,7 +272,8 @@ async function sameDatabaseProjectionScenario() {
   const store = new SqliteEventStore({ filename, migrationsDir });
   try {
     for (let index = 1; index <= 12; index += 1) {
-      store.append(
+      appendEvent(
+        store,
         makeEvent(`projection-concurrency-${index}`, "interaction.recorded", {
           index,
         }),

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/expectation.v1.schema.json",
+  "title": "Praxis structured expectation record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "source",
+    "subject",
+    "expected",
+    "verification",
+    "createdAt",
+    "validFrom",
+    "status",
+    "evidence",
+    "updatedAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "traceId": { "type": "string", "minLength": 1 },
+    "source": { "$ref": "#/$defs/reference" },
+    "subject": { "$ref": "#/$defs/reference" },
+    "expected": { "$ref": "#/$defs/jsonValue" },
+    "verification": { "$ref": "#/$defs/verificationPolicy" },
+    "createdAt": { "$ref": "#/$defs/timestamp" },
+    "validFrom": { "$ref": "#/$defs/timestamp" },
+    "evaluateBy": { "$ref": "#/$defs/timestamp" },
+    "expiresAt": { "$ref": "#/$defs/timestamp" },
+    "status": {
+      "enum": ["pending", "satisfied", "violated", "expired", "unknown"]
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/evidence" }
+    },
+    "updatedAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "verificationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "criterion"],
+      "properties": {
+        "mode": { "enum": ["state", "tool", "external", "human"] },
+        "verifier": { "$ref": "#/$defs/reference" },
+        "criterion": { "$ref": "#/$defs/jsonValue" },
+        "timeoutMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin"],
+      "anyOf": [
+        { "required": ["eventId"] },
+        { "required": ["assetId"] },
+        { "required": ["artifactHash"] }
+      ],
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "assetId": { "type": "string", "minLength": 1 },
+        "artifactHash": { "type": "string", "minLength": 1 },
+        "origin": {
+          "enum": ["direct", "declared", "inferred", "institutional"]
+        },
+        "exposureInfluenced": { "type": "boolean" }
+      }
+    },
+    "jsonValue": {
+      "anyOf": [
+        { "type": "null" },
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      ]
+    }
+  }
+}

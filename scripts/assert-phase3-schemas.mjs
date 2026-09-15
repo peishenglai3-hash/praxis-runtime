@@ -98,6 +98,9 @@ const reflectionEvent = readSchema("reflection-proposed-event.v1.schema.json");
 const expectationEvent = readSchema(
   "expectation-registered-event.v1.schema.json",
 );
+const writerContext = readSchema("writer-context.v1.schema.json");
+const expectation = readSchema("expectation.v1.schema.json");
+const verificationResult = readSchema("verification-result.v1.schema.json");
 
 requireFields(
   residual,
@@ -172,6 +175,32 @@ requireFields(
   ],
   "expectation-registered-event.v1",
 );
+requireFields(
+  writerContext,
+  ["writerId", "kind", "role", "authn", "scopes", "policyVersion"],
+  "writer-context.v1",
+);
+requireFields(
+  expectation,
+  [
+    "id",
+    "source",
+    "subject",
+    "expected",
+    "verification",
+    "createdAt",
+    "validFrom",
+    "status",
+    "evidence",
+    "updatedAt",
+  ],
+  "expectation.v1",
+);
+requireFields(
+  verificationResult,
+  ["id", "expectationId", "verifier", "observedAt", "outcome", "evidence"],
+  "verification-result.v1",
+);
 
 requirePropertyConst(
   residualEvent,
@@ -195,6 +224,64 @@ requirePropertyConst(
   "declared",
   "expectation event",
 );
+const expectedWriterScopes = [
+  "event.read",
+  "event.append",
+  "state.read",
+  "residual.propose",
+  "tool.execute",
+  "asset.propose",
+  "asset.activate",
+  "asset.contest",
+  "asset.disable",
+  "asset.fork",
+  "history.export",
+  "history.purge",
+  "system.migrate",
+];
+const expectedWriterRoles = [
+  "OWNER",
+  "OBSERVER",
+  "ANALYZER",
+  "VERIFIER",
+  "COORDINATOR",
+  "ADAPTER",
+  "IMPORTER",
+  "MIGRATION",
+];
+if (
+  JSON.stringify(writerContext.properties?.role?.enum) !==
+  JSON.stringify(expectedWriterRoles)
+) {
+  throw new Error("writer-context.v1 roles do not match the frozen ACL");
+}
+if (writerContext.properties?.policyVersion?.const !== 1) {
+  throw new Error(
+    "writer-context.v1 policyVersion must be the frozen version 1",
+  );
+}
+if (
+  JSON.stringify(writerContext.properties?.scopes?.items?.enum) !==
+  JSON.stringify(expectedWriterScopes)
+) {
+  throw new Error("writer-context.v1 scopes do not match the frozen ACL");
+}
+if (
+  JSON.stringify(expectation.properties?.status?.enum) !==
+  JSON.stringify(["pending", "satisfied", "violated", "expired", "unknown"])
+) {
+  throw new Error(
+    "expectation.v1 status enum does not match the runtime contract",
+  );
+}
+if (
+  JSON.stringify(verificationResult.properties?.outcome?.enum) !==
+  JSON.stringify(["satisfied", "violated", "unknown"])
+) {
+  throw new Error(
+    "verification-result.v1 outcome enum does not match the runtime contract",
+  );
+}
 requireReflectionConditionals(reflection, "reflection proposal");
 requireReflectionConditionals(reflectionEvent, "reflection event");
 requireActionPermissionMapping(reflection, "reflection proposal");
@@ -224,4 +311,4 @@ for (const [schema, label] of [
   }
 }
 
-log("Phase 3 schema parity PASS");
+log("Phase 3/3.5 schema parity PASS");

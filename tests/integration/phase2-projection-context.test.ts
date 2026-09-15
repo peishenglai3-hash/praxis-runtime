@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { EventEnvelope } from "../../packages/contracts/src/index.js";
+import {
+  permissionScopes,
+  type EventEnvelope,
+  type WriterContext,
+} from "../../packages/contracts/src/index.js";
 import {
   contextPlanEventId,
   type ContextSource,
@@ -23,6 +27,19 @@ import { SqliteEventStore } from "../../packages/store/src/index.js";
 const migrationsDir = resolve(
   fileURLToPath(new URL("../../migrations", import.meta.url)),
 );
+
+const testWriter: WriterContext = {
+  writerId: "test:phase2",
+  kind: "runtime",
+  role: "OWNER",
+  authn: "embedded-local",
+  scopes: [...permissionScopes],
+  policyVersion: 1,
+};
+
+function appendEvent(store: SqliteEventStore, event: EventEnvelope) {
+  return store.append(event, testWriter);
+}
 
 const makeEvent = (overrides: Partial<EventEnvelope> = {}): EventEnvelope => ({
   schemaVersion: "1",
@@ -79,7 +96,7 @@ describe("Phase 2 projection persistence", () => {
         payload: { id: "asset-1", revision: 1 },
       }),
     ]) {
-      currentStore.append(event);
+      appendEvent(currentStore, event);
     }
 
     const firstCatchUp = engine.catchUp(project);
@@ -95,7 +112,7 @@ describe("Phase 2 projection persistence", () => {
       state: { eventCount: 3, lastSeq: 3, lastEventType: "asset.candidate" },
     });
 
-    currentStore.append(makeEvent({ id: "phase2-event-4" }));
+    appendEvent(currentStore, makeEvent({ id: "phase2-event-4" }));
     expect(currentStore.getProjectionState("project")?.lastSeq).toBe(3);
     expect(engine.catchUp(project)).toMatchObject({
       status: "caught_up",
@@ -132,7 +149,7 @@ describe("Phase 2 projection persistence", () => {
     const currentStore = openPhase2Store();
     const engine = new ProjectionEngine(currentStore, currentStore);
     const stable = createProjectProjection();
-    currentStore.append(makeEvent({ id: "stable-event-1" }));
+    appendEvent(currentStore, makeEvent({ id: "stable-event-1" }));
     expect(engine.rebuild(stable).status).toBe("caught_up");
     const before = currentStore.getProjectionState("project");
 
@@ -156,21 +173,24 @@ describe("Phase 2 projection persistence", () => {
   it("replays core projections without making derived state an event fact", () => {
     const currentStore = openPhase2Store();
     const engine = new ProjectionEngine(currentStore, currentStore);
-    currentStore.append(
+    appendEvent(
+      currentStore,
       makeEvent({
         id: "rule-event",
         type: "rule.registered",
         payload: { id: "rule-1" },
       }),
     );
-    currentStore.append(
+    appendEvent(
+      currentStore,
       makeEvent({
         id: "asset-event",
         type: "asset.candidate",
         payload: { id: "asset-1", revision: 2 },
       }),
     );
-    currentStore.append(
+    appendEvent(
+      currentStore,
       makeEvent({
         id: "agent-event",
         type: "agent.cursor.updated",
@@ -211,7 +231,7 @@ describe("Phase 2 projection persistence", () => {
   it("rejects stale projection writes, future snapshots, and future agent cursors", () => {
     const currentStore = openPhase2Store();
     const engine = new ProjectionEngine(currentStore, currentStore);
-    currentStore.append(makeEvent({ id: "cursor-event-1" }));
+    appendEvent(currentStore, makeEvent({ id: "cursor-event-1" }));
     currentStore.saveProjectionState(
       {
         projectionName: "project",
@@ -248,7 +268,8 @@ describe("Phase 2 projection persistence", () => {
       }),
     ).toThrowError("ahead of the event ledger");
 
-    currentStore.append(
+    appendEvent(
+      currentStore,
       makeEvent({
         id: "future-agent-cursor",
         type: "agent.cursor.updated",
@@ -269,6 +290,7 @@ describe("Phase 2 projection persistence", () => {
       clock: { now: () => new Date("2026-09-14T00:00:00.000Z") },
       ids: { next: () => `runtime-event-${++nextId}` },
       actor: { type: "system", id: "runtime-test" },
+      writer: testWriter,
     });
     const source: ContextSource = {
       id: "runtime-source",
@@ -282,7 +304,7 @@ describe("Phase 2 projection persistence", () => {
       activeRuleRelevance: 0.5,
       sourceOrigin: "direct",
     };
-    currentStore.append(makeEvent({ id: "phase2-source-event" }));
+    appendEvent(currentStore, makeEvent({ id: "phase2-source-event" }));
     const plan = runtime.buildContextPlan({
       mode: "refresh",
       candidates: [source],
@@ -344,7 +366,8 @@ describe("Phase 2 projection persistence", () => {
       "2026-09-14T00:00:12.000Z",
     );
 
-    const secondSourceEvent = currentStore.append(
+    const secondSourceEvent = appendEvent(
+      currentStore,
       makeEvent({ id: "phase2-source-event-2" }),
     );
     const secondSource: ContextSource = {
@@ -430,7 +453,7 @@ describe("Phase 2 projection persistence", () => {
       },
       provenance: { origin: "inferred", confidence: 1 },
     });
-    expect(() => currentStore.append(forgedPlan)).toThrowError(
+    expect(() => appendEvent(currentStore, forgedPlan)).toThrowError(
       "context plan failed ledger integrity checks",
     );
 
@@ -467,7 +490,7 @@ describe("Phase 2 projection persistence", () => {
       },
       provenance: { origin: "inferred", confidence: 1 },
     });
-    expect(() => currentStore.append(forgedExposure)).toThrowError(
+    expect(() => appendEvent(currentStore, forgedExposure)).toThrowError(
       "context exposure failed ledger integrity checks",
     );
 
@@ -487,7 +510,7 @@ describe("Phase 2 projection persistence", () => {
       links: { derivedFrom: [] },
       provenance: { origin: "inferred", confidence: 1 },
     });
-    expect(() => currentStore.append(futureEmptyPlan)).toThrowError(
+    expect(() => appendEvent(currentStore, futureEmptyPlan)).toThrowError(
       "context plan failed ledger integrity checks",
     );
   });

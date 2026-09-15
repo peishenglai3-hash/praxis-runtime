@@ -1,23 +1,51 @@
 export {};
+import { randomUUID } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeSync,
+} from "node:fs";
+import { resolve } from "node:path";
+
 import type {
   ActorRef,
   Clock,
   EventAppendResult,
   EventBatchWriter,
   EventEnvelope,
-  EventRecord,
   EventReader,
   EventWriter,
+  EventQuery,
+  EventRecord,
   EvidenceOrigin,
   EvidenceRef,
   IdGenerator,
+  LedgerSeqGap,
   JsonObject,
   JsonValue,
   ProjectionPersistence,
+  WriterContext,
 } from "@praxis/contracts";
 import {
+  AuthorizationError,
+  authorizeHumanControl,
+  authorizeWriterScope,
+  parseExpectationDefinition,
+  parseExpectationRecord,
+  parseVerificationResult,
+  parseWriterContext,
+  requiredScopeForEventType,
   stableStringify,
+  expectationStatusSchema,
   validatePhase3EventEnvelope,
+} from "@praxis/contracts";
+import type {
+  ExpectationDefinition,
+  ExpectationRecord,
+  VerificationResult,
 } from "@praxis/contracts";
 import {
   ContextPlanner,
@@ -41,13 +69,25 @@ import {
 } from "@praxis/reflection";
 import type {
   Expectation,
+  FieldContext,
   Residual,
   ResidualDetectionBatch,
+  ResidualPersistence,
   TimingDetectionInput,
 } from "@praxis/residual";
 import { ResidualDetector } from "@praxis/residual";
 import { ProjectionEngine, createCoreProjections } from "@praxis/state";
 import type { CatchUpResult, Projection } from "@praxis/state";
+import type {
+  BackupManifest,
+  BackupOptions,
+  ManagedBackup,
+  PurgeCleanupResult,
+  PrivacyPurgeOptions,
+  PrivacyPurgePlan,
+  PrivacyPurgeResult,
+  StoreHealth,
+} from "@praxis/store";
 
 export interface ContextExposureTiming {
   occurredAt?: string;
@@ -61,16 +101,19 @@ export interface Phase2RuntimePorts {
   clock: Clock;
   ids: IdGenerator;
   actor: ActorRef;
+  writer: WriterContext;
 }
 
 export class Phase2Runtime {
+  #ports: Phase2RuntimePorts;
   private readonly projectionEngine: ProjectionEngine;
   private readonly contextPlanner: ContextPlanner;
 
   constructor(
-    private readonly ports: Phase2RuntimePorts,
+    ports: Phase2RuntimePorts,
     contextPlanner = new ContextPlanner(),
   ) {
+    this.#ports = ports;
     this.projectionEngine = new ProjectionEngine(
       ports.events,
       ports.projections,
@@ -89,14 +132,24 @@ export class Phase2Runtime {
     }
     if (
       event.type === "expectation.registered" ||
+      event.type === "expectation.created" ||
+      event.type === "expectation.updated" ||
+      event.type === "expectation.cancelled" ||
+      event.type === "expectation.status.changed" ||
+      event.type === "verification.requested" ||
+      event.type === "verification.completed" ||
       event.type === "residual.detected" ||
-      event.type === "reflection.proposed"
+      event.type === "reflection.proposed" ||
+      event.type === "asset.contest" ||
+      event.type === "asset.disable" ||
+      event.type === "asset.restore" ||
+      event.type === "asset.fork"
     ) {
       throw new Error(
         "domain events must be recorded through their runtime use-cases",
       );
     }
-    return this.ports.events.append(event);
+    return this.#ports.events.append(event, this.#ports.writer);
   }
 
   catchUp<TState>(projection: Projection<TState>): CatchUpResult {
@@ -120,7 +173,7 @@ export class Phase2Runtime {
     },
   ): ContextPlan {
     const generatedAt = input.generatedAt ?? this.nowIso();
-    const planId = input.planId ?? this.ports.ids.next();
+    const planId = input.planId ?? this.#ports.ids.next();
     if (planId.length < 1) {
       throw new Error("id generator returned an empty planId");
     }
@@ -141,7 +194,7 @@ export class Phase2Runtime {
       occurredAt: plan.generatedAt,
       observedAt: plan.generatedAt,
       recordedAt: plan.generatedAt,
-      actor: this.ports.actor,
+      actor: this.#ports.actor,
       source: {
         kind: "context-planner",
         ref: plan.planId,
@@ -172,7 +225,7 @@ export class Phase2Runtime {
       },
       provenance: { origin: "inferred", confidence: 1 },
     };
-    return this.ports.events.append(event);
+    return this.#ports.events.append(event, this.#ports.writer);
   }
 
   recordContextExposure(
@@ -184,7 +237,7 @@ export class Phase2Runtime {
     if (resolvedPlanId !== proposal.planId) {
       throw new Error("context exposure planId does not match its proposal");
     }
-    const planEvent = this.ports.events.getById(
+    const planEvent = this.#ports.events.getById(
       contextPlanEventId(resolvedPlanId),
     );
     if (planEvent === null) {
@@ -217,11 +270,11 @@ export class Phase2Runtime {
       occurredAt,
       observedAt,
       recordedAt,
-      actor: this.ports.actor,
+      actor: this.#ports.actor,
       proposal,
       planId: resolvedPlanId,
     });
-    return this.ports.events.append(event);
+    return this.#ports.events.append(event, this.#ports.writer);
   }
 
   private validateContextPlan(plan: ContextPlan): void {
@@ -363,7 +416,7 @@ export class Phase2Runtime {
     declaredOrigin?: EvidenceOrigin,
   ): void {
     this.validateContextStateSeq(stateSeq);
-    const sourceEvent = this.ports.events.getById(sourceEventId);
+    const sourceEvent = this.#ports.events.getById(sourceEventId);
     if (sourceEvent === null) {
       throw new Error(
         "context source event is not present in the event ledger",
@@ -394,14 +447,14 @@ export class Phase2Runtime {
         "context state cursor must be a non-negative safe integer",
       );
     }
-    const ledgerLastSeq = this.ports.events.getLastSeq();
+    const ledgerLastSeq = this.#ports.events.getLastSeq();
     if (stateSeq > ledgerLastSeq) {
       throw new Error("context state cursor is ahead of the event ledger");
     }
   }
 
-  private nowIso(): string {
-    const value = this.ports.clock.now();
+  protected nowIso(): string {
+    const value = this.#ports.clock.now();
     if (Number.isNaN(value.getTime())) {
       throw new Error("clock returned an invalid date");
     }
@@ -413,12 +466,71 @@ export type Phase3RuntimePorts = Phase2RuntimePorts & {
   events: Phase2RuntimePorts["events"] & EventBatchWriter;
 };
 
+export type AssetControlAction = "contest" | "disable" | "restore" | "fork";
+
+export interface AssetControlOptions {
+  reason: string;
+  at?: string;
+  newAssetId?: string;
+}
+
+/**
+ * The composition root depends on the store contract, not on SQLite's
+ * private connection representation. This keeps source-level tests and
+ * packaged consumers structurally compatible while preserving the rule that
+ * the raw database handle is never part of the public runtime API.
+ */
+export interface RuntimeStore
+  extends EventReader, EventWriter, EventBatchWriter, ProjectionPersistence {
+  readonly filename: string;
+  close(): void;
+  backupTo(destinationPath: string, options?: BackupOptions): BackupManifest;
+  createManagedBackup(
+    destinationPath: string,
+    writer: WriterContext,
+    options?: BackupOptions,
+  ): BackupManifest;
+  listManagedBackups(): ManagedBackup[];
+  planPrivacyPurge(sessionId: string): PrivacyPurgePlan;
+  privacyPurge(
+    sessionId: string,
+    writer: WriterContext,
+    options?: PrivacyPurgeOptions,
+  ): PrivacyPurgeResult;
+  finalizePendingPurge(writer: WriterContext): PurgeCleanupResult;
+  getPurgedSeqRanges(): LedgerSeqGap[];
+  getHealth(): StoreHealth;
+}
+
+export interface RuntimePrivacyPurgeResult extends PrivacyPurgeResult {
+  projectionRebuild?: CatchUpResult[];
+}
+
 export function residualDetectedEventId(residualId: string): string {
   return `residual-detected:${encodeURIComponent(residualId)}`;
 }
 
 export function expectationRegisteredEventId(expectationId: string): string {
   return `expectation-registered:${encodeURIComponent(expectationId)}`;
+}
+
+export function expectationCreatedEventId(expectationId: string): string {
+  return `expectation-created:${encodeURIComponent(expectationId)}`;
+}
+
+export function expectationUpdatedEventId(
+  expectationId: string,
+  updatedAt: string,
+): string {
+  return `expectation-updated:${encodeURIComponent(expectationId)}:${encodeURIComponent(updatedAt)}`;
+}
+
+export function verificationRequestedEventId(requestId: string): string {
+  return `verification-requested:${encodeURIComponent(requestId)}`;
+}
+
+export function verificationCompletedEventId(verificationId: string): string {
+  return `verification-completed:${encodeURIComponent(verificationId)}`;
 }
 
 export function reflectionProposalEventId(
@@ -441,23 +553,25 @@ export function reflectionProposalEventId(
 export class Phase3Runtime extends Phase2Runtime {
   private readonly residualDetector = new ResidualDetector();
   private readonly reflectionController = new ReflectionController();
+  #phase3Ports: Phase3RuntimePorts;
 
-  constructor(private readonly phase3Ports: Phase3RuntimePorts) {
+  constructor(phase3Ports: Phase3RuntimePorts) {
     super(phase3Ports);
+    this.#phase3Ports = phase3Ports;
   }
 
   detectResiduals(input: ResidualDetectionBatch): Residual[] {
-    validateTimingInputsAgainstLedger(this.phase3Ports, input.timings ?? []);
+    validateTimingInputsAgainstLedger(this.#phase3Ports, input.timings ?? []);
     return this.residualDetector.detect(input);
   }
 
   runReflection(input: ReflectionInput): ReflectionResult {
-    validateReflectionEvidenceDelta(this.phase3Ports, input.evidenceDelta);
+    validateReflectionEvidenceDelta(this.#phase3Ports, input.evidenceDelta);
     return this.reflectionController.reflect(input);
   }
 
   recordExpectation(expectation: Expectation): EventAppendResult {
-    assertExpectationForRecording(this.phase3Ports, expectation);
+    assertExpectationForRecording(this.#phase3Ports, expectation);
     const event: EventEnvelope = {
       schemaVersion: "1",
       eventVersion: "1",
@@ -466,7 +580,7 @@ export class Phase3Runtime extends Phase2Runtime {
       occurredAt: expectation.createdAt,
       observedAt: expectation.createdAt,
       recordedAt: expectation.createdAt,
-      actor: this.phase3Ports.actor,
+      actor: this.#phase3Ports.actor,
       ...(expectation.traceId === undefined
         ? {}
         : { traceId: expectation.traceId }),
@@ -482,15 +596,552 @@ export class Phase3Runtime extends Phase2Runtime {
       provenance: { origin: "declared", confidence: 1 },
     };
     validatePhase3EventEnvelope(event);
-    return this.phase3Ports.events.append(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  recordExpectationDefinition(
+    definition: ExpectationDefinition,
+  ): EventAppendResult {
+    const normalized = parseExpectationDefinition(definition);
+    assertEvidenceRefs(
+      this.#phase3Ports,
+      normalized.evidence,
+      "structured expectation",
+    );
+    const createdAt = normalized.createdAt;
+    const record: ExpectationRecord = {
+      ...normalized,
+      status: "pending",
+      updatedAt: createdAt,
+    };
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: expectationCreatedEventId(record.id),
+      type: "expectation.created",
+      occurredAt: createdAt,
+      observedAt: createdAt,
+      recordedAt: createdAt,
+      actor: this.#phase3Ports.actor,
+      ...(record.traceId === undefined ? {} : { traceId: record.traceId }),
+      operationId: `expectation-created:${record.id}`,
+      source: { kind: "expectation-registry", ref: record.id },
+      payload: structuredExpectationPayload(record),
+      evidence: record.evidence.map(copyEvidenceRef),
+      links: {
+        ...(eventIdsFromEvidence(record.evidence).length === 0
+          ? {}
+          : { derivedFrom: eventIdsFromEvidence(record.evidence) }),
+      },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase35ExpectationEvent(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  recordExpectationUpdate(record: ExpectationRecord): EventAppendResult {
+    const normalized = parseExpectationRecord(record);
+    const previous = this.findStructuredExpectation(normalized.id);
+    if (previous === null) {
+      throw new Error(
+        "expectation update requires a recorded expectation.created event",
+      );
+    }
+    if (Date.parse(normalized.updatedAt) < Date.parse(previous.updatedAt)) {
+      throw new Error("expectation update cannot move updatedAt backwards");
+    }
+    assertEvidenceRefs(
+      this.#phase3Ports,
+      normalized.evidence,
+      "structured expectation update",
+    );
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: expectationUpdatedEventId(normalized.id, normalized.updatedAt),
+      type: "expectation.updated",
+      occurredAt: normalized.updatedAt,
+      observedAt: normalized.updatedAt,
+      recordedAt: normalized.updatedAt,
+      actor: this.#phase3Ports.actor,
+      ...(normalized.traceId === undefined
+        ? {}
+        : { traceId: normalized.traceId }),
+      operationId: `expectation-updated:${normalized.id}:${normalized.updatedAt}`,
+      source: { kind: "expectation-registry", ref: normalized.id },
+      payload: structuredExpectationPayload(normalized),
+      evidence: normalized.evidence.map(copyEvidenceRef),
+      links: { respondsTo: [expectationCreatedEventId(normalized.id)] },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase35ExpectationEvent(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  recordVerificationRequest(
+    expectationId: string,
+    requestId: string,
+    requestedAt = this.nowIso(),
+  ): EventAppendResult {
+    const expectation = this.requireStructuredExpectation(expectationId);
+    if (expectation.verification.verifier === undefined) {
+      throw new Error("verification request requires an explicit verifier");
+    }
+    assertExpectationTime(requestedAt, "verification requestedAt");
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: verificationRequestedEventId(requestId),
+      type: "verification.requested",
+      occurredAt: requestedAt,
+      observedAt: requestedAt,
+      recordedAt: requestedAt,
+      actor: this.#phase3Ports.actor,
+      ...(expectation.traceId === undefined
+        ? {}
+        : { traceId: expectation.traceId }),
+      operationId: `verification-request:${requestId}`,
+      source: { kind: "verification-coordinator", ref: expectationId },
+      payload: {
+        materialClassification: "declared",
+        expectationId,
+        requestId,
+        requestedAt,
+        verifier: expectation.verification.verifier,
+        mode: expectation.verification.mode,
+      } as unknown as JsonValue,
+      evidence: expectation.evidence.map(copyEvidenceRef),
+      links: { respondsTo: [expectationCreatedEventId(expectationId)] },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase35ExpectationEvent(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  recordVerificationResult(result: VerificationResult): EventAppendResult {
+    const normalized = parseVerificationResult(result);
+    const expectation = this.requireStructuredExpectation(
+      normalized.expectationId,
+    );
+    if (
+      expectation.verification.verifier === undefined ||
+      stableStringify(
+        expectation.verification.verifier as unknown as JsonValue,
+      ) !== stableStringify(normalized.verifier as unknown as JsonValue)
+    ) {
+      throw new Error(
+        "verification result verifier does not match the expectation policy",
+      );
+    }
+    assertVerificationWindow(expectation, normalized.observedAt);
+    assertEvidenceRefs(
+      this.#phase3Ports,
+      normalized.evidence,
+      "verification result",
+    );
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: verificationCompletedEventId(normalized.id),
+      type: "verification.completed",
+      occurredAt: normalized.observedAt,
+      observedAt: normalized.observedAt,
+      recordedAt: normalized.observedAt,
+      actor: this.#phase3Ports.actor,
+      ...(expectation.traceId === undefined
+        ? {}
+        : { traceId: expectation.traceId }),
+      operationId: `verification-completed:${normalized.id}`,
+      source: {
+        kind: "verification-coordinator",
+        ref: normalized.expectationId,
+      },
+      payload: {
+        materialClassification: "declared",
+        result: verificationResultPayload(normalized),
+      } as unknown as JsonValue,
+      evidence: normalized.evidence.map(copyEvidenceRef),
+      links: {
+        respondsTo: [expectationCreatedEventId(normalized.expectationId)],
+      },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase35ExpectationEvent(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  recordExpectationStatusChange(
+    expectationId: string,
+    to: ExpectationRecord["status"],
+    changedAt = this.nowIso(),
+    reason = "human decision",
+  ): EventAppendResult {
+    assertHumanWriter(this.#phase3Ports.writer);
+    const nextStatus = expectationStatusSchema.parse(to);
+    const expectation = this.requireStructuredExpectation(expectationId);
+    assertExpectationTime(changedAt, "expectation changedAt");
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: `expectation-status:${encodeURIComponent(expectationId)}:${encodeURIComponent(changedAt)}`,
+      type: "expectation.status.changed",
+      occurredAt: changedAt,
+      observedAt: changedAt,
+      recordedAt: changedAt,
+      actor: this.#phase3Ports.actor,
+      ...(expectation.traceId === undefined
+        ? {}
+        : { traceId: expectation.traceId }),
+      operationId: `expectation-status:${expectationId}:${changedAt}`,
+      source: { kind: "human-control", ref: expectationId },
+      payload: {
+        materialClassification: "declared",
+        expectationId,
+        from: expectation.status,
+        to: nextStatus,
+        changedAt,
+        reason,
+      } as unknown as JsonValue,
+      evidence: expectation.evidence.map(copyEvidenceRef),
+      links: { respondsTo: [expectationCreatedEventId(expectationId)] },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase35ExpectationEvent(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  recordExpectationCancellation(
+    expectationId: string,
+    cancelledAt = this.nowIso(),
+    reason = "human cancellation",
+  ): EventAppendResult {
+    assertHumanWriter(this.#phase3Ports.writer);
+    const expectation = this.requireStructuredExpectation(expectationId);
+    assertExpectationTime(cancelledAt, "expectation cancelledAt");
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: `expectation-cancelled:${encodeURIComponent(expectationId)}:${encodeURIComponent(cancelledAt)}`,
+      type: "expectation.cancelled",
+      occurredAt: cancelledAt,
+      observedAt: cancelledAt,
+      recordedAt: cancelledAt,
+      actor: this.#phase3Ports.actor,
+      ...(expectation.traceId === undefined
+        ? {}
+        : { traceId: expectation.traceId }),
+      operationId: `expectation-cancelled:${expectationId}:${cancelledAt}`,
+      source: { kind: "human-control", ref: expectationId },
+      payload: {
+        materialClassification: "declared",
+        expectationId,
+        cancelledAt,
+        reason,
+      } as unknown as JsonValue,
+      evidence: expectation.evidence.map(copyEvidenceRef),
+      links: { respondsTo: [expectationCreatedEventId(expectationId)] },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase35ExpectationEvent(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  detectStructuredOutcomeResidual(
+    result: VerificationResult,
+    field: FieldContext,
+    detectedAt = this.nowIso(),
+    persistence?: ResidualPersistence,
+  ): Residual | null {
+    const normalized = parseVerificationResult(result);
+    const expectation = this.requireStructuredExpectation(
+      normalized.expectationId,
+    );
+    assertStructuredVerificationWasRecorded(this.#phase3Ports, normalized);
+    if (normalized.outcome !== "violated") return null;
+    const details = asJsonObject(normalized.details);
+    const actual = details?.actual;
+    if (actual === undefined) {
+      throw new Error(
+        "structured outcome residual requires verification.details.actual",
+      );
+    }
+    return (
+      this.detectResiduals({
+        outcomes: [
+          {
+            expectation: structuredExpectationToLegacy(expectation),
+            observation: {
+              id: normalized.id,
+              ...(expectation.traceId === undefined
+                ? {}
+                : { traceId: expectation.traceId }),
+              subject: expectation.subject,
+              actual,
+              observedAt: normalized.observedAt,
+              evidence: normalized.evidence,
+            },
+            field,
+            detectedAt,
+            ...(persistence === undefined ? {} : { persistence }),
+            verification: {
+              matches: false,
+              confidence: 1,
+              explanation: "structured verification outcome was violated",
+              evidence: normalized.evidence,
+            },
+          },
+        ],
+      })[0] ?? null
+    );
+  }
+
+  /**
+   * Human controls are append-only decisions about an existing asset. They do
+   * not edit the source event; the new event records the target, reason, and
+   * provenance so a later projection can be rebuilt without guessing intent.
+   */
+  recordAssetControl(
+    action: AssetControlAction,
+    assetId: string,
+    options: AssetControlOptions,
+  ): EventAppendResult {
+    const eventType = `asset.${action}`;
+    const requiredScope = requiredScopeForEventType(eventType);
+    authorizeHumanControl(
+      this.#phase3Ports.writer,
+      `${eventType} human control`,
+      requiredScope,
+    );
+    assertHumanActor(this.#phase3Ports.actor);
+    if (assetId.length < 1) throw new Error("asset id is required");
+    if (options.reason.length < 1) {
+      throw new Error("asset control reason is required");
+    }
+    const controlledAt = options.at ?? this.nowIso();
+    assertCanonicalTimestamp(controlledAt, "asset control at");
+    const target = this.findAssetEvent(assetId);
+    if (target === null) {
+      throw new Error("asset control requires a recorded asset event");
+    }
+    if (action === "fork") {
+      if (
+        options.newAssetId === undefined ||
+        options.newAssetId.length < 1 ||
+        options.newAssetId === assetId
+      ) {
+        throw new Error("asset fork requires a distinct newAssetId");
+      }
+      if (this.findAssetEvent(options.newAssetId) !== null) {
+        throw new Error("asset fork newAssetId already exists");
+      }
+    }
+    const resultAssetId = action === "fork" ? options.newAssetId! : assetId;
+    const eventId = `asset-control:${action}:${encodeURIComponent(
+      resultAssetId,
+    )}:${encodeURIComponent(controlledAt)}`;
+    const event: EventEnvelope = {
+      schemaVersion: "1",
+      eventVersion: "1",
+      id: eventId,
+      type: eventType,
+      occurredAt: controlledAt,
+      observedAt: controlledAt,
+      recordedAt: controlledAt,
+      actor: this.#phase3Ports.actor,
+      operationId: eventId,
+      source: { kind: "human-control", ref: assetId },
+      payload: {
+        materialClassification: "declared",
+        id: resultAssetId,
+        assetId: resultAssetId,
+        targetAssetId: assetId,
+        action,
+        reason: options.reason,
+        controlledAt,
+        ...(action === "fork"
+          ? { sourceAssetId: assetId, sourceAssetEventId: target.id }
+          : {}),
+      } as unknown as JsonObject,
+      evidence: [{ eventId: target.id, assetId, origin: "direct" }],
+      links: { respondsTo: [target.id], derivedFrom: [target.id] },
+      provenance: { origin: "declared", confidence: 1 },
+    };
+    validatePhase3EventEnvelope(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
+  }
+
+  contestAsset(
+    assetId: string,
+    reason: string,
+    at?: string,
+  ): EventAppendResult {
+    return this.recordAssetControl("contest", assetId, {
+      reason,
+      ...(at === undefined ? {} : { at }),
+    });
+  }
+
+  disableAsset(
+    assetId: string,
+    reason: string,
+    at?: string,
+  ): EventAppendResult {
+    return this.recordAssetControl("disable", assetId, {
+      reason,
+      ...(at === undefined ? {} : { at }),
+    });
+  }
+
+  restoreAsset(
+    assetId: string,
+    reason: string,
+    at?: string,
+  ): EventAppendResult {
+    return this.recordAssetControl("restore", assetId, {
+      reason,
+      ...(at === undefined ? {} : { at }),
+    });
+  }
+
+  forkAsset(
+    assetId: string,
+    newAssetId: string,
+    reason: string,
+    at?: string,
+  ): EventAppendResult {
+    return this.recordAssetControl("fork", assetId, {
+      newAssetId,
+      reason,
+      ...(at === undefined ? {} : { at }),
+    });
+  }
+
+  private findAssetEvent(assetId: string): EventRecord | null {
+    const events = readAllEvents(this.#phase3Ports.events);
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event === undefined || !event.type.startsWith("asset.")) continue;
+      const payload = asJsonObject(event.payload);
+      const candidate =
+        typeof payload?.id === "string"
+          ? payload.id
+          : typeof payload?.assetId === "string"
+            ? payload.assetId
+            : undefined;
+      if (candidate === assetId) return event;
+    }
+    return null;
+  }
+
+  getStructuredExpectation(expectationId: string): ExpectationRecord | null {
+    return this.findStructuredExpectation(expectationId);
+  }
+
+  private findStructuredExpectation(
+    expectationId: string,
+  ): ExpectationRecord | null {
+    const events = readAllEvents(this.#phase3Ports.events);
+    const state = { expectations: {} } as {
+      expectations: Record<string, ExpectationRecord & { cancelled?: boolean }>;
+    };
+    for (const event of events) {
+      if (
+        event.type === "expectation.created" ||
+        event.type === "expectation.updated"
+      ) {
+        const payload = asJsonObject(event.payload);
+        if (payload === null) continue;
+        const { materialClassification: _classification, ...record } = payload;
+        const parsed = parseExpectationRecord(record);
+        const previous = state.expectations[parsed.id];
+        if (event.type === "expectation.created" && previous !== undefined) {
+          throw new Error(
+            `expectation ${parsed.id} was created more than once`,
+          );
+        }
+        state.expectations[parsed.id] = {
+          ...parsed,
+          ...(previous?.cancelled === true ? { cancelled: true } : {}),
+        };
+        continue;
+      }
+      if (event.type === "verification.completed") {
+        const payload = asJsonObject(event.payload);
+        const result = payload === null ? null : asJsonObject(payload.result);
+        if (result === null || result.expectationId !== expectationId) continue;
+        const previous = state.expectations[expectationId];
+        if (previous === undefined) continue;
+        const outcome = result.outcome;
+        if (
+          outcome === "satisfied" ||
+          outcome === "violated" ||
+          outcome === "unknown"
+        ) {
+          state.expectations[expectationId] = {
+            ...previous,
+            status: outcome,
+            updatedAt:
+              typeof result.observedAt === "string"
+                ? result.observedAt
+                : previous.updatedAt,
+          };
+        }
+        continue;
+      }
+      if (event.type === "expectation.status.changed") {
+        const payload = asJsonObject(event.payload);
+        if (payload === null || payload.expectationId !== expectationId)
+          continue;
+        const previous = state.expectations[expectationId];
+        if (
+          previous === undefined ||
+          previous.status !== payload.from ||
+          !expectationStatusSchema.safeParse(payload.to).success
+        ) {
+          continue;
+        }
+        state.expectations[expectationId] = {
+          ...previous,
+          status: payload.to as ExpectationRecord["status"],
+          updatedAt:
+            typeof payload.changedAt === "string"
+              ? payload.changedAt
+              : previous.updatedAt,
+        };
+        continue;
+      }
+      if (event.type === "expectation.cancelled") {
+        const payload = asJsonObject(event.payload);
+        if (payload?.expectationId !== expectationId) continue;
+        const previous = state.expectations[expectationId];
+        if (previous !== undefined) {
+          state.expectations[expectationId] = { ...previous, cancelled: true };
+        }
+      }
+    }
+    const record = state.expectations[expectationId];
+    return record === undefined ? null : record;
+  }
+
+  private requireStructuredExpectation(
+    expectationId: string,
+  ): ExpectationRecord {
+    const expectation = this.findStructuredExpectation(expectationId);
+    if (expectation === null) {
+      throw new Error("structured expectation is not recorded");
+    }
+    return expectation;
   }
 
   recordResiduals(residuals: Residual[]): EventAppendResult[] {
     const events = residuals.map((residual) =>
-      residualDetectedEvent(this.phase3Ports, residual),
+      residualDetectedEvent(this.#phase3Ports, residual),
     );
     events.forEach(validatePhase3EventEnvelope);
-    return this.phase3Ports.events.appendBatch(events);
+    return this.#phase3Ports.events.appendBatch(
+      events,
+      this.#phase3Ports.writer,
+    );
   }
 
   recordReflectionProposal(
@@ -501,9 +1152,9 @@ export class Phase3Runtime extends Phase2Runtime {
     if (proposal.residualId !== residual.id) {
       throw new Error("reflection proposal residualId does not match residual");
     }
-    validateReflectionEvidenceDelta(this.phase3Ports, proposal.evidenceDelta);
+    validateReflectionEvidenceDelta(this.#phase3Ports, proposal.evidenceDelta);
     const residualEventId = residualDetectedEventId(residual.id);
-    const residualEvent = this.phase3Ports.events.getById(residualEventId);
+    const residualEvent = this.#phase3Ports.events.getById(residualEventId);
     if (
       residualEvent === null ||
       residualEvent.type !== "residual.detected" ||
@@ -516,9 +1167,9 @@ export class Phase3Runtime extends Phase2Runtime {
       );
     }
 
-    assertResidualForRecording(this.phase3Ports, residual);
+    assertResidualForRecording(this.#phase3Ports, residual);
     const recordedAt = deterministicReflectionTimestamp(
-      this.phase3Ports,
+      this.#phase3Ports,
       residualEvent,
       proposal.evidenceDelta,
     );
@@ -527,7 +1178,7 @@ export class Phase3Runtime extends Phase2Runtime {
       proposal.evidenceDelta.toSeq,
     );
     const previousProposal = validateReflectionRound(
-      this.phase3Ports,
+      this.#phase3Ports,
       residualEvent,
       proposal,
       proposalEventId,
@@ -545,7 +1196,7 @@ export class Phase3Runtime extends Phase2Runtime {
       occurredAt: recordedAt,
       observedAt: recordedAt,
       recordedAt,
-      actor: this.phase3Ports.actor,
+      actor: this.#phase3Ports.actor,
       operationId: `reflection:${residual.id}:${proposal.evidenceDelta.toSeq}`,
       source: { kind: "reflection-controller", ref: residual.id },
       payload: reflectionProposalPayload(residual, proposal),
@@ -564,7 +1215,7 @@ export class Phase3Runtime extends Phase2Runtime {
       provenance: { origin: "inferred", confidence: residual.confidence },
     };
     validatePhase3EventEnvelope(event);
-    return this.phase3Ports.events.append(event);
+    return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
   }
 }
 
@@ -648,6 +1299,199 @@ function expectationPayload(expectation: Expectation): JsonObject {
       : { validUntil: expectation.validUntil }),
     evidence: expectation.evidence.map(evidencePayload),
   } as unknown as JsonObject;
+}
+
+function structuredExpectationPayload(
+  expectation: ExpectationRecord,
+): JsonObject {
+  return {
+    materialClassification: "declared",
+    id: expectation.id,
+    ...(expectation.traceId === undefined
+      ? {}
+      : { traceId: expectation.traceId }),
+    source: expectation.source,
+    subject: expectation.subject,
+    expected: expectation.expected,
+    verification: expectation.verification,
+    createdAt: expectation.createdAt,
+    validFrom: expectation.validFrom,
+    ...(expectation.evaluateBy === undefined
+      ? {}
+      : { evaluateBy: expectation.evaluateBy }),
+    ...(expectation.expiresAt === undefined
+      ? {}
+      : { expiresAt: expectation.expiresAt }),
+    status: expectation.status,
+    evidence: expectation.evidence.map(evidencePayload),
+    updatedAt: expectation.updatedAt,
+  } as unknown as JsonObject;
+}
+
+function verificationResultPayload(result: VerificationResult): JsonObject {
+  return {
+    id: result.id,
+    expectationId: result.expectationId,
+    verifier: result.verifier,
+    observedAt: result.observedAt,
+    outcome: result.outcome,
+    evidence: result.evidence.map(evidencePayload),
+    ...(result.details === undefined ? {} : { details: result.details }),
+  } as unknown as JsonObject;
+}
+
+function validatePhase35ExpectationEvent(event: EventEnvelope): void {
+  const payload = asJsonObject(event.payload);
+  if (payload === null || payload.materialClassification !== "declared") {
+    throw new Error("expectation lifecycle events require declared material");
+  }
+  if (
+    event.type === "expectation.created" ||
+    event.type === "expectation.updated"
+  ) {
+    const { materialClassification: _classification, ...record } = payload;
+    parseExpectationRecord(record);
+    return;
+  }
+  if (event.type === "verification.completed") {
+    const result = payload.result;
+    if (result === undefined)
+      throw new Error("verification.completed has no result");
+    parseVerificationResult(result);
+    return;
+  }
+  if (event.type === "verification.requested") {
+    if (
+      typeof payload.expectationId !== "string" ||
+      typeof payload.requestId !== "string" ||
+      typeof payload.requestedAt !== "string" ||
+      typeof payload.mode !== "string" ||
+      payload.verifier === undefined
+    ) {
+      throw new Error("verification.requested payload is incomplete");
+    }
+    return;
+  }
+  if (event.type === "expectation.cancelled") {
+    if (
+      typeof payload.expectationId !== "string" ||
+      typeof payload.cancelledAt !== "string" ||
+      typeof payload.reason !== "string" ||
+      payload.reason.length === 0
+    ) {
+      throw new Error("expectation.cancelled payload is incomplete");
+    }
+    return;
+  }
+  if (event.type === "expectation.status.changed") {
+    if (
+      typeof payload.expectationId !== "string" ||
+      typeof payload.from !== "string" ||
+      typeof payload.to !== "string" ||
+      typeof payload.changedAt !== "string" ||
+      typeof payload.reason !== "string" ||
+      payload.reason.length === 0
+    ) {
+      throw new Error("expectation.status.changed payload is incomplete");
+    }
+  }
+}
+
+function assertExpectationTime(value: string, field: string): void {
+  assertCanonicalTimestamp(value, field);
+}
+
+function assertVerificationWindow(
+  expectation: ExpectationRecord,
+  observedAt: string,
+): void {
+  assertCanonicalTimestamp(observedAt, "verification observedAt");
+  if (Date.parse(observedAt) < Date.parse(expectation.validFrom)) {
+    throw new Error("verification cannot precede expectation validFrom");
+  }
+  if (
+    expectation.expiresAt !== undefined &&
+    Date.parse(observedAt) > Date.parse(expectation.expiresAt)
+  ) {
+    throw new Error(
+      "verification is outside the expectation window; expired is not violated",
+    );
+  }
+}
+
+function assertHumanWriter(writer: WriterContext): void {
+  authorizeHumanControl(writer, "expectation human control", "event.append");
+}
+
+function assertHumanActor(actor: ActorRef): void {
+  if (actor.type !== "human") {
+    throw new AuthorizationError("human control requires a human actor", {
+      actor,
+    });
+  }
+}
+
+function readAllEvents(reader: EventReader): EventRecord[] {
+  const events: EventRecord[] = [];
+  let afterSeq = 0;
+  while (true) {
+    const batch = reader.query({ afterSeq, limit: 10_000 });
+    if (batch.length === 0) break;
+    events.push(...batch);
+    const last = batch.at(-1);
+    if (last === undefined || last.seq <= afterSeq) {
+      throw new Error("event reader did not advance while paginating");
+    }
+    afterSeq = last.seq;
+    if (batch.length < 10_000) break;
+  }
+  return events;
+}
+
+function structuredExpectationToLegacy(
+  expectation: ExpectationRecord,
+): Expectation {
+  return {
+    id: expectation.id,
+    ...(expectation.traceId === undefined
+      ? {}
+      : { traceId: expectation.traceId }),
+    subject: expectation.subject,
+    expected: expectation.expected,
+    verification: "predicate",
+    predicateId: `structured:${expectation.id}`,
+    createdAt: expectation.createdAt,
+    ...(expectation.expiresAt === undefined
+      ? {}
+      : { validUntil: expectation.expiresAt }),
+    evidence: expectation.evidence.map(copyEvidenceRef),
+  };
+}
+
+function assertStructuredVerificationWasRecorded(
+  ports: Phase3RuntimePorts,
+  result: VerificationResult,
+): void {
+  const event = ports.events.getById(verificationCompletedEventId(result.id));
+  if (event === null || event.type !== "verification.completed") {
+    throw new Error(
+      "structured outcome residual requires a recorded verification.completed event",
+    );
+  }
+  const payload = asJsonObject(event.payload);
+  const recorded = payload === null ? null : asJsonObject(payload.result);
+  if (recorded === null) {
+    throw new Error("recorded structured verification result is malformed");
+  }
+  const normalized = parseVerificationResult(recorded);
+  if (
+    stableStringify(normalized as unknown as JsonValue) !==
+    stableStringify(result as unknown as JsonValue)
+  ) {
+    throw new Error(
+      "structured outcome residual verification does not match the recorded result",
+    );
+  }
 }
 
 function residualPayload(residual: Residual): JsonObject {
@@ -779,25 +1623,44 @@ function assertResidualForRecording(
   }
   if (residual.kind === "outcome") {
     const baselineId = residual.baselineId!;
-    const expectationEvent = ports.events.getById(
+    const legacyExpectationEvent = ports.events.getById(
       expectationRegisteredEventId(baselineId),
     );
+    let registeredSubject: JsonValue | undefined;
+    let registeredExpected: JsonValue | undefined;
+    let registered = false;
     if (
-      expectationEvent === null ||
-      expectationEvent.type !== "expectation.registered" ||
-      expectationEvent.operationId !== baselineId ||
-      expectationEvent.provenance.origin !== "declared"
+      legacyExpectationEvent !== null &&
+      legacyExpectationEvent.type === "expectation.registered" &&
+      legacyExpectationEvent.operationId === baselineId &&
+      legacyExpectationEvent.provenance.origin === "declared"
     ) {
-      throw new Error(
-        "outcome residual requires a matching recorded expectation.registered event",
+      const expectation = asJsonObject(legacyExpectationEvent.payload);
+      registeredSubject = expectation?.subject;
+      registeredExpected = expectation?.expected;
+      registered = expectation?.expectationId === baselineId;
+    } else {
+      const structuredEvent = ports.events.getById(
+        expectationCreatedEventId(baselineId),
       );
+      if (
+        structuredEvent !== null &&
+        structuredEvent.type === "expectation.created" &&
+        structuredEvent.provenance.origin === "declared"
+      ) {
+        const payload = asJsonObject(structuredEvent.payload);
+        if (payload !== null) {
+          const { materialClassification: _classification, ...record } =
+            payload;
+          const structured = parseExpectationRecord(record);
+          registeredSubject = structured.subject;
+          registeredExpected = structured.expected;
+          registered = structured.id === baselineId;
+        }
+      }
     }
-    const expectation = asJsonObject(expectationEvent.payload);
-    const registeredSubject = expectation?.subject;
-    const registeredExpected = expectation?.expected;
     if (
-      expectation === null ||
-      expectation.expectationId !== baselineId ||
+      !registered ||
       residual.baseline === undefined ||
       registeredSubject === undefined ||
       registeredExpected === undefined ||
@@ -1134,5 +1997,453 @@ function assertCanonicalTimestamp(value: string, field: string): void {
     new Date(milliseconds).toISOString() !== value
   ) {
     throw new Error(`${field} must be a canonical UTC timestamp`);
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === "EPERM" || code === "EACCES";
+  }
+}
+
+export type RuntimeMode = "embedded" | "daemon";
+
+export interface WriterLockMetadata {
+  pid: number;
+  mode: RuntimeMode;
+  startedAt: string;
+  dbPath: string;
+}
+
+export interface WriterLockRecord extends WriterLockMetadata {
+  token: string;
+}
+
+export class WriterLockError extends Error {
+  readonly code = "WRITER_LOCK_CONFLICT" as const;
+
+  constructor(
+    message: string,
+    readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "WriterLockError";
+  }
+}
+
+export class WriterOwnershipLock {
+  readonly path: string;
+  #token: string | undefined;
+
+  constructor(path: string) {
+    this.path = resolve(path);
+  }
+
+  inspect(): WriterLockRecord | null {
+    if (!existsSync(this.path)) return null;
+    try {
+      const value = JSON.parse(readFileSync(this.path, "utf8")) as Record<
+        string,
+        unknown
+      >;
+      if (
+        typeof value.token !== "string" ||
+        typeof value.pid !== "number" ||
+        !Number.isSafeInteger(value.pid) ||
+        (value.mode !== "embedded" && value.mode !== "daemon") ||
+        typeof value.startedAt !== "string" ||
+        typeof value.dbPath !== "string"
+      ) {
+        return null;
+      }
+      return {
+        token: value.token,
+        pid: value.pid,
+        mode: value.mode,
+        startedAt: value.startedAt,
+        dbPath: value.dbPath,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  clearStale(expectedToken: string): boolean {
+    const record = this.inspect();
+    if (record === null) return false;
+    if (record.token !== expectedToken) {
+      throw new WriterLockError(
+        "writer lock token does not match the requested stale-lock clear",
+        { path: this.path },
+      );
+    }
+    if (record.pid === process.pid || isProcessAlive(record.pid)) {
+      throw new WriterLockError(
+        "writer lock is still owned by a live process; it was preserved",
+        { path: this.path, pid: record.pid },
+      );
+    }
+    unlinkSync(this.path);
+    return true;
+  }
+
+  acquire(metadata: WriterLockMetadata): void {
+    if (this.#token !== undefined) return;
+    const token = randomUUID();
+    const record = JSON.stringify({ ...metadata, token });
+    let fileDescriptor: number | undefined;
+    try {
+      fileDescriptor = openSync(this.path, "wx");
+      writeSync(fileDescriptor, record, undefined, "utf8");
+      closeSync(fileDescriptor);
+      fileDescriptor = undefined;
+      this.#token = token;
+    } catch (error) {
+      if (fileDescriptor !== undefined) closeSync(fileDescriptor);
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        let existing: string | undefined;
+        try {
+          existing = readFileSync(this.path, "utf8");
+        } catch {
+          existing = undefined;
+        }
+        throw new WriterLockError(
+          "another runtime already owns the database writer lock",
+          { path: this.path, existing },
+        );
+      }
+      throw new WriterLockError("could not acquire the database writer lock", {
+        path: this.path,
+        cause: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  isHeld(): boolean {
+    if (this.#token === undefined || !existsSync(this.path)) return false;
+    try {
+      const value = JSON.parse(readFileSync(this.path, "utf8")) as {
+        token?: unknown;
+      };
+      return value.token === this.#token;
+    } catch {
+      return false;
+    }
+  }
+
+  release(): void {
+    const token = this.#token;
+    if (token === undefined) return;
+    this.#token = undefined;
+    if (!existsSync(this.path)) return;
+    try {
+      const value = JSON.parse(readFileSync(this.path, "utf8")) as {
+        token?: unknown;
+      };
+      if (value.token !== token) {
+        throw new WriterLockError(
+          "writer lock changed ownership before release; lock was preserved",
+          { path: this.path },
+        );
+      }
+      unlinkSync(this.path);
+    } catch (error) {
+      if (error instanceof WriterLockError) throw error;
+      throw new WriterLockError("could not release the database writer lock", {
+        path: this.path,
+        cause: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+export interface RuntimeCompositionOptions {
+  store: RuntimeStore;
+  actor: ActorRef;
+  writer: WriterContext;
+  mode: RuntimeMode;
+  clock?: Clock;
+  ids?: IdGenerator;
+  lockPath?: string;
+}
+
+export interface DoctorCheck {
+  name: string;
+  status: "pass" | "fail" | "info";
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface RuntimeDoctorReport {
+  status: "pass" | "fail";
+  checks: DoctorCheck[];
+  health: StoreHealth;
+}
+
+export class RuntimeCompositionRoot {
+  readonly #store: RuntimeStore;
+  readonly lock: WriterOwnershipLock;
+  readonly writer: WriterContext;
+  readonly runtime: Phase3Runtime;
+  readonly mode: RuntimeMode;
+  readonly clock: Clock;
+  #started = false;
+
+  constructor(options: RuntimeCompositionOptions) {
+    this.#store = options.store;
+    this.writer = parseWriterContext(options.writer);
+    this.mode = options.mode;
+    this.clock = options.clock ?? { now: () => new Date() };
+    this.lock = new WriterOwnershipLock(
+      options.lockPath ?? `${options.store.filename}.writer.lock`,
+    );
+    this.runtime = new Phase3Runtime({
+      events: this.#store,
+      projections: this.#store,
+      clock: this.clock,
+      ids: options.ids ?? { next: () => randomUUID() },
+      actor: options.actor,
+      writer: this.writer,
+    });
+  }
+
+  start(): this {
+    if (this.#started) return this;
+    this.lock.acquire({
+      pid: process.pid,
+      mode: this.mode,
+      startedAt: this.clock.now().toISOString(),
+      dbPath: resolve(this.#store.filename),
+    });
+    this.#started = true;
+    return this;
+  }
+
+  close(): void {
+    if (!this.#started) {
+      this.#store.close();
+      return;
+    }
+    try {
+      this.#store.close();
+    } finally {
+      this.lock.release();
+      this.#started = false;
+    }
+  }
+
+  catchUpCoreProjections(): CatchUpResult[] {
+    this.assertStarted();
+    return this.runtime.catchUpCoreProjections();
+  }
+
+  rebuildCoreProjections(): CatchUpResult[] {
+    this.assertStarted();
+    return createCoreProjections().map((projection) =>
+      this.runtime.rebuild(projection),
+    );
+  }
+
+  createManagedBackup(
+    destinationPath: string,
+    options: { id?: string; createdAt?: number } = {},
+  ): BackupManifest {
+    this.assertStarted();
+    return this.#store.createManagedBackup(
+      destinationPath,
+      this.writer,
+      options,
+    );
+  }
+
+  backupTo(
+    destinationPath: string,
+    options: BackupOptions = {},
+  ): BackupManifest {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "history.export", "backup creation");
+    return this.#store.backupTo(destinationPath, options);
+  }
+
+  listManagedBackups(): ManagedBackup[] {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "history.export", "backup listing");
+    return this.#store.listManagedBackups();
+  }
+
+  get databasePath(): string {
+    return resolve(this.#store.filename);
+  }
+
+  inspectEvent(eventId: string): EventRecord | null {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "inspect event");
+    if (eventId.length < 1) throw new Error("event id is required");
+    return this.#store.getById(eventId);
+  }
+
+  exportEvents(query: EventQuery = {}): EventRecord[] {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "history.export", "export event history");
+    return this.#store.query(query);
+  }
+
+  planPrivacyPurge(sessionId: string): PrivacyPurgePlan {
+    this.assertStarted();
+    return this.#store.planPrivacyPurge(sessionId);
+  }
+
+  privacyPurge(
+    sessionId: string,
+    options: PrivacyPurgeOptions = {},
+  ): RuntimePrivacyPurgeResult {
+    this.assertStarted();
+    const result = this.#store.privacyPurge(sessionId, this.writer, options);
+    if (result.dryRun || result.receipt === undefined) return result;
+    return {
+      ...result,
+      projectionRebuild: this.rebuildCoreProjections(),
+    };
+  }
+
+  finalizePendingPurge(): PurgeCleanupResult {
+    this.assertStarted();
+    return this.#store.finalizePendingPurge(this.writer);
+  }
+
+  getHealth(): StoreHealth {
+    this.assertStarted();
+    return this.#store.getHealth();
+  }
+
+  doctor(): RuntimeDoctorReport {
+    this.assertStarted();
+    const health = this.#store.getHealth();
+    const checks: DoctorCheck[] = [
+      {
+        name: "writer-lock",
+        status: this.lock.isHeld() ? "pass" : "fail",
+        message: this.lock.isHeld()
+          ? "canonical writer lock is held"
+          : "canonical writer lock is not held",
+        details: { path: this.lock.path, mode: this.mode },
+      },
+      {
+        name: "sqlite-wal",
+        status:
+          health.pragmas.journalMode === "wal" &&
+          health.pragmas.foreignKeys === 1 &&
+          health.pragmas.synchronous === 2
+            ? "pass"
+            : "fail",
+        message:
+          "SQLite WAL, foreign keys, and FULL synchronous mode are checked",
+        details: health.pragmas as unknown as Record<string, unknown>,
+      },
+      {
+        name: "writer-provenance",
+        status: health.writerBackfillCount === 0 ? "pass" : "fail",
+        message:
+          health.writerBackfillCount === 0
+            ? "all ledger rows have writer provenance"
+            : "ledger rows are missing writer provenance",
+        details: { backfillCount: health.writerBackfillCount },
+      },
+      {
+        name: "wal-checkpoint",
+        status: health.walCheckpoint.busy === 0 ? "pass" : "fail",
+        message:
+          health.walCheckpoint.busy === 0
+            ? "WAL checkpoint is not blocked"
+            : "WAL checkpoint reports a busy database",
+        details: health.walCheckpoint,
+      },
+      {
+        name: "orphan-verification",
+        status: health.orphanVerificationCount === 0 ? "pass" : "fail",
+        message:
+          health.orphanVerificationCount === 0
+            ? "verification results have expectation parents"
+            : "orphan verification results were found",
+        details: { count: health.orphanVerificationCount },
+      },
+      {
+        name: "purge-state",
+        status: health.pendingPurgeCount === 0 ? "pass" : "fail",
+        message:
+          health.pendingPurgeCount === 0
+            ? "no pending purge authorization or backup cleanup exists"
+            : "purge cleanup is pending",
+        details: { count: health.pendingPurgeCount },
+      },
+      {
+        name: "managed-backup-integrity",
+        status:
+          health.managedBackups.missingFiles.length === 0 &&
+          health.managedBackups.invalidChecksums.length === 0
+            ? "pass"
+            : "fail",
+        message: "managed backup paths and checksums are checked",
+        details: health.managedBackups,
+      },
+      {
+        name: "asset-provenance",
+        status: "info",
+        message: "purge-invalidated asset provenance is retained in receipts",
+        details: { invalidatedAssetCount: health.invalidatedAssetCount },
+      },
+    ];
+    const expectedProjectionNames = [
+      "project",
+      "rules",
+      "assets",
+      "agents",
+      "expectations_current",
+    ];
+    const projectionByName = new Map(
+      health.projections.map((projection) => [
+        projection.projectionName,
+        projection,
+      ]),
+    );
+    for (const name of expectedProjectionNames) {
+      const projection = projectionByName.get(name);
+      if (projection === undefined) {
+        checks.push({
+          name: `projection:${name}`,
+          status: health.lastSeq === 0 ? "info" : "fail",
+          message:
+            health.lastSeq === 0
+              ? "projection is not initialized on an empty ledger"
+              : "projection state is missing while the ledger is non-empty",
+        });
+        continue;
+      }
+      checks.push({
+        name: `projection:${name}`,
+        status: projection.lag === 0 ? "pass" : "fail",
+        message:
+          projection.lag === 0
+            ? "projection cursor is caught up"
+            : "projection cursor lags behind the event ledger",
+        details: projection as unknown as Record<string, unknown>,
+      });
+    }
+    return {
+      status: checks.some((check) => check.status === "fail") ? "fail" : "pass",
+      checks,
+      health,
+    };
+  }
+
+  private assertStarted(): void {
+    if (!this.#started) {
+      throw new WriterLockError("runtime composition root is not started");
+    }
   }
 }

@@ -10,6 +10,29 @@ import { fileURLToPath } from "node:url";
 
 import { SqliteEventStore } from "../packages/store/dist/index.js";
 
+const writer = {
+  writerId: "system:phase1-recovery",
+  kind: "runtime",
+  role: "OWNER",
+  authn: "system",
+  scopes: [
+    "event.read",
+    "event.append",
+    "state.read",
+    "residual.propose",
+    "tool.execute",
+    "asset.propose",
+    "asset.activate",
+    "asset.contest",
+    "asset.disable",
+    "asset.fork",
+    "history.export",
+    "history.purge",
+    "system.migrate",
+  ],
+  policyVersion: 1,
+};
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "..");
 const workerScript = join(scriptDir, "phase1-crash-worker.mjs");
@@ -91,20 +114,23 @@ try {
     ) {
       throw new Error("uncommitted crash row survived recovery");
     }
-    const result = store.append({
-      schemaVersion: "1",
-      eventVersion: "1",
-      id: "after-crash-event",
-      type: "system.recovery-probe",
-      occurredAt: "2026-09-13T00:00:00.000Z",
-      observedAt: "2026-09-13T00:00:00.000Z",
-      recordedAt: "2026-09-13T00:00:01.000Z",
-      actor: { type: "system", id: "phase1-recovery" },
-      operationId: "after-crash-operation",
-      source: { kind: "phase1-crash-recovery" },
-      payload: { recovered: true },
-      provenance: { origin: "direct", confidence: 1 },
-    });
+    const result = store.append(
+      {
+        schemaVersion: "1",
+        eventVersion: "1",
+        id: "after-crash-event",
+        type: "system.recovery-probe",
+        occurredAt: "2026-09-13T00:00:00.000Z",
+        observedAt: "2026-09-13T00:00:00.000Z",
+        recordedAt: "2026-09-13T00:00:01.000Z",
+        actor: { type: "system", id: "phase1-recovery" },
+        operationId: "after-crash-operation",
+        source: { kind: "phase1-crash-recovery" },
+        payload: { recovered: true },
+        provenance: { origin: "direct", confidence: 1 },
+      },
+      writer,
+    );
     if (result.record.seq !== 1 || store.getLastSeq() !== 1) {
       throw new Error("post-crash write did not recover at seq 1");
     }
