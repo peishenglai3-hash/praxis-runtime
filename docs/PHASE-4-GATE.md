@@ -1,7 +1,7 @@
 # Phase 4 Gate — EPIC-007 Reusable Assets
 
-**Status:** local implementation candidate
-**Formal Alpha gate:** `NO-GO` pending Gate D
+**Status:** `PASS` within the declared local capability boundary
+**Formal Alpha gate:** `GO`
 **Controlling plan:** `Codex Implementation Bible v1.0`
 **ADR:** `docs/ADR/ADR-0011-phase4-reusable-assets.md`
 
@@ -70,7 +70,10 @@ repository-wide result is recorded after the verification command below.
 The current-worktree `pnpm verify` also passes locally under Node
 `v24.15.0`: 14 test files and 86/86 tests, plus format, lint, workspace and
 dependency-direction boundaries, typecheck, build, schema parity, and the
-Phase 1-4 scenario suite.
+Phase 1-4 scenario suite. GitHub Actions run `34978723319` then passed the
+same gate on exact Node `22.13.0` under both Ubuntu and Windows; its first
+Windows newline failure and `.gitattributes` correction are recorded in
+`docs/断点记录.md` as `BP-040`.
 
 ## Security and permission review
 
@@ -128,15 +131,16 @@ The same scenario is included in `pnpm verify`.
 
 ## Formal gate result
 
-**Phase 4 local implementation:** `PASS candidate`.
-**Phase 4 Alpha/merge:** `NO-GO`.
+**Phase 4 local implementation:** `PASS` within the bounded capability
+boundary.
+**Phase 4 Alpha/merge:** `GO`.
 
-The remaining blocker is Gate D in `docs/PHASE-3.5-GATE.md`: actual
-`pnpm verify` evidence on both `ubuntu-latest` and `windows-latest` with exact
-Node `22.13.0`. Local Node 24 results are retained as useful evidence but do
-not substitute for that runner evidence. Source synchronization to the
-private GitHub repository is authorized as a controlled handoff; the sync
-itself is not CI evidence and cannot close Gate D.
+Gate D in `docs/PHASE-3.5-GATE.md` is closed by run `34978723319`: actual
+`pnpm verify` evidence passed on both `ubuntu-latest` and `windows-latest` with
+exact Node `22.13.0`. Local Node 24 results remain useful development evidence
+but are not substituted for that runner evidence. Source synchronization to
+the private GitHub repository remains a controlled handoff; it does not imply
+public release.
 
 ## Rollback point
 

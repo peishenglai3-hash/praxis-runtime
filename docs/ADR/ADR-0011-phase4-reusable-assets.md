@@ -1,6 +1,6 @@
 # ADR-0011: Phase 4 provenance-aware reusable assets
 
-**Status:** Accepted for the local Phase 4 implementation candidate
+**Status:** Accepted for Phase 4 Alpha after exact Node `22.13.0` CI verification
 **Scope:** Bible EPIC-007, issues 060-066
 **Gate:** `docs/PHASE-4-GATE.md`
 
@@ -144,6 +144,6 @@ author-owned production evidence.
 | 065 challenge/disable/restore | runtime human-control façade, Phase 4 integration tests                                          |
 | 066 fork                      | `forkAsset`, `asset.fork`, independent-lineage integration test                                  |
 
-The implementation candidate is locally testable. The formal Alpha gate still
-depends on the separate Node `22.13.0` Ubuntu/Windows CI evidence recorded in
+The implementation is locally testable and the formal Alpha gate is closed by
+the exact Node `22.13.0` Ubuntu/Windows CI evidence recorded in
 `docs/PHASE-3.5-GATE.md` and `docs/PHASE-4-GATE.md`.

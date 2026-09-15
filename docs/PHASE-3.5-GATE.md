@@ -1,11 +1,11 @@
 # Phase 3.5 Gate Reconciliation
 
 **Reconciliation date:** 2026-09-15
-**Status:** Gates A-C `PASS` within the declared local capability boundary;
-Gate D `PENDING` for the required Node.js `22.13.0` runners. Phase 4
-implementation is allowed to proceed locally by the owner's explicit request,
-but the formal Alpha/merge gate remains `NO-GO` until Gate D has real CI
-evidence.
+**Status:** Gates A-D `PASS` within the declared local capability boundary;
+the formal Phase 4 Alpha/merge gate is now `GO`. The exact Node.js
+`22.13.0` evidence is recorded below. This does not expand the local
+capability boundary into OS-level isolation, enterprise IAM, or hardware-level
+deletion guarantees.
 
 This record supersedes the stale pre-Correction-Pack entry that continued to
 ask for inputs already frozen by `Codex Phase3.5 Correction Pack v1.0`.
@@ -76,7 +76,7 @@ trusted in-process capability, not as hostile-process isolation.
 
 ### 5. Result
 
-**`PASS` candidate — local capability boundary only.** This is not proof of
+**`PASS` — within the declared local capability boundary.** This is not proof of
 OS-level isolation, enterprise IAM, or an external identity provider.
 
 ## Gate B — Expectation / Verification / Async Fixture
@@ -120,7 +120,7 @@ cases.
 
 ### 5. Result
 
-**`PASS` candidate — structured contract and synthetic replay evidence.**
+**`PASS` — structured contract and synthetic replay evidence.**
 
 ## Gate C — CLI / daemon / backup / privacy production assembly
 
@@ -164,7 +164,7 @@ These criteria are satisfied locally.
 
 ### 5. Result
 
-**`PASS` candidate — bounded local production assembly.** The local
+**`PASS` — bounded local production assembly.** The local
 capability boundary is explicit and must not be described as enterprise IAM or
 hardware-level irreversible deletion.
 
@@ -182,10 +182,12 @@ hardware-level irreversible deletion.
 ### 2. Current evidence
 
 The current local machine runs Node `v24.15.0`; the bundled runtime is
-`v24.19.0`. Local verification under those runtimes is useful evidence but
-does not close this gate. No source push was authorized, so the configured
-GitHub Actions runners have not produced an actual result for the current
-worktree.
+`v24.19.0`. Local verification under those runtimes is useful evidence but is
+not substituted for the canonical runner. GitHub Actions run
+`34978723319` at commit `75b5d23` completed `pnpm verify` successfully on both
+`ubuntu-latest` (job `104413114501`) and `windows-latest` (job
+`104413114357`) with exact Node `22.13.0`. The first run's Windows newline
+failure and its correction are retained in `BP-040`.
 
 ### 3. ADR / document
 
@@ -196,28 +198,27 @@ worktree.
 
 On both required runners, the same `pnpm verify` must pass, including the
 complete test suite, CLI/daemon smoke coverage, SQLite backup/restore fixture,
-dependency boundaries, build, and Phase 1-4 scenarios. The exact runner
-result is not present yet.
+dependency boundaries, build, and Phase 1-4 scenarios. Run `34978723319`
+satisfies this criterion; the workflow uses the exact Node `22.13.0` and
+reports success for both required operating systems.
 
 ### 5. Result
 
-**`PENDING` — external Node `22.13.0` evidence.** The absence is a
-deliberately retained external-evidence boundary, not a request for another
-generic author-material package.
+**`PASS` — exact Node `22.13.0` Ubuntu/Windows CI evidence.** This closes the
+external runner boundary for the current Phase 4 candidate.
 
 ## Reconciled Phase 4 entry rule
 
 The Correction Pack has already frozen the local capability semantics,
 structured expectation/verification semantics, local production assembly, and
 the exact CI target. No previously listed “four owner inputs” should be
-requested again as a generic prerequisite. The explicit owner instruction to
-continue Phase 4 authorizes local construction and testing now. It does not
-turn Gate D into `PASS` or change the Bible's Alpha merge rule:
+requested again as a generic prerequisite. The exact CI run now closes Gate D
+and satisfies the Bible's Alpha merge rule:
 
-> Phase 4 may be implemented as a local candidate; Phase 4 Alpha/merge is
-> `NO-GO` until Gate D has real Ubuntu/Windows Node `22.13.0` evidence.
+> Phase 4 is a verified implementation slice; Phase 4 Alpha/merge is `GO`
+> after both required Node `22.13.0` runners pass.
 
-The only still-open external item is the runner result itself. If a future
+There is no remaining generic owner-material request for this gate. If a future
 policy decision is needed, it must name the exact unresolved interface or
 acceptance criterion; this record must not regress into a generic request for
 writer, ACL, human-control, expectation, or production materials already

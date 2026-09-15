@@ -1,6 +1,6 @@
 # ADR-0007: Runtime and CI reproducibility
 
-**Status:** Accepted for Phase 3.5, with Node 22.13.0 runner evidence pending
+**Status:** Accepted; exact Node 22.13.0 runner evidence verified in CI run `34978723319`
 
 ## Context
 
@@ -30,5 +30,6 @@ driver. If the pinned runner rejects this operation, the required response is
 
 ## Consequences
 
-The repository has deterministic installation and OS coverage. The gate remains
-conditional until an actual Node `22.13.0` runner produces green evidence.
+The repository has deterministic installation and OS coverage. CI run
+`34978723319` produced green evidence on both required runners, closing the
+Node `22.13.0` reproducibility condition for the current Alpha gate.

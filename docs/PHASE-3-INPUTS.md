@@ -19,17 +19,17 @@ The labels below distinguish implementation decisions from external evidence:
 
 ## Reconciled register
 
-| Input recorded before Phase 3.5       | Current reconciled status                                                                                                                                                     | Repository evidence                                                                                     |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Trusted writer identity               | `FROZEN LOCAL` as a validated local `WriterContext`; explicitly not OS/IAM identity proof                                                                                     | `packages/contracts/src/authorization.ts`, `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`           |
-| Role/scope/ACL matrix                 | `FROZEN LOCAL` for bounded roles, namespaces, explicit scopes, and `asset.restore`                                                                                            | authorization contract and unit tests                                                                   |
-| Human-control semantics               | `FROZEN LOCAL` for inspect/export, challenge, disable, restore, fork, purge, and OWNER confirmation                                                                           | `packages/runtime/src/index.ts`, `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`                     |
-| External-verification policy          | `FROZEN STRUCTURAL` for typed verifier outcomes and explicit validation reports; no claim of external-provider authority                                                      | `packages/contracts/src/expectations.ts`, `docs/ADR/ADR-0009-phase35-expectation-verification-async.md` |
-| Expectation time/resolution semantics | `FROZEN LOCAL` for ordered `validFrom`/`evaluateBy`/`expiresAt`, inclusive boundary, and explicit unknown/late handling                                                       | expectation contracts, replay tests, ASYNC fixtures                                                     |
-| Author-owned golden cases             | `FROZEN STRUCTURAL`: ASYNC-01~04 are synthetic regression fixtures; production cases remain optional evidence, not a blocker for local implementation                         | `fixtures/phase35/ASYNC-01.json` through `ASYNC-04.json`                                                |
-| Production assembly                   | `FROZEN LOCAL` for the local CLI/daemon composition root, one-writer lock, backup, restore, doctor, and purge flows                                                           | `apps/cli`, `apps/daemon`, `docs/ADR/ADR-0010-phase35-local-runtime-backup-privacy.md`                  |
-| Privacy and purge boundary            | `FROZEN LOCAL` as best-effort local purge with audit receipt, rebuild, and visible pending cleanup; hardware-level irrecoverability is not claimed                            | ADR-0010 and maintenance tests                                                                          |
-| Node 22 runner path                   | `EXTERNAL EVIDENCE PENDING`; exact GitHub Actions configuration exists and source synchronization is now authorized, but the actual Ubuntu/Windows results are still required | `.node-version`, `.nvmrc`, `.github/workflows/ci.yml`                                                   |
+| Input recorded before Phase 3.5       | Current reconciled status                                                                                                                             | Repository evidence                                                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Trusted writer identity               | `FROZEN LOCAL` as a validated local `WriterContext`; explicitly not OS/IAM identity proof                                                             | `packages/contracts/src/authorization.ts`, `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`           |
+| Role/scope/ACL matrix                 | `FROZEN LOCAL` for bounded roles, namespaces, explicit scopes, and `asset.restore`                                                                    | authorization contract and unit tests                                                                   |
+| Human-control semantics               | `FROZEN LOCAL` for inspect/export, challenge, disable, restore, fork, purge, and OWNER confirmation                                                   | `packages/runtime/src/index.ts`, `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`                     |
+| External-verification policy          | `FROZEN STRUCTURAL` for typed verifier outcomes and explicit validation reports; no claim of external-provider authority                              | `packages/contracts/src/expectations.ts`, `docs/ADR/ADR-0009-phase35-expectation-verification-async.md` |
+| Expectation time/resolution semantics | `FROZEN LOCAL` for ordered `validFrom`/`evaluateBy`/`expiresAt`, inclusive boundary, and explicit unknown/late handling                               | expectation contracts, replay tests, ASYNC fixtures                                                     |
+| Author-owned golden cases             | `FROZEN STRUCTURAL`: ASYNC-01~04 are synthetic regression fixtures; production cases remain optional evidence, not a blocker for local implementation | `fixtures/phase35/ASYNC-01.json` through `ASYNC-04.json`                                                |
+| Production assembly                   | `FROZEN LOCAL` for the local CLI/daemon composition root, one-writer lock, backup, restore, doctor, and purge flows                                   | `apps/cli`, `apps/daemon`, `docs/ADR/ADR-0010-phase35-local-runtime-backup-privacy.md`                  |
+| Privacy and purge boundary            | `FROZEN LOCAL` as best-effort local purge with audit receipt, rebuild, and visible pending cleanup; hardware-level irrecoverability is not claimed    | ADR-0010 and maintenance tests                                                                          |
+| Node 22 runner path                   | `FROZEN STRUCTURAL`; exact GitHub Actions run `34978723319` passed on Ubuntu/Windows with Node `22.13.0`; local Node 24 remains separate evidence     | `.node-version`, `.nvmrc`, `.github/workflows/ci.yml`                                                   |
 
 ## What is allowed to proceed
 
@@ -39,9 +39,9 @@ authorial production evidence or an external verification result. Phase 4
 promotion remains gated by the runtime policy, provenance checks, validation,
 and human confirmation described in `docs/ADR/ADR-0011-phase4-reusable-assets.md`.
 
-The exact Node `22.13.0` runner remains a separate Alpha evidence gate. Local
-Node `24.15.0` or bundled Node `24.19.0` results must not be relabelled as
-Node 22 evidence.
+The exact Node `22.13.0` runner was a separate Alpha evidence gate and is now
+closed by CI run `34978723319`. Local Node `24.15.0` or bundled Node
+`24.19.0` results must still not be relabelled as Node 22 evidence.
 
 ## Boundary not to misread
 

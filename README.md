@@ -84,7 +84,7 @@ Phase 0 gate status is deliberately split:
 - clean-copy frozen install: `PASS`;
 - immutable local Git rollback checkpoint: `PASS` at `3517725`; source synchronization to the private GitHub handoff repository is now explicitly authorized and tracked below.
 
-Phase 1 / EPIC-002 is now implemented and conditionally verified after the strict Bible re-audit:
+Phase 1 / EPIC-002 is now implemented and verified after the strict Bible re-audit:
 
 - versioned event envelope and JSON Schema with `SourceRef`, `EvidenceRef[]`, `EventLinks`, and required `Provenance`: `PASS`;
 - SQLite WAL event ledger with forward-only migrations, `seq` cursor, operation lifecycle idempotency, and conflict detection: `PASS`;
@@ -95,12 +95,12 @@ Phase 1 / EPIC-002 is now implemented and conditionally verified after the stric
 - bundled Node.js `v24.19.0` concurrency and crash probes: `PASS`;
 - bundled Node.js `v24.19.0` full `pnpm verify`: `PASS`;
 - post-hardening engineering and theory review: `PASS` for the local Phase 1 scope, with later boundary conditions retained;
-- Node.js `22.13.0` CI runner evidence: `PENDING`;
+- Node.js `22.13.0` CI runner evidence: `PASS` on Ubuntu/Windows in Actions run `34978723319`;
 - immutable local Git checkpoint: `3517725` (`phase1: harden event ledger`); the checkpoint remains in the preserved history and is included in the controlled private handoff.
 
-The Phase 1 implementation is therefore verified against the local runtime and recorded fixtures, but it does not claim remote CI or production-scale durability evidence until those checks are run.
+The Phase 1 implementation is verified against local runtimes, recorded fixtures, and the exact Node 22 CI gate; this is not a production-scale durability promise.
 
-Phase 2 / EPIC-003 and EPIC-004 has passed the local implementation gate, conditional on the separate Node.js `22.13.0` runner evidence:
+Phase 2 / EPIC-003 and EPIC-004 has passed the implementation gate, including the separate Node.js `22.13.0` runner evidence:
 
 - projection reducers, versioned persistence, CAS-protected `lastSeq`, ledger-bounded snapshots/cursors, safe rebuild, and core projection fixtures: `PASS` locally;
 - REUSE/REINDEX/REFRESH context planning, explainable ranking, token fallback, and explicit source-bound exposure proposals: `PASS` locally;
@@ -108,7 +108,7 @@ Phase 2 / EPIC-003 and EPIC-004 has passed the local implementation gate, condit
 - concurrent isolated replay/context scenario and same-database projection safety cases: `PASS`;
 - post-red-team engineering and theory review: `PASS` for the bounded local Phase 2 scope; authentication, human control APIs, and production app assembly remain deferred;
 - 30 tests and final `pnpm verify` on system Node.js `v24.15.0` and bundled Node.js `v24.19.0`: `PASS`;
-- Node.js `22.13.0` CI runner evidence: `PENDING`; source synchronization is authorized, but only the actual Ubuntu/Windows runner results can close this evidence gate.
+- Node.js `22.13.0` CI runner evidence: `PASS` on Ubuntu/Windows in Actions run `34978723319`;
 
 The Phase 2 red-team review initially returned `NO-GO/HOLD`. The implementation then closed the reported stale projection overwrite, future cursor, incomplete plan/exposure binding, unverified source event, provenance, and silent `REUSE` fallback paths. A missing source-event fixture in the isolated scenario was also found by the final gate and corrected; it was recorded in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The Phase 2 local checkpoint remains immutable in history and is included in the controlled private handoff.
 
@@ -124,13 +124,13 @@ Phase 3 / EPIC-005 and EPIC-006 is implemented and locally verified as a bounded
 - the Phase 3 gate-era `pnpm verify` was `PASS` on system Node `v24.15.0` and bundled Node `v24.19.0`, with 51/51 tests at that checkpoint; the current Phase 4 tree is recorded separately below;
 - the former Phase-4 owner-input register is reconciled by the Phase 3.5
   Correction Pack into frozen local capability/production semantics; the
-  remaining external evidence is the exact Node `22.13.0` runner result in
+  exact Node `22.13.0` runner evidence is recorded in
   [`docs/PHASE-3.5-GATE.md`](./docs/PHASE-3.5-GATE.md).
 
 Phase 3 does not turn a permission label into authorization and does not claim production readiness. The initial concurrency actor mismatch, the malformed JSON trigger, and the low-level hardening sequence are preserved in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The Phase 3 checkpoint remains available as immutable history in the controlled private handoff.
 
-Phase 3.5 / Author Decision Freeze correction work is implemented as a bounded
-local candidate before Phase 4:
+Phase 3.5 / Author Decision Freeze correction work is implemented and passed
+as a bounded local capability slice before Phase 4:
 
 - `WriterContext`, capability scopes, namespace ACL, separate actor/writer
   provenance, frozen roles/policy version, human OWNER guards, and migrations
@@ -144,13 +144,14 @@ local candidate before Phase 4:
   startup, confirmed session purge, audited sequence gaps, transaction-first
   pending-backup cleanup, asset invalidation receipts, projection rebuild, and
   doctor checks: `PASS` locally;
-- exact Node `22.13.0` and Ubuntu/Windows CI workflows are pinned, but an
-  actual Node 22 runner result remains `PENDING`;
+- exact Node `22.13.0` and Ubuntu/Windows CI workflows are pinned, and Actions
+  run `34978723319` passed the full gate on both runners;
 - the requested Phase 3.5 ADR numbers collided with existing ADR history and
   were not overwritten; the unique Phase 3.5 ADR set and both compatibility
   mismatches are recorded in [`docs/PHASE-3.5-GATE.md`](./docs/PHASE-3.5-GATE.md).
 
-Phase 4 / EPIC-007 Reusable Assets is implemented as a local candidate:
+Phase 4 / EPIC-007 Reusable Assets is implemented and verified within the
+bounded capability boundary:
 
 - versioned asset contracts, provenance, lifecycle transitions, and promotion
   policy are implemented in `packages/contracts` and `packages/assets`;
@@ -163,14 +164,14 @@ Phase 4 / EPIC-007 Reusable Assets is implemented as a local candidate:
 - four-process CAS, low-level bypass, provenance-origin, purge invalidation,
   and catalog-tamper scenarios are covered by the Phase 4 tests and
   `pnpm phase4:scenario`;
-- the local Phase 4 candidate gate is recorded in
-  [`docs/PHASE-4-GATE.md`](./docs/PHASE-4-GATE.md), while formal Alpha/merge
-  remains `NO-GO` until exact Node `22.13.0` Ubuntu/Windows CI evidence exists.
+- the Phase 4 gate is recorded in [`docs/PHASE-4-GATE.md`](./docs/PHASE-4-GATE.md)
+  with formal Alpha/merge `GO` after exact Node `22.13.0` Ubuntu/Windows CI
+  evidence.
 
-The repository is being synchronized to the private GitHub handoff target;
-the exact remote CI result remains a separate gate. `VACUUM INTO` remains the
-backup path for the pinned Node baseline; `node:sqlite` is experimental in
-Node `22.13.0` even though the flag is no longer required.
+The repository is synchronized to the private GitHub handoff target, and the
+exact remote CI gate is recorded above. `VACUUM INTO` remains the backup path
+for the pinned Node baseline; `node:sqlite` is experimental in Node `22.13.0`
+even though the flag is no longer required.
 The asset invalidation record after physical purge is intentionally
 receipt-based.
 

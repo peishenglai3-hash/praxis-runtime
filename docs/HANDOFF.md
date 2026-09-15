@@ -17,15 +17,16 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 
 ## Current checkpoint
 
-- Phase 4 / Bible `EPIC-007` Reusable Assets is implemented as a local
-  implementation candidate.
-- Gate A–C are `PASS` within the declared local capability boundary. Gate D is
-  `PENDING` until the exact Node.js `22.13.0` `pnpm verify` result exists on
-  both `ubuntu-latest` and `windows-latest`.
-- Phase 4 local implementation is `PASS candidate`; formal Alpha/merge is
-  `NO-GO` until Gate D closes.
-- Local verification was run on Node 24 and passed, but Node 24 is not Node
-  22 evidence. `node:sqlite` remains experimental in Node `22.13.0`; the
+- Phase 4 / Bible `EPIC-007` Reusable Assets is implemented and verified within
+  the declared local capability boundary.
+- Gates A–D are `PASS` within that boundary. GitHub Actions run
+  `34978723319` passed the exact Node.js `22.13.0` `pnpm verify` on both
+  `ubuntu-latest` and `windows-latest`.
+- Phase 4 local implementation is `PASS`; formal Alpha/merge is `GO`. This is
+  not a claim of OS-level hostile-process isolation, enterprise IAM, or
+  hardware-level irreversible deletion.
+- Local verification was also run on Node 24 and passed, but Node 24 is not
+  Node 22 evidence. `node:sqlite` remains experimental in Node `22.13.0`; the
   pinned backup path is `VACUUM INTO` plus manifest checksum, staged restore,
   and doctor/replay verification.
 - Before changing code, run `git status --short --branch` and
@@ -131,10 +132,10 @@ The remaining Bible delivery slices are:
   requires provider-independent contracts, deterministic fake adapters,
   timeout/error/budget fixtures, and proof that provider SDKs cannot enter the
   core dependency graph.
-- **Alpha/release closure:** exact Node `22.13.0` CI evidence on both runners,
-  final gate reconciliation, controlled visibility/publication decision, and
-  release documentation. The MIT license is already present; public release
-  is not implied by this private handoff.
+- **Release closure:** final gate reconciliation, controlled visibility/publication
+  decision, and release documentation. The exact Node `22.13.0` CI evidence
+  and Phase 4 Alpha gate are already closed; the MIT license is present, but
+  public release is not implied by this private handoff.
 
 No external model should label the project “complete” merely because Phase 4
 code exists or local Node 24 verification passes.
