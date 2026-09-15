@@ -7,7 +7,7 @@ import {
   renameSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { DatabaseSync as DatabaseSyncConnection } from "node:sqlite";
 import type * as Sqlite from "node:sqlite";
 
@@ -18,11 +18,14 @@ import {
   authorizeWriterScope,
   eventEnvelopeSchema,
   parseWriterContext,
+  parseReusableAsset,
   stableStringify,
   validatePhase3EventEnvelope,
 } from "@praxis/contracts";
 import type {
   ActorRef,
+  AssetEventWriter,
+  AssetReader,
   EventAppendResult,
   EventBatchWriter,
   EventEnvelope,
@@ -41,6 +44,8 @@ import type {
   SourceRef,
   SnapshotRecord,
   Provenance,
+  AssetStatus,
+  ReusableAsset,
   JsonValue,
   WriterContext,
 } from "@praxis/contracts";
@@ -61,6 +66,19 @@ function sha256File(filename: string): string {
 
 function sqlStringLiteral(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
+}
+
+function isSha256(value: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(value);
+}
+
+function isPathWithinRoot(path: string, root: string): boolean {
+  const relativePath = relative(root, path);
+  return (
+    relativePath.length > 0 &&
+    !relativePath.startsWith("..") &&
+    !isAbsolute(relativePath)
+  );
 }
 
 function assertTimestampMilliseconds(value: number, field: string): void {
@@ -139,8 +157,47 @@ function eventReferences(
     event.source.ref,
     ...linkValues,
     ...evidenceEventIds,
+    ...assetLineageReferences(event),
   ].filter((value): value is string => typeof value === "string");
   return explicitReferences.some((value) => identifiers.has(value));
+}
+
+function assetLineageReferences(event: EventRecord): string[] {
+  if (!event.type.startsWith("asset.")) return [];
+  const payload = asObject(event.payload);
+  if (payload === null) return [];
+  const references: string[] = [];
+  for (const key of [
+    "id",
+    "assetId",
+    "sourceAssetId",
+    "targetAssetId",
+    "sourceEventId",
+  ]) {
+    if (typeof payload[key] === "string") references.push(payload[key]);
+  }
+  const nestedAsset = asObject(payload.asset);
+  if (nestedAsset !== null) {
+    for (const key of ["id"]) {
+      if (typeof nestedAsset[key] === "string")
+        references.push(nestedAsset[key]);
+    }
+    const derivedFrom = nestedAsset.derivedFrom;
+    if (Array.isArray(derivedFrom)) {
+      for (const item of derivedFrom) {
+        const evidence = asObject(item);
+        if (evidence === null) continue;
+        for (const key of ["eventId", "assetId"]) {
+          if (typeof evidence[key] === "string") references.push(evidence[key]);
+        }
+      }
+    }
+    const forkedFrom = asObject(nestedAsset.forkedFrom);
+    if (forkedFrom !== null && typeof forkedFrom.id === "string") {
+      references.push(forkedFrom.id);
+    }
+  }
+  return references;
 }
 
 function sequenceRanges(
@@ -163,6 +220,7 @@ export interface SqliteEventStoreOptions {
   filename: string;
   migrationsDir: string;
   migrationNow?: () => number;
+  managedBackupRoot?: string;
 }
 
 export interface SqlitePragmas {
@@ -218,6 +276,7 @@ export interface StoreHealth {
     invalidChecksums: string[];
   };
   invalidatedAssetCount: number;
+  assetIntegrityIssues: string[];
   purgedSeqRanges: LedgerSeqGap[];
   walCheckpoint: { busy: number; log: number; checkpointed: number };
 }
@@ -233,6 +292,7 @@ export interface PrivacyPurgePlan {
   invalidatedProjectionNames: string[];
   invalidatedSnapshotCount: number;
   managedBackupIds: string[];
+  managedBackupFingerprints: string[];
   planHash: string;
 }
 
@@ -265,6 +325,7 @@ export interface PrivacyPurgeOptions {
   confirm?: boolean;
   preserveManagedBackups?: boolean;
   executedAt?: number;
+  planHash?: string;
 }
 
 export interface RestoreDatabaseOptions {
@@ -340,6 +401,125 @@ function hashEvent(event: EventEnvelope): string {
   return createHash("sha256")
     .update(stableStringify(event as unknown as JsonValue))
     .digest("hex");
+}
+
+const managedAssetEventTypes = new Set([
+  "asset.validated",
+  "asset.activate",
+  "asset.contest",
+  "asset.disable",
+  "asset.restore",
+  "asset.fork",
+]);
+
+function isManagedAssetEvent(event: EventEnvelope): boolean {
+  if (managedAssetEventTypes.has(event.type)) return true;
+  if (event.type !== "asset.candidate") return false;
+  const payload = asObject(event.payload);
+  return payload?.asset !== undefined;
+}
+
+function expectedAssetStatusForEvent(
+  type: string,
+): AssetStatus | "validated-or-active" | undefined {
+  switch (type) {
+    case "asset.candidate":
+    case "asset.fork":
+      return "candidate";
+    case "asset.validated":
+    case "asset.restore":
+      return type === "asset.validated" ? "validated" : "validated-or-active";
+    case "asset.activate":
+      return "active";
+    case "asset.contest":
+      return "challenged";
+    case "asset.disable":
+      return "deprecated";
+    default:
+      return undefined;
+  }
+}
+
+function assertManagedAssetWriteContract(
+  event: EventEnvelope,
+  asset: ReusableAsset,
+): void {
+  const payload = asObject(event.payload);
+  const expectedStatus = expectedAssetStatusForEvent(event.type);
+  if (payload === null || expectedStatus === undefined) {
+    throw new StoreError(
+      "ASSET_WRITE_REQUIRED",
+      "managed asset event has an unsupported lifecycle shape",
+      { eventType: event.type },
+    );
+  }
+  if (
+    expectedStatus !== "validated-or-active" &&
+    asset.status !== expectedStatus
+  ) {
+    throw new StoreError(
+      "INVALID_EVENT",
+      "managed asset event status does not match its event type",
+      { eventType: event.type, expectedStatus, actualStatus: asset.status },
+    );
+  }
+  if (
+    expectedStatus === "validated-or-active" &&
+    asset.status !== "validated" &&
+    asset.status !== "active"
+  ) {
+    throw new StoreError(
+      "INVALID_EVENT",
+      "asset restore must target validated or active status",
+      { actualStatus: asset.status },
+    );
+  }
+  if (
+    event.type === "asset.candidate" &&
+    event.source.kind !== "asset-proposer"
+  ) {
+    throw new StoreError(
+      "ASSET_WRITE_REQUIRED",
+      "asset candidates must be created by the asset proposer use-case",
+    );
+  }
+  if (["asset.validated", "asset.activate"].includes(event.type)) {
+    const review = asObject(payload.review);
+    const decision = asObject(payload.decision);
+    if (
+      event.source.kind !== "asset-promotion" ||
+      review === null ||
+      decision === null ||
+      review.targetStatus !== asset.status ||
+      decision.targetStatus !== asset.status ||
+      decision.allowed !== true ||
+      (event.type === "asset.activate" && review.humanConfirmed !== true)
+    ) {
+      throw new StoreError(
+        "ASSET_WRITE_REQUIRED",
+        "asset promotion events require an accepted runtime policy decision",
+        { eventType: event.type },
+      );
+    }
+  }
+  if (
+    ["asset.contest", "asset.disable", "asset.restore", "asset.fork"].includes(
+      event.type,
+    )
+  ) {
+    const reason = payload.reason;
+    if (
+      event.source.kind !== "human-control" ||
+      typeof reason !== "string" ||
+      reason.length < 1
+    ) {
+      throw new StoreError(
+        "ASSET_WRITE_REQUIRED",
+        "asset control events require the human-control use-case",
+        { eventType: event.type },
+      );
+    }
+  }
 }
 
 function epochMilliseconds(timestamp: string): number {
@@ -498,12 +678,68 @@ function rowToRecord(
   };
 }
 
+function assetTimestamp(value: unknown, field: string): string {
+  const milliseconds = requireNumber(value, field);
+  const timestamp = new Date(milliseconds).toISOString();
+  if (Number.isNaN(Date.parse(timestamp))) {
+    throw new StoreError("STORAGE_ERROR", `Stored ${field} is invalid`);
+  }
+  return timestamp;
+}
+
+function rowToAsset(row: Record<string, unknown>): ReusableAsset {
+  try {
+    const forkedFromJson = row.forked_from_json;
+    return parseReusableAsset({
+      id: requireString(row.id, "asset id"),
+      kind: requireString(row.kind, "asset kind"),
+      version: requireString(row.version, "asset version"),
+      revision: requireNumber(row.revision, "asset revision"),
+      status: requireString(row.status, "asset status"),
+      body: readJson(
+        requireString(row.body_json, "asset body_json"),
+        "asset body_json",
+      ),
+      derivedFrom: readJson(
+        requireString(row.derived_from_json, "asset derived_from_json"),
+        "asset derived_from_json",
+      ),
+      ...(forkedFromJson === null || forkedFromJson === undefined
+        ? {}
+        : {
+            forkedFrom: readJson(
+              requireString(forkedFromJson, "asset forked_from_json"),
+              "asset forked_from_json",
+            ),
+          }),
+      createdAt: assetTimestamp(row.created_at, "asset created_at"),
+      updatedAt: assetTimestamp(row.updated_at, "asset updated_at"),
+    });
+  } catch (error) {
+    if (error instanceof StoreError) throw error;
+    throw new StoreError(
+      "STORAGE_ERROR",
+      "Stored asset failed contract validation",
+      {
+        cause: error instanceof Error ? error.message : String(error),
+      },
+    );
+  }
+}
+
 export class SqliteEventStore
-  implements EventReader, EventWriter, EventBatchWriter, ProjectionPersistence
+  implements
+    EventReader,
+    EventWriter,
+    EventBatchWriter,
+    ProjectionPersistence,
+    AssetEventWriter,
+    AssetReader
 {
   readonly filename: string;
   readonly migrationVersion: number;
   readonly migrationStatus: MigrationStatus;
+  readonly #managedBackupRoot: string | undefined;
   readonly #database: DatabaseSyncConnection;
   readonly #hasWriterColumn: boolean;
   #closed = false;
@@ -517,6 +753,10 @@ export class SqliteEventStore
 
   constructor(options: SqliteEventStoreOptions) {
     this.filename = options.filename;
+    this.#managedBackupRoot =
+      options.managedBackupRoot === undefined
+        ? undefined
+        : resolve(options.managedBackupRoot);
     this.#database = new DatabaseSync(options.filename);
     try {
       this.configureConnection();
@@ -596,6 +836,163 @@ export class SqliteEventStore
       this.#database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     } finally {
       this.#database.close();
+    }
+  }
+
+  private assertManagedBackupTarget(targetPath: string): void {
+    if (
+      this.#managedBackupRoot !== undefined &&
+      !isPathWithinRoot(targetPath, this.#managedBackupRoot)
+    ) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "managed backup path must remain inside the configured backup root",
+        { targetPath, backupRoot: this.#managedBackupRoot },
+      );
+    }
+  }
+
+  private validateBackupManifestFile(manifest: BackupManifest): void {
+    if (manifest.schemaVersion !== "1") {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "backup manifest version is invalid",
+      );
+    }
+    if (
+      !isSha256(manifest.sourceDbSha256) ||
+      !isSha256(manifest.backupSha256) ||
+      !Number.isSafeInteger(manifest.firstEventSeq) ||
+      !Number.isSafeInteger(manifest.lastEventSeq) ||
+      manifest.firstEventSeq < 0 ||
+      manifest.lastEventSeq < manifest.firstEventSeq
+    ) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "backup manifest integrity fields are invalid",
+      );
+    }
+    if (!existsSync(manifest.path)) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "managed backup file does not exist",
+        { path: manifest.path },
+      );
+    }
+    if (sha256File(manifest.path) !== manifest.backupSha256) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "managed backup file checksum does not match its manifest",
+        { path: manifest.path },
+      );
+    }
+    if (validateSqliteFile(manifest.path) !== manifest.lastEventSeq) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "managed backup sequence does not match its manifest",
+        { path: manifest.path },
+      );
+    }
+  }
+
+  private reserveManagedBackup(
+    backupId: string,
+    targetPath: string,
+    createdAt: number,
+    lastEventSeq: number,
+    writerId: string,
+  ): void {
+    if (backupId.length < 1) {
+      throw new StoreError("STORAGE_ERROR", "backup id must not be empty");
+    }
+    if (existsSync(targetPath)) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "backup destination already exists",
+        {
+          destinationPath: targetPath,
+        },
+      );
+    }
+    if (!existsSync(dirname(targetPath))) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "backup destination directory does not exist",
+        { destinationPath: targetPath },
+      );
+    }
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const existing = this.#database
+        .prepare(
+          "SELECT path, status, backup_sha256 FROM managed_backups WHERE backup_id = ?",
+        )
+        .get(backupId) as Record<string, unknown> | undefined;
+      if (existing !== undefined) {
+        if (
+          existing.path !== targetPath ||
+          existing.status !== "active" ||
+          String(existing.backup_sha256 ?? "").length > 0
+        ) {
+          throw new StoreError(
+            "STORAGE_ERROR",
+            "managed backup id already belongs to another operation",
+            { backupId },
+          );
+        }
+        this.#database.exec("COMMIT");
+        return;
+      }
+      this.#database
+        .prepare(
+          `INSERT INTO managed_backups (
+             backup_id, schema_version, path, created_at,
+             first_event_seq, last_event_seq, projection_versions_json,
+             source_db_sha256, backup_sha256, status
+           ) VALUES (?, '1', ?, ?, ?, ?, '{}', '', '', 'active')`,
+        )
+        .run(
+          backupId,
+          targetPath,
+          createdAt,
+          lastEventSeq === 0 ? 0 : 1,
+          lastEventSeq,
+        );
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original reservation failure.
+      }
+      if (error instanceof StoreError) throw error;
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "managed backup reservation failed",
+        {
+          backupId,
+          writerId,
+          cause: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
+  }
+
+  private removeManagedBackupReservation(backupId: string): void {
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.#database
+        .prepare(
+          "DELETE FROM managed_backups WHERE backup_id = ? AND status = 'active' AND backup_sha256 = ''",
+        )
+        .run(backupId);
+      this.#database.exec("COMMIT");
+    } catch {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Doctor will retain the incomplete reservation as an explicit issue.
+      }
     }
   }
 
@@ -704,9 +1101,36 @@ export class SqliteEventStore
     } catch (error) {
       throw this.authorizationStoreError(error);
     }
-    const manifest = this.backupTo(destinationPath, options);
-    this.registerManagedBackup(manifest, authorized);
-    return manifest;
+    this.assertOpen();
+    const targetPath = resolve(destinationPath);
+    this.assertManagedBackupTarget(targetPath);
+    const createdAt = options.createdAt ?? Date.now();
+    assertTimestampMilliseconds(createdAt, "managed backup createdAt");
+    const backupId = options.id ?? `backup:${createdAt}:${randomUUID()}`;
+    const lastEventSeq = this.getLastSeq();
+    this.reserveManagedBackup(
+      backupId,
+      targetPath,
+      createdAt,
+      lastEventSeq,
+      authorized.writerId,
+    );
+    try {
+      const manifest = this.backupTo(targetPath, {
+        ...options,
+        id: backupId,
+        createdAt,
+      });
+      this.registerManagedBackup(manifest, authorized);
+      return manifest;
+    } catch (error) {
+      // If no final file exists, remove only our incomplete reservation. If a
+      // file exists, keep the row so doctor/purge can see and handle it.
+      if (!existsSync(targetPath)) {
+        this.removeManagedBackupReservation(backupId);
+      }
+      throw error;
+    }
   }
 
   registerManagedBackup(manifest: BackupManifest, writer: WriterContext): void {
@@ -720,6 +1144,7 @@ export class SqliteEventStore
     } catch (error) {
       throw this.authorizationStoreError(error);
     }
+    void authorized;
     this.assertOpen();
     if (manifest.path !== resolve(manifest.path)) {
       throw new StoreError(
@@ -727,16 +1152,21 @@ export class SqliteEventStore
         "managed backup path must be absolute",
       );
     }
+    this.assertManagedBackupTarget(manifest.path);
+    this.validateBackupManifestFile(manifest);
     try {
       this.#database.exec("BEGIN IMMEDIATE");
       const existing = this.#database
         .prepare("SELECT * FROM managed_backups WHERE backup_id = ?")
         .get(manifest.id) as Record<string, unknown> | undefined;
       if (existing !== undefined) {
-        const same =
-          existing.path === manifest.path &&
-          existing.backup_sha256 === manifest.backupSha256;
-        if (!same) {
+        const samePath = existing.path === manifest.path;
+        const existingHash = String(existing.backup_sha256 ?? "");
+        if (
+          !samePath ||
+          existing.status !== "active" ||
+          (existingHash.length > 0 && existingHash !== manifest.backupSha256)
+        ) {
           throw new StoreError(
             "STORAGE_ERROR",
             "managed backup id conflicts with existing metadata",
@@ -745,6 +1175,29 @@ export class SqliteEventStore
             },
           );
         }
+        this.#database
+          .prepare(
+            `UPDATE managed_backups
+             SET schema_version = ?, path = ?, created_at = ?,
+                 first_event_seq = ?, last_event_seq = ?,
+                 projection_versions_json = ?, source_db_sha256 = ?,
+                 backup_sha256 = ?, status = 'active',
+                 pending_path = NULL, purged_at = NULL
+             WHERE backup_id = ?`,
+          )
+          .run(
+            manifest.schemaVersion,
+            manifest.path,
+            manifest.createdAt,
+            manifest.firstEventSeq,
+            manifest.lastEventSeq,
+            stableStringify(
+              manifest.projectionVersions as unknown as JsonValue,
+            ),
+            manifest.sourceDbSha256,
+            manifest.backupSha256,
+            manifest.id,
+          );
         this.#database.exec("COMMIT");
         return;
       }
@@ -783,7 +1236,6 @@ export class SqliteEventStore
         },
       );
     }
-    void authorized;
   }
 
   listManagedBackups(): ManagedBackup[] {
@@ -878,17 +1330,30 @@ export class SqliteEventStore
       )[0],
     );
     const ranges = sequenceRanges(eventSeqs);
-    const managedBackupIds = this.listManagedBackups()
-      .filter(
-        (backup) =>
-          backup.status !== "deleted" &&
-          ranges.some(
-            (range) =>
-              backup.firstEventSeq <= range.endSeq &&
-              backup.lastEventSeq >= range.startSeq,
-          ),
-      )
+    const managedBackups = this.listManagedBackups();
+    const selectedManagedBackups = managedBackups.filter(
+      (backup) =>
+        backup.status !== "deleted" &&
+        ranges.some(
+          (range) =>
+            backup.firstEventSeq <= range.endSeq &&
+            backup.lastEventSeq >= range.startSeq,
+        ),
+    );
+    const managedBackupIds = selectedManagedBackups
       .map((backup) => backup.id)
+      .sort();
+    const managedBackupFingerprints = selectedManagedBackups
+      .map((backup) =>
+        stableStringify({
+          id: backup.id,
+          path: backup.path,
+          pendingPath: backup.pendingPath ?? null,
+          status: backup.status,
+          lastEventSeq: backup.lastEventSeq,
+          backupSha256: backup.backupSha256,
+        } as unknown as JsonValue),
+      )
       .sort();
     const planWithoutHash = {
       schemaVersion: "1" as const,
@@ -903,6 +1368,7 @@ export class SqliteEventStore
         ? snapshotCount
         : 0,
       managedBackupIds,
+      managedBackupFingerprints,
     };
     const planHash = createHash("sha256")
       .update(stableStringify(planWithoutHash as unknown as JsonValue))
@@ -937,6 +1403,16 @@ export class SqliteEventStore
         plan,
         ...(warnings === undefined ? {} : { warnings }),
       };
+    }
+    if (options.planHash !== plan.planHash) {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        "purge confirmation must include the current dry-run plan hash",
+        {
+          expectedPlanHash: plan.planHash,
+          providedPlanHash: options.planHash ?? null,
+        },
+      );
     }
     if (plan.eventSeqs.length === 0) {
       return {
@@ -1045,6 +1521,14 @@ export class SqliteEventStore
       this.#database.exec("DELETE FROM snapshots");
       this.#database.exec("DELETE FROM projection_data");
       this.#database.exec("DELETE FROM projection_state");
+      if (plan.affectedAssetIds.length > 0) {
+        const assetPlaceholders = plan.affectedAssetIds
+          .map(() => "?")
+          .join(", ");
+        this.#database
+          .prepare(`DELETE FROM assets WHERE id IN (${assetPlaceholders})`)
+          .run(...plan.affectedAssetIds);
+      }
       const placeholders = plan.eventSeqs.map(() => "?").join(", ");
       this.#database
         .prepare(`DELETE FROM events WHERE seq IN (${placeholders})`)
@@ -1193,6 +1677,7 @@ export class SqliteEventStore
       )[0],
       "invalidated asset count",
     );
+    const assetIntegrityIssues = this.getAssetIntegrityIssues();
     return {
       filename: resolve(this.filename),
       pragmas: this.pragmas,
@@ -1213,6 +1698,7 @@ export class SqliteEventStore
         invalidChecksums,
       },
       invalidatedAssetCount,
+      assetIntegrityIssues,
       purgedSeqRanges: this.getPurgedSeqRanges(),
       walCheckpoint: checkpoint,
     };
@@ -1227,13 +1713,180 @@ export class SqliteEventStore
     writer: WriterContext,
   ): EventAppendResult[] {
     if (events.length === 0) return [];
+    const { authorizedWriter, normalizedEvents } =
+      this.authorizeAndNormalizeEvents(events, writer);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const results = this.appendEventsInTransaction(
+        normalizedEvents,
+        authorizedWriter,
+      );
+      this.#database.exec("COMMIT");
+      return results;
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original error; the caller may close the connection.
+      }
+      if (error instanceof StoreError) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new StoreError("STORAGE_ERROR", message);
+    }
+  }
+
+  appendAssetEvent(
+    event: EventEnvelope,
+    writer: WriterContext,
+    assetInput: ReusableAsset,
+    expectedRevision?: number,
+  ): EventAppendResult {
+    this.assertOpen();
+    const { authorizedWriter, normalizedEvents } =
+      this.authorizeAndNormalizeEvents([event], writer, true);
+    const normalized = normalizedEvents[0];
+    if (
+      normalized === undefined ||
+      !isManagedAssetEvent(normalized.normalized)
+    ) {
+      throw new StoreError(
+        "ASSET_WRITE_REQUIRED",
+        "appendAssetEvent requires a managed asset lifecycle event",
+      );
+    }
+    const asset = this.parseAssetInput(assetInput);
+    const payload = asObject(normalized.normalized.payload);
+    const payloadAsset = payload?.asset;
+    if (payloadAsset === undefined) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "managed asset event payload must contain the complete asset snapshot",
+      );
+    }
+    let normalizedPayloadAsset: ReusableAsset;
+    try {
+      normalizedPayloadAsset = parseReusableAsset(payloadAsset);
+    } catch (error) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "managed asset event payload contains an invalid asset snapshot",
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
+    }
+    if (
+      stableStringify(normalizedPayloadAsset as unknown as JsonValue) !==
+      stableStringify(asset as unknown as JsonValue)
+    ) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "managed asset event payload does not match the asset argument",
+      );
+    }
+    const payloadAssetId = payload?.assetId;
+    if (typeof payloadAssetId !== "string" || payloadAssetId !== asset.id) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "managed asset event assetId does not match the asset snapshot",
+      );
+    }
+    assertManagedAssetWriteContract(normalized.normalized, asset);
+    if (
+      expectedRevision !== undefined &&
+      (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+    ) {
+      throw new StoreError(
+        "ASSET_REVISION_CONFLICT",
+        "expected asset revision must be a non-negative safe integer",
+        { expectedRevision },
+      );
+    }
+
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const existingById = this.findById(
+        normalized.normalized.id,
+        authorizedWriter,
+      );
+      if (existingById !== null) {
+        this.assertSameEvent(
+          existingById,
+          normalized.contentHash,
+          "EVENT_ID_CONFLICT",
+        );
+        this.#database.exec("COMMIT");
+        return { record: existingById, inserted: false };
+      }
+      if (normalized.normalized.operationId !== undefined) {
+        const existingByOperationAndType = this.findByOperationAndType(
+          normalized.normalized.operationId,
+          normalized.normalized.type,
+          authorizedWriter,
+        );
+        if (existingByOperationAndType !== null) {
+          this.assertSameEvent(
+            existingByOperationAndType,
+            normalized.contentHash,
+            "OPERATION_ID_CONFLICT",
+          );
+          this.#database.exec("COMMIT");
+          return { record: existingByOperationAndType, inserted: false };
+        }
+      }
+      const current = this.readAssetInTransaction(asset.id);
+      this.assertAssetRevision(current, asset, expectedRevision);
+      const result = this.appendEventsInTransaction(
+        normalizedEvents,
+        authorizedWriter,
+      )[0];
+      if (result === undefined || !result.inserted) {
+        throw new StoreError(
+          "STORAGE_ERROR",
+          "managed asset event did not insert a new ledger row",
+        );
+      }
+      this.writeAssetInTransaction(asset, result.record.seq);
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original asset write failure.
+      }
+      if (error instanceof StoreError) throw error;
+      throw new StoreError(
+        "STORAGE_ERROR",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  private authorizeAndNormalizeEvents(
+    events: EventEnvelope[],
+    writer: WriterContext,
+    allowManagedAssetEvents = false,
+  ): {
+    authorizedWriter: WriterContext;
+    normalizedEvents: Array<{
+      normalized: EventEnvelope;
+      contentHash: string;
+    }>;
+  } {
     let authorizedWriter: WriterContext;
     try {
       authorizedWriter = parseWriterContext(writer);
       for (const event of events) {
         authorizeEventAppend(authorizedWriter, event.type);
+        if (!allowManagedAssetEvents && isManagedAssetEvent(event)) {
+          throw new StoreError(
+            "ASSET_WRITE_REQUIRED",
+            "managed asset lifecycle events must use the asset runtime write path",
+            { eventType: event.type },
+          );
+        }
       }
     } catch (error) {
+      if (error instanceof StoreError) throw error;
       if (error instanceof AuthorizationError) {
         throw new StoreError(
           "AUTHORIZATION_ERROR",
@@ -1253,9 +1906,7 @@ export class SqliteEventStore
         throw new StoreError(
           "INVALID_EVENT",
           "Event does not satisfy the v1 envelope",
-          {
-            issues: parsed.error.issues,
-          },
+          { issues: parsed.error.issues },
         );
       }
       const normalized = parsed.data as EventEnvelope;
@@ -1269,99 +1920,211 @@ export class SqliteEventStore
       }
       return { normalized, contentHash: hashEvent(normalized) };
     });
+    return { authorizedWriter, normalizedEvents };
+  }
+
+  private appendEventsInTransaction(
+    normalizedEvents: Array<{
+      normalized: EventEnvelope;
+      contentHash: string;
+    }>,
+    authorizedWriter: WriterContext,
+  ): EventAppendResult[] {
     const results: EventAppendResult[] = [];
-    try {
-      this.#database.exec("BEGIN IMMEDIATE");
-      for (const { normalized, contentHash } of normalizedEvents) {
-        const existingById = this.findById(normalized.id, authorizedWriter);
-        if (existingById !== null) {
-          this.assertSameEvent(existingById, contentHash, "EVENT_ID_CONFLICT");
-          results.push({ record: existingById, inserted: false });
+    for (const { normalized, contentHash } of normalizedEvents) {
+      const existingById = this.findById(normalized.id, authorizedWriter);
+      if (existingById !== null) {
+        this.assertSameEvent(existingById, contentHash, "EVENT_ID_CONFLICT");
+        results.push({ record: existingById, inserted: false });
+        continue;
+      }
+
+      if (normalized.operationId !== undefined) {
+        const existingByOperationAndType = this.findByOperationAndType(
+          normalized.operationId,
+          normalized.type,
+          authorizedWriter,
+        );
+        if (existingByOperationAndType !== null) {
+          this.assertSameEvent(
+            existingByOperationAndType,
+            contentHash,
+            "OPERATION_ID_CONFLICT",
+          );
+          results.push({
+            record: existingByOperationAndType,
+            inserted: false,
+          });
           continue;
         }
+      }
 
-        if (normalized.operationId !== undefined) {
-          const existingByOperationAndType = this.findByOperationAndType(
-            normalized.operationId,
-            normalized.type,
-            authorizedWriter,
-          );
-          if (existingByOperationAndType !== null) {
-            this.assertSameEvent(
-              existingByOperationAndType,
-              contentHash,
-              "OPERATION_ID_CONFLICT",
-            );
-            results.push({
-              record: existingByOperationAndType,
-              inserted: false,
-            });
-            continue;
-          }
-        }
-
-        const insertResult = this.insertStatement.run(
-          normalized.id,
-          normalized.schemaVersion,
-          normalized.eventVersion,
-          normalized.type,
-          epochMilliseconds(normalized.occurredAt),
-          epochMilliseconds(normalized.observedAt),
-          epochMilliseconds(normalized.recordedAt),
-          normalized.actor.type,
-          normalized.actor.id,
-          normalized.sessionId ?? null,
-          normalized.traceId ?? null,
-          normalized.operationId ?? null,
-          stableStringify(normalized.source as unknown as JsonValue),
-          stableStringify(normalized.payload),
-          normalized.evidence === undefined
-            ? null
-            : stableStringify(normalized.evidence as unknown as JsonValue),
-          normalized.links === undefined
-            ? null
-            : stableStringify(normalized.links as unknown as JsonValue),
-          normalized.provenance === undefined
-            ? null
-            : stableStringify(normalized.provenance as unknown as JsonValue),
-          ...(this.#hasWriterColumn
-            ? [stableStringify(authorizedWriter as unknown as JsonValue)]
-            : []),
-          contentHash,
+      const insertResult = this.insertStatement.run(
+        normalized.id,
+        normalized.schemaVersion,
+        normalized.eventVersion,
+        normalized.type,
+        epochMilliseconds(normalized.occurredAt),
+        epochMilliseconds(normalized.observedAt),
+        epochMilliseconds(normalized.recordedAt),
+        normalized.actor.type,
+        normalized.actor.id,
+        normalized.sessionId ?? null,
+        normalized.traceId ?? null,
+        normalized.operationId ?? null,
+        stableStringify(normalized.source as unknown as JsonValue),
+        stableStringify(normalized.payload),
+        normalized.evidence === undefined
+          ? null
+          : stableStringify(normalized.evidence as unknown as JsonValue),
+        normalized.links === undefined
+          ? null
+          : stableStringify(normalized.links as unknown as JsonValue),
+        normalized.provenance === undefined
+          ? null
+          : stableStringify(normalized.provenance as unknown as JsonValue),
+        ...(this.#hasWriterColumn
+          ? [stableStringify(authorizedWriter as unknown as JsonValue)]
+          : []),
+        contentHash,
+      );
+      const seq = Number(insertResult.lastInsertRowid);
+      const row = this.selectBySeqStatement.get(seq);
+      if (row === undefined) {
+        throw new StoreError(
+          "STORAGE_ERROR",
+          "Inserted event could not be read back",
+          { id: normalized.id, seq },
         );
-        const seq = Number(insertResult.lastInsertRowid);
-        const row = this.selectBySeqStatement.get(seq);
-        if (row === undefined) {
-          throw new StoreError(
-            "STORAGE_ERROR",
-            "Inserted event could not be read back",
-            {
-              id: normalized.id,
-              seq,
-            },
-          );
-        }
-        results.push({
-          record: rowToRecord(asEventRow(row), authorizedWriter),
-          inserted: true,
-        });
       }
-      this.#database.exec("COMMIT");
-      return results;
-    } catch (error) {
-      try {
-        this.#database.exec("ROLLBACK");
-      } catch {
-        // Preserve the original error; the caller may close the connection.
-      }
-      if (error instanceof StoreError) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      throw new StoreError("STORAGE_ERROR", message);
+      results.push({
+        record: rowToRecord(asEventRow(row), authorizedWriter),
+        inserted: true,
+      });
     }
+    return results;
+  }
+
+  private parseAssetInput(assetInput: ReusableAsset): ReusableAsset {
+    try {
+      return parseReusableAsset(assetInput);
+    } catch (error) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "asset snapshot failed the reusable-asset contract",
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
+    }
+  }
+
+  private readAssetInTransaction(id: string): ReusableAsset | null {
+    const row = this.#database
+      .prepare("SELECT * FROM assets WHERE id = ?")
+      .get(id) as Record<string, unknown> | undefined;
+    return row === undefined ? null : rowToAsset(row);
+  }
+
+  private assertAssetRevision(
+    current: ReusableAsset | null,
+    incoming: ReusableAsset,
+    expectedRevision: number | undefined,
+  ): void {
+    if (current === null) {
+      if (expectedRevision !== undefined && expectedRevision !== 0) {
+        throw new StoreError(
+          "ASSET_REVISION_CONFLICT",
+          "asset revision compare-and-set expected an absent asset",
+          { expectedRevision, actualRevision: null },
+        );
+      }
+      if (incoming.revision !== 1) {
+        throw new StoreError(
+          "ASSET_REVISION_CONFLICT",
+          "a new asset must start at revision 1",
+          { incomingRevision: incoming.revision },
+        );
+      }
+      return;
+    }
+    if (
+      expectedRevision === undefined ||
+      expectedRevision !== current.revision
+    ) {
+      throw new StoreError(
+        "ASSET_REVISION_CONFLICT",
+        "asset revision compare-and-set failed",
+        {
+          expectedRevision: expectedRevision ?? null,
+          actualRevision: current.revision,
+        },
+      );
+    }
+    if (incoming.revision !== current.revision + 1) {
+      throw new StoreError(
+        "ASSET_REVISION_CONFLICT",
+        "asset revision must advance exactly once",
+        {
+          currentRevision: current.revision,
+          incomingRevision: incoming.revision,
+        },
+      );
+    }
+  }
+
+  private writeAssetInTransaction(asset: ReusableAsset, lastSeq: number): void {
+    this.#database
+      .prepare(
+        `
+        INSERT INTO assets (
+          id, kind, version, revision, status, body_json,
+          derived_from_json, forked_from_json, created_at, updated_at, last_seq
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          kind = excluded.kind,
+          version = excluded.version,
+          revision = excluded.revision,
+          status = excluded.status,
+          body_json = excluded.body_json,
+          derived_from_json = excluded.derived_from_json,
+          forked_from_json = excluded.forked_from_json,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at,
+          last_seq = excluded.last_seq
+      `,
+      )
+      .run(
+        asset.id,
+        asset.kind,
+        asset.version,
+        asset.revision,
+        asset.status,
+        stableStringify(asset.body),
+        stableStringify(asset.derivedFrom as unknown as JsonValue),
+        asset.forkedFrom === undefined
+          ? null
+          : stableStringify(asset.forkedFrom as unknown as JsonValue),
+        epochMilliseconds(asset.createdAt),
+        epochMilliseconds(asset.updatedAt),
+        lastSeq,
+      );
   }
 
   getById(id: string): EventRecord | null {
     return this.findById(id);
+  }
+
+  getAsset(id: string): ReusableAsset | null {
+    this.assertOpen();
+    this.assertNonEmpty(id, "asset id");
+    return this.readAssetInTransaction(id);
+  }
+
+  listAssets(): ReusableAsset[] {
+    this.assertOpen();
+    const rows = this.#database
+      .prepare("SELECT * FROM assets ORDER BY updated_at ASC, id ASC")
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((row) => rowToAsset(row));
   }
 
   getByOperationId(operationId: string): EventRecord[] {
@@ -1940,6 +2703,112 @@ export class SqliteEventStore
       }
     }
     return orphanCount;
+  }
+
+  private getAssetIntegrityIssues(): string[] {
+    const rows = this.#database
+      .prepare("SELECT * FROM assets ORDER BY id ASC")
+      .all() as Array<Record<string, unknown>>;
+    const assetIds = new Set(
+      rows.flatMap((row) =>
+        typeof row.id === "string" && row.id.length > 0 ? [row.id] : [],
+      ),
+    );
+    const issues = new Set<string>();
+    const addIssue = (assetId: string, issue: string): void => {
+      issues.add(`${assetId}:${issue}`);
+    };
+
+    for (const row of rows) {
+      const assetId =
+        typeof row.id === "string" && row.id.length > 0
+          ? row.id
+          : "<invalid-asset-id>";
+      let asset: ReusableAsset;
+      try {
+        asset = rowToAsset(row);
+      } catch {
+        addIssue(assetId, "catalog-row-invalid");
+        continue;
+      }
+
+      const lastSeq = row.last_seq;
+      if (
+        typeof lastSeq !== "number" ||
+        !Number.isSafeInteger(lastSeq) ||
+        lastSeq < 1
+      ) {
+        addIssue(asset.id, "last-seq-invalid");
+      } else {
+        const eventRow = this.#database
+          .prepare("SELECT * FROM events WHERE seq = ?")
+          .get(lastSeq) as Record<string, unknown> | undefined;
+        if (eventRow === undefined) {
+          addIssue(asset.id, "last-seq-event-missing");
+        } else {
+          try {
+            const event = rowToRecord(asEventRow(eventRow));
+            const payload = asObject(event.payload);
+            const nestedAsset = payload?.asset;
+            if (!isManagedAssetEvent(event) || nestedAsset === undefined) {
+              addIssue(asset.id, "last-seq-is-not-managed-asset-event");
+            } else {
+              const eventAsset = parseReusableAsset(nestedAsset);
+              if (
+                eventAsset.id !== asset.id ||
+                stableStringify(eventAsset as unknown as JsonValue) !==
+                  stableStringify(asset as unknown as JsonValue)
+              ) {
+                addIssue(asset.id, "catalog-snapshot-mismatch");
+              }
+              const expectedStatus = expectedAssetStatusForEvent(event.type);
+              if (
+                expectedStatus !== undefined &&
+                expectedStatus !== "validated-or-active" &&
+                eventAsset.status !== expectedStatus
+              ) {
+                addIssue(asset.id, "event-status-mismatch");
+              }
+              if (
+                expectedStatus === "validated-or-active" &&
+                eventAsset.status !== "validated" &&
+                eventAsset.status !== "active"
+              ) {
+                addIssue(asset.id, "restore-status-mismatch");
+              }
+            }
+          } catch {
+            addIssue(asset.id, "last-seq-event-invalid");
+          }
+        }
+      }
+
+      for (const evidence of asset.derivedFrom) {
+        if (evidence.eventId !== undefined) {
+          let sourceEvent: EventRecord | null;
+          try {
+            sourceEvent = this.getById(evidence.eventId);
+          } catch {
+            sourceEvent = null;
+          }
+          if (sourceEvent === null) {
+            addIssue(asset.id, `missing-event:${evidence.eventId}`);
+          } else if (sourceEvent.provenance.origin !== evidence.origin) {
+            addIssue(asset.id, `evidence-origin-mismatch:${evidence.eventId}`);
+          }
+        }
+        if (evidence.assetId !== undefined && !assetIds.has(evidence.assetId)) {
+          addIssue(asset.id, `missing-asset:${evidence.assetId}`);
+        }
+      }
+      if (
+        asset.forkedFrom !== undefined &&
+        !assetIds.has(asset.forkedFrom.id)
+      ) {
+        addIssue(asset.id, `missing-fork-parent:${asset.forkedFrom.id}`);
+      }
+    }
+    return [...issues].sort();
   }
 
   private getPendingPurgeCount(): number {

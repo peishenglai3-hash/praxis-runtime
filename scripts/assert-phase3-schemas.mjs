@@ -101,6 +101,7 @@ const expectationEvent = readSchema(
 const writerContext = readSchema("writer-context.v1.schema.json");
 const expectation = readSchema("expectation.v1.schema.json");
 const verificationResult = readSchema("verification-result.v1.schema.json");
+const reusableAsset = readSchema("reusable-asset.v1.schema.json");
 
 requireFields(
   residual,
@@ -201,6 +202,21 @@ requireFields(
   ["id", "expectationId", "verifier", "observedAt", "outcome", "evidence"],
   "verification-result.v1",
 );
+requireFields(
+  reusableAsset,
+  [
+    "id",
+    "kind",
+    "version",
+    "revision",
+    "status",
+    "body",
+    "derivedFrom",
+    "createdAt",
+    "updatedAt",
+  ],
+  "reusable-asset.v1",
+);
 
 requirePropertyConst(
   residualEvent,
@@ -234,6 +250,7 @@ const expectedWriterScopes = [
   "asset.activate",
   "asset.contest",
   "asset.disable",
+  "asset.restore",
   "asset.fork",
   "history.export",
   "history.purge",
@@ -281,6 +298,28 @@ if (
   throw new Error(
     "verification-result.v1 outcome enum does not match the runtime contract",
   );
+}
+if (
+  JSON.stringify(reusableAsset.properties?.kind?.enum) !==
+    JSON.stringify([
+      "rule",
+      "skill",
+      "workflow",
+      "agent-policy",
+      "summary",
+      "pattern",
+    ]) ||
+  JSON.stringify(reusableAsset.properties?.status?.enum) !==
+    JSON.stringify([
+      "draft",
+      "candidate",
+      "validated",
+      "active",
+      "challenged",
+      "deprecated",
+    ])
+) {
+  throw new Error("reusable-asset.v1 enums do not match the runtime contract");
 }
 requireReflectionConditionals(reflection, "reflection proposal");
 requireReflectionConditionals(reflectionEvent, "reflection event");

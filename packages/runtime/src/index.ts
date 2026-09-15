@@ -12,6 +12,11 @@ import { resolve } from "node:path";
 
 import type {
   ActorRef,
+  AssetEventWriter,
+  AssetPromotionPolicyConfig,
+  AssetPromotionReview,
+  AssetReader,
+  AssetStatus,
   Clock,
   EventAppendResult,
   EventBatchWriter,
@@ -27,6 +32,7 @@ import type {
   JsonObject,
   JsonValue,
   ProjectionPersistence,
+  ReusableAsset,
   WriterContext,
 } from "@praxis/contracts";
 import {
@@ -76,6 +82,15 @@ import type {
   TimingDetectionInput,
 } from "@praxis/residual";
 import { ResidualDetector } from "@praxis/residual";
+import {
+  AssetLifecycleError,
+  assertAssetValidationReport,
+  createAssetCandidate,
+  evaluateAssetPromotion,
+  forkAsset as forkReusableAsset,
+  transitionAsset,
+} from "@praxis/assets";
+import type { CreateAssetCandidateInput } from "@praxis/assets";
 import { ProjectionEngine, createCoreProjections } from "@praxis/state";
 import type { CatchUpResult, Projection } from "@praxis/state";
 import type {
@@ -140,6 +155,8 @@ export class Phase2Runtime {
       event.type === "verification.completed" ||
       event.type === "residual.detected" ||
       event.type === "reflection.proposed" ||
+      event.type === "asset.validated" ||
+      event.type === "asset.activate" ||
       event.type === "asset.contest" ||
       event.type === "asset.disable" ||
       event.type === "asset.restore" ||
@@ -472,6 +489,7 @@ export interface AssetControlOptions {
   reason: string;
   at?: string;
   newAssetId?: string;
+  restoreTo?: AssetStatus;
 }
 
 /**
@@ -481,7 +499,13 @@ export interface AssetControlOptions {
  * the raw database handle is never part of the public runtime API.
  */
 export interface RuntimeStore
-  extends EventReader, EventWriter, EventBatchWriter, ProjectionPersistence {
+  extends
+    EventReader,
+    EventWriter,
+    EventBatchWriter,
+    ProjectionPersistence,
+    AssetEventWriter,
+    AssetReader {
   readonly filename: string;
   close(): void;
   backupTo(destinationPath: string, options?: BackupOptions): BackupManifest;
@@ -777,6 +801,7 @@ export class Phase3Runtime extends Phase2Runtime {
     reason = "human decision",
   ): EventAppendResult {
     assertHumanWriter(this.#phase3Ports.writer);
+    assertHumanActor(this.#phase3Ports.actor);
     const nextStatus = expectationStatusSchema.parse(to);
     const expectation = this.requireStructuredExpectation(expectationId);
     assertExpectationTime(changedAt, "expectation changedAt");
@@ -816,6 +841,7 @@ export class Phase3Runtime extends Phase2Runtime {
     reason = "human cancellation",
   ): EventAppendResult {
     assertHumanWriter(this.#phase3Ports.writer);
+    assertHumanActor(this.#phase3Ports.actor);
     const expectation = this.requireStructuredExpectation(expectationId);
     assertExpectationTime(cancelledAt, "expectation cancelledAt");
     const event: EventEnvelope = {
@@ -1217,6 +1243,481 @@ export class Phase3Runtime extends Phase2Runtime {
     validatePhase3EventEnvelope(event);
     return this.#phase3Ports.events.append(event, this.#phase3Ports.writer);
   }
+}
+
+export type Phase4RuntimePorts = Phase3RuntimePorts & {
+  events: Phase3RuntimePorts["events"] & AssetEventWriter & AssetReader;
+};
+
+export interface Phase4RuntimeOptions {
+  promotionPolicy?: AssetPromotionPolicyConfig;
+}
+
+function freezePhase4RuntimePorts(
+  ports: Phase4RuntimePorts,
+): Phase4RuntimePorts {
+  return Object.freeze({
+    ...ports,
+    actor: freezeActor(ports.actor),
+    writer: parseWriterContext(ports.writer),
+  });
+}
+
+/**
+ * Phase 4 is the managed reusable-asset use-case boundary. Domain policy is
+ * pure and produces a decision; this class verifies ledger provenance,
+ * applies human-control authorization, and delegates the atomic write to the
+ * store port.
+ */
+export class Phase4Runtime extends Phase3Runtime {
+  #phase4Ports: Phase4RuntimePorts;
+  #promotionPolicy: AssetPromotionPolicyConfig | undefined;
+
+  constructor(
+    phase4Ports: Phase4RuntimePorts,
+    options: Phase4RuntimeOptions = {},
+  ) {
+    const normalizedPorts = freezePhase4RuntimePorts(phase4Ports);
+    super(normalizedPorts);
+    this.#phase4Ports = normalizedPorts;
+    this.#promotionPolicy =
+      options.promotionPolicy === undefined
+        ? undefined
+        : Object.freeze({ ...options.promotionPolicy });
+  }
+
+  override appendEvent(event: EventEnvelope): EventAppendResult {
+    if (event.type === "asset.candidate") {
+      throw new Error(
+        "managed asset candidates must be recorded through proposeAsset",
+      );
+    }
+    return super.appendEvent(event);
+  }
+
+  proposeAsset(input: CreateAssetCandidateInput): EventAppendResult {
+    const asset = createAssetCandidate(input);
+    assertAssetEvidenceRefs(
+      this.#phase4Ports,
+      asset.derivedFrom,
+      "asset candidate",
+    );
+    const at = asset.createdAt;
+    const eventId = `asset-candidate:${encodeURIComponent(asset.id)}:${encodeURIComponent(asset.version)}`;
+    const evidence = copyAssetEvidence(asset.derivedFrom);
+    const event = managedAssetEvent(
+      this.#phase4Ports,
+      eventId,
+      "asset.candidate",
+      asset,
+      at,
+      evidence,
+      { action: "propose" },
+      { kind: "asset-proposer", ref: asset.id },
+    );
+    return this.#phase4Ports.events.appendAssetEvent(
+      event,
+      this.#phase4Ports.writer,
+      asset,
+    );
+  }
+
+  promoteAsset(
+    assetId: string,
+    review: AssetPromotionReview,
+    at?: string,
+  ): EventAppendResult {
+    if (assetId.length < 1) throw new Error("asset id is required");
+    assertAssetPromotionReview(this.#phase4Ports, review);
+    const current = this.#phase4Ports.events.getAsset(assetId);
+    if (current === null) {
+      throw new AssetLifecycleError(
+        "asset promotion requires a recorded asset",
+        {
+          assetId,
+        },
+      );
+    }
+    const decision = evaluateAssetPromotion(
+      current,
+      review,
+      this.#promotionPolicy,
+    );
+    if (!decision.allowed) {
+      throw new AssetLifecycleError("asset promotion denied by policy", {
+        assetId,
+        decision,
+      });
+    }
+    const promotedAt = at ?? this.nowIso();
+    assertCanonicalTimestamp(promotedAt, "asset promotion at");
+    if (review.targetStatus === "active") {
+      authorizeHumanControl(
+        this.#phase4Ports.writer,
+        "asset activation",
+        "asset.activate",
+      );
+    }
+    const next = transitionAsset(current, review.targetStatus, promotedAt);
+    const eventId = `asset-promotion:${encodeURIComponent(assetId)}:${next.revision}`;
+    const evidence = mergeAssetEvidence(
+      current.derivedFrom,
+      review.episodes.flatMap((episode) => episode.evidence),
+      review.validation.evidence,
+      review.counterexamples.flatMap((item) => item.evidence ?? []),
+    );
+    assertAssetEvidenceRefs(this.#phase4Ports, evidence, "asset promotion");
+    const source = findAssetEvent(this.#phase4Ports.events, assetId);
+    const links = source === null ? {} : { respondsTo: [source.id] };
+    const event = managedAssetEvent(
+      this.#phase4Ports,
+      eventId,
+      review.targetStatus === "active" ? "asset.activate" : "asset.validated",
+      next,
+      promotedAt,
+      evidence,
+      {
+        action: review.targetStatus,
+        review: review as unknown as JsonValue,
+        decision: decision as unknown as JsonValue,
+      },
+      { kind: "asset-promotion", ref: assetId },
+      links,
+    );
+    return this.#phase4Ports.events.appendAssetEvent(
+      event,
+      this.#phase4Ports.writer,
+      next,
+      current.revision,
+    );
+  }
+
+  override recordAssetControl(
+    action: AssetControlAction,
+    assetId: string,
+    options: AssetControlOptions,
+  ): EventAppendResult {
+    if (assetId.length < 1) throw new Error("asset id is required");
+    if (options.reason.length < 1) {
+      throw new Error("asset control reason is required");
+    }
+    const eventType = `asset.${action}`;
+    authorizeHumanControl(
+      this.#phase4Ports.writer,
+      `${eventType} human control`,
+      requiredScopeForEventType(eventType),
+    );
+    if (this.#phase4Ports.actor.type !== "human") {
+      throw new AuthorizationError("asset control requires a human actor", {
+        actor: this.#phase4Ports.actor,
+      });
+    }
+    const current = this.#phase4Ports.events.getAsset(assetId);
+    if (current === null) {
+      throw new AssetLifecycleError("asset control requires a managed asset", {
+        assetId,
+      });
+    }
+    const controlledAt = options.at ?? this.nowIso();
+    assertCanonicalTimestamp(controlledAt, "asset control at");
+    const source = findAssetEvent(this.#phase4Ports.events, assetId);
+    if (source === null) {
+      throw new AssetLifecycleError("asset control requires asset provenance", {
+        assetId,
+      });
+    }
+
+    if (action === "fork") {
+      if (options.newAssetId === undefined) {
+        throw new Error("asset fork requires a distinct newAssetId");
+      }
+      if (this.#phase4Ports.events.getAsset(options.newAssetId) !== null) {
+        throw new Error("asset fork newAssetId already exists");
+      }
+      const fork = forkReusableAsset(current, options.newAssetId, controlledAt);
+      const evidence = mergeAssetEvidence(current.derivedFrom, [
+        { eventId: source.id, assetId, origin: "declared" },
+      ]);
+      assertAssetEvidenceRefs(this.#phase4Ports, evidence, "asset fork");
+      const eventId = `asset-control:fork:${encodeURIComponent(
+        fork.id,
+      )}:${encodeURIComponent(controlledAt)}`;
+      const event = managedAssetEvent(
+        this.#phase4Ports,
+        eventId,
+        "asset.fork",
+        fork,
+        controlledAt,
+        evidence,
+        {
+          action,
+          reason: options.reason,
+          controlledAt,
+          sourceAssetId: assetId,
+          sourceAssetEventId: source.id,
+        },
+        { kind: "human-control", ref: assetId },
+        { respondsTo: [source.id] },
+      );
+      return this.#phase4Ports.events.appendAssetEvent(
+        event,
+        this.#phase4Ports.writer,
+        fork,
+      );
+    }
+
+    const nextStatus: AssetStatus =
+      action === "contest"
+        ? "challenged"
+        : action === "disable"
+          ? "deprecated"
+          : (options.restoreTo ?? "validated");
+    const next = transitionAsset(current, nextStatus, controlledAt);
+    const evidence = mergeAssetEvidence(current.derivedFrom, [
+      { eventId: source.id, assetId, origin: "declared" },
+    ]);
+    assertAssetEvidenceRefs(this.#phase4Ports, evidence, "asset control");
+    const eventId = `asset-control:${action}:${encodeURIComponent(
+      assetId,
+    )}:${encodeURIComponent(controlledAt)}`;
+    const event = managedAssetEvent(
+      this.#phase4Ports,
+      eventId,
+      eventType,
+      next,
+      controlledAt,
+      evidence,
+      {
+        action,
+        reason: options.reason,
+        controlledAt,
+        ...(action === "restore" ? { restoreTo: nextStatus } : {}),
+      },
+      { kind: "human-control", ref: assetId },
+      { respondsTo: [source.id] },
+    );
+    return this.#phase4Ports.events.appendAssetEvent(
+      event,
+      this.#phase4Ports.writer,
+      next,
+      current.revision,
+    );
+  }
+}
+
+function assetJson(asset: ReusableAsset): JsonObject {
+  return {
+    id: asset.id,
+    kind: asset.kind,
+    version: asset.version,
+    revision: asset.revision,
+    status: asset.status,
+    body: asset.body,
+    derivedFrom: asset.derivedFrom as unknown as JsonValue,
+    ...(asset.forkedFrom === undefined
+      ? {}
+      : { forkedFrom: asset.forkedFrom as unknown as JsonValue }),
+    createdAt: asset.createdAt,
+    updatedAt: asset.updatedAt,
+  };
+}
+
+function managedAssetEvent(
+  ports: Phase4RuntimePorts,
+  id: string,
+  type: string,
+  asset: ReusableAsset,
+  at: string,
+  evidence: EvidenceRef[],
+  extra: JsonObject,
+  source: { kind: string; ref: string },
+  links: { respondsTo?: string[] } = {},
+): EventEnvelope {
+  const materialOrigin =
+    ports.writer.kind === "agent" || ports.writer.role === "ANALYZER"
+      ? "inferred"
+      : "declared";
+  const derivedFrom = uniqueStrings([
+    ...evidence.flatMap((item) =>
+      item.eventId === undefined ? [] : [item.eventId],
+    ),
+  ]);
+  return {
+    schemaVersion: "1",
+    eventVersion: "1",
+    id,
+    type,
+    occurredAt: at,
+    observedAt: at,
+    recordedAt: at,
+    actor: ports.actor,
+    operationId: id,
+    source,
+    payload: {
+      materialClassification: materialOrigin,
+      id: asset.id,
+      assetId: asset.id,
+      asset: assetJson(asset),
+      ...extra,
+    },
+    evidence: copyAssetEvidence(evidence),
+    links: {
+      ...(derivedFrom.length === 0 ? {} : { derivedFrom }),
+      ...(links.respondsTo === undefined
+        ? {}
+        : { respondsTo: links.respondsTo }),
+    },
+    provenance: {
+      origin: materialOrigin,
+      confidence: materialOrigin === "declared" ? 1 : 0.8,
+    },
+  };
+}
+
+function copyAssetEvidence(evidence: EvidenceRef[]): EvidenceRef[] {
+  return evidence.map((item) => ({
+    ...(item.eventId === undefined ? {} : { eventId: item.eventId }),
+    ...(item.assetId === undefined ? {} : { assetId: item.assetId }),
+    ...(item.artifactHash === undefined
+      ? {}
+      : { artifactHash: item.artifactHash }),
+    origin: item.origin,
+    ...(item.exposureInfluenced === undefined
+      ? {}
+      : { exposureInfluenced: item.exposureInfluenced }),
+  }));
+}
+
+function mergeAssetEvidence(...groups: EvidenceRef[][]): EvidenceRef[] {
+  const result: EvidenceRef[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const evidence of group) {
+      const key = stableStringify(evidence as unknown as JsonValue);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(...copyAssetEvidence([evidence]));
+    }
+  }
+  return result;
+}
+
+function assertAssetEvidenceRefs(
+  ports: Phase4RuntimePorts,
+  evidence: EvidenceRef[],
+  label: string,
+): void {
+  for (const item of evidence) {
+    if (
+      item.eventId === undefined &&
+      item.assetId === undefined &&
+      item.artifactHash === undefined
+    ) {
+      throw new AssetLifecycleError(
+        `${label} evidence has no source reference`,
+      );
+    }
+    if (
+      item.eventId !== undefined &&
+      ports.events.getById(item.eventId) === null
+    ) {
+      throw new AssetLifecycleError(
+        `${label} evidence event is not in the ledger`,
+        {
+          eventId: item.eventId,
+        },
+      );
+    }
+    if (item.eventId !== undefined) {
+      const sourceEvent = ports.events.getById(item.eventId);
+      if (
+        sourceEvent !== null &&
+        sourceEvent.provenance.origin !== item.origin
+      ) {
+        throw new AssetLifecycleError(
+          `${label} evidence origin does not match ledger provenance`,
+          {
+            eventId: item.eventId,
+            expectedOrigin: sourceEvent.provenance.origin,
+            actualOrigin: item.origin,
+          },
+        );
+      }
+    }
+    if (
+      item.assetId !== undefined &&
+      ports.events.getAsset(item.assetId) === null
+    ) {
+      throw new AssetLifecycleError(
+        `${label} evidence asset is not in the catalog`,
+        {
+          assetId: item.assetId,
+        },
+      );
+    }
+  }
+}
+
+function assertAssetPromotionReview(
+  ports: Phase4RuntimePorts,
+  review: AssetPromotionReview,
+): void {
+  if (
+    review === null ||
+    typeof review !== "object" ||
+    (review.targetStatus !== "validated" && review.targetStatus !== "active") ||
+    !Array.isArray(review.episodes) ||
+    !Array.isArray(review.counterexamples) ||
+    review.validation === null ||
+    typeof review.validation !== "object" ||
+    !Array.isArray(review.validation.evidence)
+  ) {
+    throw new AssetLifecycleError("asset promotion review is malformed");
+  }
+  for (const episode of review.episodes) {
+    if (!Array.isArray(episode.evidence)) {
+      throw new AssetLifecycleError("asset episode evidence is malformed");
+    }
+    assertAssetEvidenceRefs(ports, episode.evidence, "asset episode");
+  }
+  assertAssetValidationReport(review.validation);
+  assertAssetEvidenceRefs(
+    ports,
+    review.validation.evidence,
+    "asset validation",
+  );
+  for (const counterexample of review.counterexamples) {
+    if (counterexample.evidence !== undefined) {
+      assertAssetEvidenceRefs(
+        ports,
+        counterexample.evidence,
+        "asset counterexample",
+      );
+    }
+  }
+}
+
+function findAssetEvent(
+  reader: EventReader,
+  assetId: string,
+): EventRecord | null {
+  const events = readAllEvents(reader);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event === undefined || !event.type.startsWith("asset.")) continue;
+    const payload = asJsonObject(event.payload);
+    const nested = asJsonObject(payload?.asset);
+    const candidate =
+      typeof nested?.id === "string"
+        ? nested.id
+        : typeof payload?.id === "string"
+          ? payload.id
+          : typeof payload?.assetId === "string"
+            ? payload.assetId
+            : undefined;
+    if (candidate === assetId) return event;
+  }
+  return null;
 }
 
 function residualDetectedEvent(
@@ -2180,6 +2681,7 @@ export interface RuntimeCompositionOptions {
   clock?: Clock;
   ids?: IdGenerator;
   lockPath?: string;
+  lock?: WriterOwnershipLock;
 }
 
 export interface DoctorCheck {
@@ -2197,34 +2699,63 @@ export interface RuntimeDoctorReport {
 
 export class RuntimeCompositionRoot {
   readonly #store: RuntimeStore;
-  readonly lock: WriterOwnershipLock;
-  readonly writer: WriterContext;
-  readonly runtime: Phase3Runtime;
-  readonly mode: RuntimeMode;
-  readonly clock: Clock;
+  readonly #lock: WriterOwnershipLock;
+  readonly #writer: WriterContext;
+  readonly #runtime: Phase4Runtime;
+  readonly #mode: RuntimeMode;
+  readonly #clock: Clock;
   #started = false;
+  #lockTransferred = false;
 
   constructor(options: RuntimeCompositionOptions) {
     this.#store = options.store;
-    this.writer = parseWriterContext(options.writer);
-    this.mode = options.mode;
-    this.clock = options.clock ?? { now: () => new Date() };
-    this.lock = new WriterOwnershipLock(
-      options.lockPath ?? `${options.store.filename}.writer.lock`,
-    );
-    this.runtime = new Phase3Runtime({
+    this.#writer = parseWriterContext(options.writer);
+    this.#mode = options.mode;
+    this.#clock = options.clock ?? { now: () => new Date() };
+    this.#lock =
+      options.lock ??
+      new WriterOwnershipLock(
+        options.lockPath ?? `${options.store.filename}.writer.lock`,
+      );
+    const runtime = new Phase4Runtime({
       events: this.#store,
       projections: this.#store,
-      clock: this.clock,
+      clock: this.#clock,
       ids: options.ids ?? { next: () => randomUUID() },
       actor: freezeActor(options.actor),
-      writer: this.writer,
+      writer: this.#writer,
     });
+    this.#runtime = new Proxy(runtime, {
+      get: (target, property) => {
+        const value = Reflect.get(target, property, target);
+        if (typeof value !== "function") return value;
+        return (...args: unknown[]) => {
+          this.assertStarted();
+          return Reflect.apply(value, target, args);
+        };
+      },
+    });
+  }
+
+  get writer(): WriterContext {
+    return this.#writer;
+  }
+
+  get runtime(): Phase4Runtime {
+    return this.#runtime;
+  }
+
+  get mode(): RuntimeMode {
+    return this.#mode;
+  }
+
+  get clock(): Clock {
+    return this.#clock;
   }
 
   start(): this {
     if (this.#started) return this;
-    this.lock.acquire({
+    this.#lock.acquire({
       pid: process.pid,
       mode: this.mode,
       startedAt: this.clock.now().toISOString(),
@@ -2237,23 +2768,38 @@ export class RuntimeCompositionRoot {
   close(): void {
     if (!this.#started) {
       this.#store.close();
+      if (!this.#lockTransferred) this.#lock.release();
       return;
     }
     try {
       this.#store.close();
     } finally {
-      this.lock.release();
       this.#started = false;
+      this.#lock.release();
     }
+  }
+
+  /**
+   * Close the store while retaining the already-held writer lock for an
+   * atomic maintenance handoff, such as a validated database restore.
+   */
+  handoffForMaintenance(): WriterOwnershipLock {
+    this.assertStarted();
+    this.#store.close();
+    this.#started = false;
+    this.#lockTransferred = true;
+    return this.#lock;
   }
 
   catchUpCoreProjections(): CatchUpResult[] {
     this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "projection catch-up");
     return this.runtime.catchUpCoreProjections();
   }
 
   rebuildCoreProjections(): CatchUpResult[] {
     this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "projection rebuild");
     return createCoreProjections().map((projection) =>
       this.runtime.rebuild(projection),
     );
@@ -2287,7 +2833,15 @@ export class RuntimeCompositionRoot {
   }
 
   get databasePath(): string {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "database path");
     return resolve(this.#store.filename);
+  }
+
+  get writerLockPath(): string {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "writer lock path");
+    return this.#lock.path;
   }
 
   inspectEvent(eventId: string): EventRecord | null {
@@ -2295,6 +2849,19 @@ export class RuntimeCompositionRoot {
     authorizeWriterScope(this.writer, "event.read", "inspect event");
     if (eventId.length < 1) throw new Error("event id is required");
     return this.#store.getById(eventId);
+  }
+
+  inspectAsset(assetId: string): ReusableAsset | null {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "inspect asset");
+    if (assetId.length < 1) throw new Error("asset id is required");
+    return this.#store.getAsset(assetId);
+  }
+
+  listAssets(): ReusableAsset[] {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "list assets");
+    return this.#store.listAssets();
   }
 
   exportEvents(query: EventQuery = {}): EventRecord[] {
@@ -2333,20 +2900,22 @@ export class RuntimeCompositionRoot {
 
   getHealth(): StoreHealth {
     this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "runtime health");
     return this.#store.getHealth();
   }
 
   doctor(): RuntimeDoctorReport {
     this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "runtime doctor");
     const health = this.#store.getHealth();
     const checks: DoctorCheck[] = [
       {
         name: "writer-lock",
-        status: this.lock.isHeld() ? "pass" : "fail",
-        message: this.lock.isHeld()
+        status: this.#lock.isHeld() ? "pass" : "fail",
+        message: this.#lock.isHeld()
           ? "canonical writer lock is held"
           : "canonical writer lock is not held",
-        details: { path: this.lock.path, mode: this.mode },
+        details: { path: this.#lock.path, mode: this.mode },
       },
       {
         name: "sqlite-wal",
@@ -2408,9 +2977,15 @@ export class RuntimeCompositionRoot {
       },
       {
         name: "asset-provenance",
-        status: "info",
-        message: "purge-invalidated asset provenance is retained in receipts",
-        details: { invalidatedAssetCount: health.invalidatedAssetCount },
+        status: health.assetIntegrityIssues.length === 0 ? "pass" : "fail",
+        message:
+          health.assetIntegrityIssues.length === 0
+            ? "asset catalog snapshots and provenance are ledger-consistent"
+            : "asset catalog or provenance integrity issues were found",
+        details: {
+          invalidatedAssetCount: health.invalidatedAssetCount,
+          issues: health.assetIntegrityIssues,
+        },
       },
     ];
     const expectedProjectionNames = [
@@ -2459,6 +3034,11 @@ export class RuntimeCompositionRoot {
   private assertStarted(): void {
     if (!this.#started) {
       throw new WriterLockError("runtime composition root is not started");
+    }
+    if (!this.#lock.isHeld()) {
+      throw new WriterLockError(
+        "runtime composition root lost its writer lock; operation is blocked",
+      );
     }
   }
 }

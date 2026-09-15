@@ -140,6 +140,9 @@ importers:
 
   packages/state:
     dependencies:
+      '@praxis/assets':
+        specifier: workspace:*
+        version: link:../assets
       '@praxis/contracts':
         specifier: workspace:*
         version: link:../contracts

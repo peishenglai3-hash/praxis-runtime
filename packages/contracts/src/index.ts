@@ -63,6 +63,29 @@ export {
   parseEventEnvelope,
 } from "./events.js";
 export type {
+  AssetCounterexample,
+  AssetEventWriter,
+  AssetEpisodeEvidence,
+  AssetKind,
+  AssetPromotionDecision,
+  AssetPromotionPolicyConfig,
+  AssetPromotionReview,
+  AssetRef,
+  AssetReader,
+  AssetStatus,
+  AssetValidationReport,
+  ReusableAsset,
+} from "./assets.js";
+export {
+  assetKindSchema,
+  assetKinds,
+  assetStatusSchema,
+  assetStatuses,
+  defaultAssetPromotionPolicy,
+  parseReusableAsset,
+  reusableAssetSchema,
+} from "./assets.js";
+export type {
   ActorRef,
   ActorType,
   EventAppendResult,

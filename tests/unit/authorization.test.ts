@@ -31,6 +31,7 @@ describe("WriterContext capability authorization", () => {
       "residual.propose",
     );
     expect(requiredScopeForEventType("asset.activate")).toBe("asset.activate");
+    expect(requiredScopeForEventType("asset.restore")).toBe("asset.restore");
     expect(requiredScopeForEventType("privacy.purge.completed")).toBe(
       "history.purge",
     );
@@ -69,6 +70,20 @@ describe("WriterContext capability authorization", () => {
     expect(() =>
       authorizeEventAppend(writer({ role: "ANALYZER" }), "asset.activate"),
     ).toThrowError(AuthorizationError);
+  });
+
+  it("does not collapse asset restore into proposal capability", () => {
+    expect(() =>
+      authorizeEventAppend(
+        writer({ scopes: ["asset.propose"] }),
+        "asset.restore",
+      ),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "AUTHORIZATION_ERROR",
+        details: expect.objectContaining({ requiredScope: "asset.restore" }),
+      }),
+    );
   });
 
   it("requires a human OWNER for irreversible control decisions", () => {

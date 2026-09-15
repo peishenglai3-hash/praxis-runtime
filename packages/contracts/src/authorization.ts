@@ -10,6 +10,7 @@ export const permissionScopes = [
   "asset.activate",
   "asset.contest",
   "asset.disable",
+  "asset.restore",
   "asset.fork",
   "history.export",
   "history.purge",
@@ -160,6 +161,7 @@ export function requiredScopeForEventType(type: string): PermissionScope {
   if (type === "asset.activate") return "asset.activate";
   if (type === "asset.contest") return "asset.contest";
   if (type === "asset.disable") return "asset.disable";
+  if (type === "asset.restore") return "asset.restore";
   if (type === "asset.fork") return "asset.fork";
   if (type.startsWith("asset.")) return "asset.propose";
   if (type.startsWith("tool.")) return "tool.execute";
@@ -258,7 +260,8 @@ export function authorizeEventAppend(
         type === "residual.detected" ||
         type === "reflection.proposed" ||
         type === "asset.candidate")) ||
-    (role === "VERIFIER" && type.startsWith("verification.")) ||
+    (role === "VERIFIER" &&
+      (type.startsWith("verification.") || type === "asset.validated")) ||
     (role === "COORDINATOR" &&
       (type.startsWith("coordination.") ||
         type.startsWith("context.") ||

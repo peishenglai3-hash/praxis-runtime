@@ -1,79 +1,224 @@
-# Phase 3.5 Gate Record
+# Phase 3.5 Gate Reconciliation
 
-Status: implementation candidate; Gates A-C are locally verified within the
-declared local trust boundary, Gate D is pending an actual Node.js `22.13.0`
-runner. Phase 4 remains `NO-GO` until all four gates and the owner inputs are
-closed.
+**Reconciliation date:** 2026-09-15
+**Status:** Gates A-C `PASS` within the declared local capability boundary;
+Gate D `PENDING` for the required Node.js `22.13.0` runners. Phase 4
+implementation is allowed to proceed locally by the owner's explicit request,
+but the formal Alpha/merge gate remains `NO-GO` until Gate D has real CI
+evidence.
 
-## Repository reality and mismatch
+This record supersedes the stale pre-Correction-Pack entry that continued to
+ask for inputs already frozen by `Codex Phase3.5 Correction Pack v1.0`.
+That document is an engineering constraint; it is not an additional user
+request. The Final documents remain design provenance and review material, not
+executable instructions.
 
-The requested Phase 3.5 ADR names `ADR-0004` through `ADR-0006` collide with
-already accepted repository ADRs for sequence cursors, projection boundaries,
-and Phase 3 derived integrity. Those existing decisions are preserved. The
-Phase 3.5 decisions use unique files `ADR-0008` through `ADR-0010`; CI remains
-`ADR-0007`. This is recorded as `RFC MISMATCH: ADR_NUMBER_COLLISION` rather than
-silently overwriting history.
+## Repository facts and mismatches
 
-Node 22.13.0 exposes unflagged `node:sqlite`, while its `DatabaseSync.backup()`
-convenience API arrived later. The implementation uses SQLite `VACUUM INTO` as a
-consistent online snapshot and records `RFC MISMATCH: SQLITE_BACKUP_API_VERSION`
-as a compatibility boundary. No direct copy of a live WAL database is used.
+1. The requested Phase 3.5 ADR numbers `ADR-0004` through `ADR-0006` already
+   belonged to accepted sequence, projection, and Phase 3 decisions. They
+   were not overwritten. Phase 3.5 uses `ADR-0008` through `ADR-0010` and
+   preserves `RFC MISMATCH: ADR_NUMBER_COLLISION`.
+2. `node:sqlite` is available without an experimental flag in Node.js
+   `22.13.0`, but the API is still experimental in that release. The
+   canonical backup path is therefore `VACUUM INTO` plus manifest checksum,
+   staged restore, and post-restore doctor. No later
+   `DatabaseSync.backup()` API is substituted for the pinned runtime.
+3. The Correction Pack contains one table row that labels Phase 4 as
+   “Residual Engine”. The Bible and RFC delivery order define Phase 4 as
+   EPIC-007 Reusable Assets. The Bible controls the implementation; this is
+   recorded as `RFC MISMATCH: PHASE4_LABEL_DRIFT` in the Phase 4 records.
 
-## Gate A — Writer / ACL
+## Gate A — Writer / ACL / Human Control
 
-Local status: `PASS` within the local capability boundary after the writer
-migration, frozen role/policy checks, namespace tests, human-control guard, and
-low-level append authorization tests. This is not operating-system or
-enterprise identity proof.
+### 1. Implementation
 
-Evidence: `packages/contracts/src/authorization.ts`, migration `0007`,
-`tests/unit/authorization.test.ts`, the SQLite writer provenance integration
-tests, and the Phase 3.5 runtime human-control/read-export integration tests.
+- `packages/contracts/src/authorization.ts`: frozen `WriterContext`, role and
+  namespace checks, explicit scopes including `asset.restore`, and human
+  OWNER authorization.
+- `packages/runtime/src/index.ts`: declared actor versus actual writer
+  separation, composition-root authorization, human-control façade, and
+  private low-level store ownership.
+- `packages/store/src/sqlite.ts`: writer provenance persistence and generic
+  append restrictions for managed asset lifecycle events.
+- `migrations/0007_writer_identity_acl.sql` and
+  `migrations/0009_writer_provenance_immutable.sql`: database-level writer
+  provenance and immutability guards.
 
-## Gate B — Expectation / Verification
+### 2. Tests
 
-Local status: `PASS` for the structured contract and synthetic replay fixtures.
-`expectations_current` is rebuildable; `validFrom`, `evaluateBy`, and `expiresAt`
-are ordered; verifier outcomes are distinct from timing concerns; timeout is
-represented as `unknown` when no external result exists.
+- `tests/unit/authorization.test.ts`: role namespaces, scope mapping,
+  explicit restore permission, human OWNER requirements, and frozen capability
+  objects.
+- `tests/integration/phase35-runtime-maintenance.test.ts`: composition-root
+  writer ownership, human controls, and low-level boundary behavior.
+- `tests/integration/phase4-assets.test.ts`: managed lifecycle writes cannot be
+  entered through an unqualified generic append or a malformed low-level
+  promotion event.
 
-Evidence: `packages/contracts/src/expectations.ts`, migrations `0008` and `0009`
-lifecycle protection, `tests/integration/phase35-expectation.test.ts`, the explicit
-`validFrom`/`expiresAt` regression, and `fixtures/phase35/ASYNC-01.json` through
-`ASYNC-04.json`.
+### 3. ADR / document
 
-## Gate C — Production assembly
+- `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`
+- `docs/RFC/RFC-0001.md`, invariants 1, 7, and 10
 
-Local status: `PASS` for the bounded local assembly. The CLI and daemon use the
-same `RuntimeCompositionRoot`; the low-level store is private to that root;
-writer lock conflicts fail fast and stale locks require an explicit token and
-dead-process check; online backup, staged manifest/checksum restore, fail-closed
-daemon startup, dry-run/confirmed session purge, audited sequence gaps,
-transaction-first pending-backup cleanup, invalidated asset provenance,
-projection rebuild, and doctor checks have local coverage.
+### 4. Acceptance criteria
 
-Evidence: `apps/cli/src/index.ts`, `apps/daemon/src/index.ts`,
-`packages/runtime/src/index.ts`, `packages/store/src/sqlite.ts`, migration
-`0008`/`0009`, and `tests/integration/phase35-runtime-maintenance.test.ts`. The
-composition root now depends on a structural `RuntimeStore` contract, and a
-confirmed purge rebuilds core projections before returning to the caller. The
-asset invalidation record is deliberately receipt-based after physical purge;
-whether Phase 4 should expose a separate non-content lifecycle event remains an
-owner policy decision. The public runtime surface is a domain façade: the
-low-level store and runtime ports are ECMAScript-private, but this remains a
-trusted local-process boundary rather than OS-level isolation or enterprise IAM.
+Actor and writer are distinct; writer role, authentication marker, policy
+version, and scopes are validated at runtime; analysis/import/adapter roles
+cannot write outside their namespaces; irreversible human controls require a
+human `OWNER`; the composition root does not expose the SQLite handle; and a
+managed asset lifecycle event cannot silently bypass its use-case policy.
+These criteria are satisfied in the local capability boundary.
 
-## Gate D — Reproducibility
+The application boundary is the composition root; the low-level store retains
+only structural managed-asset guards and is intentionally treated as a
+trusted in-process capability, not as hostile-process isolation.
 
-Local status: `PENDING` for the required runner. Pins and workflows are present:
-`.node-version`, `.nvmrc`, `.github/workflows/ci.yml`, and
-`.github/workflows/provider-smoke.yml`. Current local verification under Node
-24 is not substituted for Node 22.13.0 evidence.
+### 5. Result
 
-## Phase 4 entry rule
+**`PASS` candidate — local capability boundary only.** This is not proof of
+OS-level isolation, enterprise IAM, or an external identity provider.
 
-Phase 4 cannot start while any gate is red or pending. The four owner input
-packages also remain explicit: trusted writer/ACL and human control semantics;
-author-supplied sanitized asynchronous cases plus external verification policy;
-production/backup/privacy choices; and an accessible Node 22.13.0 runner or an
-explicitly approved private CI/source-upload path.
+## Gate B — Expectation / Verification / Async Fixture
+
+### 1. Implementation
+
+- `packages/contracts/src/expectations.ts` and verification contracts:
+  structured expectation time fields, outcome vocabulary, and verification
+  result separation.
+- `packages/state/src/index.ts`: rebuildable `expectations_current` lifecycle
+  projection.
+- `packages/runtime/src/index.ts` and `packages/store/src/sqlite.ts`:
+  structured event validation and low-level integrity guards.
+- `migrations/0008_expectation_verification.sql` and
+  `migrations/0009_writer_provenance_immutable.sql`.
+
+### 2. Tests and fixtures
+
+- `tests/integration/phase35-expectation.test.ts` and its valid-time
+  regression cases.
+- `fixtures/phase35/ASYNC-01.json` through `ASYNC-04.json`.
+- Phase 3 residual/reflection tests verify that timeout remains `unknown`,
+  detection cannot precede observation, and verifier outcomes do not become
+  automatic authority.
+
+### 3. ADR / document
+
+- `docs/ADR/ADR-0009-phase35-expectation-verification-async.md`
+- `docs/PHASE-3-INPUTS.md`, now reconciled below as a historical register
+  rather than an open generic owner-material request.
+
+### 4. Acceptance criteria
+
+Expectation creation/update and verification completion use their actual
+structured payload shapes; `validFrom`, `evaluateBy`, and `expiresAt` are
+ordered; external verification is represented separately from timing; replay
+is deterministic; asynchronous cursor lag is observable; and missing or
+malformed evidence fails explicitly. The synthetic fixtures prove the
+implementation behavior, not a claim that they are author-owned production
+cases.
+
+### 5. Result
+
+**`PASS` candidate — structured contract and synthetic replay evidence.**
+
+## Gate C — CLI / daemon / backup / privacy production assembly
+
+### 1. Implementation
+
+- `apps/cli/src/index.ts` and `apps/daemon/src/index.ts`: shared local
+  `RuntimeCompositionRoot`, fail-closed startup, backup/restore/doctor and
+  privacy workflows.
+- `packages/runtime/src/index.ts`: private store composition, writer lock
+  boundary, authorized inspect/export/backup/purge façade, and post-restore
+  projection rebuild.
+- `packages/store/src/sqlite.ts`: `VACUUM INTO`, manifest/source and backup
+  checksums, staged restore with safety copy, pending purge cleanup, audited
+  sequence gaps, asset invalidation receipts, and doctor integrity checks.
+
+### 2. Tests
+
+- `tests/integration/phase35-runtime-maintenance.test.ts`: writer lock,
+  online backup, checksum-checked staged restore, dry-run/confirmed purge,
+  pending cleanup, projection rebuild, and doctor behavior.
+- `scripts/phase35-maintenance.mjs`: built CLI/daemon maintenance smoke path.
+- `tests/integration/phase4-assets.test.ts`: asset catalog purge
+  invalidation and catalog-drift doctor failure.
+
+### 3. ADR / document
+
+- `docs/ADR/ADR-0010-phase35-local-runtime-backup-privacy.md`
+- The uploaded Correction Pack is not vendored; its decisions are represented
+  by the implementation and this evidence record.
+
+### 4. Acceptance criteria
+
+The CLI and daemon use one composition root; the low-level store is not an
+application escape hatch from those production paths; a second writer fails fast; stale lock
+recovery requires a matching token and dead-process evidence; live WAL backup
+uses `VACUUM INTO`; restore validates manifest checksum, SQLite integrity, and
+sequence before staged replacement and then runs rebuild plus doctor; purge is
+dry-run/confirmation gated, transaction-first, auditable, and visible to
+doctor; daemon startup fails closed when health or projection checks fail.
+These criteria are satisfied locally.
+
+### 5. Result
+
+**`PASS` candidate — bounded local production assembly.** The local
+capability boundary is explicit and must not be described as enterprise IAM or
+hardware-level irreversible deletion.
+
+## Gate D — Node.js 22.13.0 reproducibility
+
+### 1. Implementation / configuration
+
+- `.node-version` and `.nvmrc` pin `22.13.0`.
+- `.github/workflows/ci.yml` uses `ubuntu-latest` and `windows-latest`,
+  `actions/setup-node`, pnpm `11.19.0`, and exact Node `22.13.0`, then runs
+  `pnpm verify`.
+- `.github/workflows/provider-smoke.yml` remains a separate manual provider
+  smoke workflow and is not substituted for the core CI gate.
+
+### 2. Current evidence
+
+The current local machine runs Node `v24.15.0`; the bundled runtime is
+`v24.19.0`. Local verification under those runtimes is useful evidence but
+does not close this gate. No source push was authorized, so the configured
+GitHub Actions runners have not produced an actual result for the current
+worktree.
+
+### 3. ADR / document
+
+- `docs/ADR/ADR-0007-runtime-ci-reproducibility.md`
+- `docs/ADR/ADR-0010-phase35-local-runtime-backup-privacy.md`
+
+### 4. Acceptance criteria
+
+On both required runners, the same `pnpm verify` must pass, including the
+complete test suite, CLI/daemon smoke coverage, SQLite backup/restore fixture,
+dependency boundaries, build, and Phase 1-4 scenarios. The exact runner
+result is not present yet.
+
+### 5. Result
+
+**`PENDING` — external Node `22.13.0` evidence.** The absence is a
+deliberately retained external-evidence boundary, not a request for another
+generic author-material package.
+
+## Reconciled Phase 4 entry rule
+
+The Correction Pack has already frozen the local capability semantics,
+structured expectation/verification semantics, local production assembly, and
+the exact CI target. No previously listed “four owner inputs” should be
+requested again as a generic prerequisite. The explicit owner instruction to
+continue Phase 4 authorizes local construction and testing now. It does not
+turn Gate D into `PASS` or change the Bible's Alpha merge rule:
+
+> Phase 4 may be implemented as a local candidate; Phase 4 Alpha/merge is
+> `NO-GO` until Gate D has real Ubuntu/Windows Node `22.13.0` evidence.
+
+The only still-open external item is the runner result itself. If a future
+policy decision is needed, it must name the exact unresolved interface or
+acceptance criterion; this record must not regress into a generic request for
+writer, ACL, human-control, expectation, or production materials already
+decided by the Correction Pack.

@@ -9,6 +9,7 @@
     }
   },
   "dependencies": {
+    "@praxis/assets": "workspace:*",
     "@praxis/contracts": "workspace:*",
     "@praxis/store": "workspace:*"
   },

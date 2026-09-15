@@ -1,20 +1,28 @@
 export {};
 import type {
+  AssetKind,
+  AssetRef,
+  AssetStatus,
   EventEnvelope,
   EventReader,
   EventRecord,
+  EvidenceRef,
   LedgerSeqGap,
   JsonValue,
   ProjectionDataRecord,
   ProjectionPersistence,
   ProjectionStateRecord,
+  ReusableAsset,
   SnapshotRecord,
 } from "@praxis/contracts";
 import {
+  assetStatusSchema,
   expectationStatusSchema,
+  parseReusableAsset,
   parseExpectationRecord,
   parseVerificationResult,
 } from "@praxis/contracts";
+import { assertAssetTransition } from "@praxis/assets";
 import type { ExpectationRecord } from "@praxis/contracts";
 
 export interface Projection<TState> {
@@ -56,6 +64,11 @@ export interface AssetProjectionEntry {
   id: string;
   status: string;
   revision?: number;
+  kind?: AssetKind;
+  version?: string;
+  body?: JsonValue;
+  derivedFrom?: EvidenceRef[];
+  forkedFrom?: AssetRef;
   lastSeq: number;
 }
 
@@ -374,21 +387,39 @@ export function createRuleProjection(): Projection<RuleState> {
 export function createAssetProjection(): Projection<AssetState> {
   return {
     name: "assets",
-    version: 1,
+    version: 2,
     initial: () => ({ assets: {} }),
     apply: (state, event) => {
       if (!event.type.startsWith("asset.")) return state;
-      const id = payloadString(event, "id") ?? event.id;
-      const revision = payloadSafeInteger(event, "revision");
+      const payload = jsonObject(event.payload);
+      const nestedAsset = parseProjectedAsset(payload?.asset);
+      const id = nestedAsset?.id ?? payloadString(event, "id") ?? event.id;
+      const revision =
+        nestedAsset?.revision ?? payloadSafeInteger(event, "revision");
       const previous = state.assets[id];
+      const status =
+        nestedAsset?.status ??
+        legacyAssetStatus(event.type.slice("asset.".length));
+      if (previous !== undefined && previous.status !== status) {
+        assertProjectedAssetTransition(previous.status, status);
+      }
       const entry: AssetProjectionEntry = {
         id,
-        status: event.type.slice("asset.".length),
+        status,
         lastSeq: event.seq,
       };
       if (revision !== undefined) entry.revision = revision;
       else if (previous?.revision !== undefined)
         entry.revision = previous.revision;
+      if (nestedAsset !== null) {
+        entry.kind = nestedAsset.kind;
+        entry.version = nestedAsset.version;
+        entry.body = nestedAsset.body;
+        entry.derivedFrom = nestedAsset.derivedFrom;
+        if (nestedAsset.forkedFrom !== undefined) {
+          entry.forkedFrom = nestedAsset.forkedFrom;
+        }
+      }
       return { assets: { ...state.assets, [id]: entry } };
     },
   };
@@ -699,6 +730,47 @@ function payloadString(event: EventEnvelope, key: string): string | undefined {
   }
   const value = event.payload[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function jsonObject(
+  value: JsonValue | undefined,
+): Record<string, JsonValue> | null {
+  if (value === undefined || value === null || typeof value !== "object") {
+    return null;
+  }
+  return Array.isArray(value) ? null : value;
+}
+
+function parseProjectedAsset(
+  value: JsonValue | undefined,
+): ReusableAsset | null {
+  if (value === undefined) return null;
+  const parsed = parseReusableAsset(value);
+  return parsed;
+}
+
+function legacyAssetStatus(suffix: string): string {
+  const mapped: Record<string, AssetStatus> = {
+    candidate: "candidate",
+    validated: "validated",
+    activate: "active",
+    contest: "challenged",
+    disable: "deprecated",
+    restore: "validated",
+    fork: "candidate",
+  };
+  return mapped[suffix] ?? suffix;
+}
+
+function assertProjectedAssetTransition(from: string, to: string): void {
+  const previous = assetStatusSchema.safeParse(from);
+  const next = assetStatusSchema.safeParse(to);
+  if (!previous.success || !next.success || from === to) return;
+  try {
+    assertAssetTransition(previous.data, next.data);
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function payloadSafeInteger(

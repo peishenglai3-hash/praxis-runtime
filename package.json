@@ -26,7 +26,8 @@
     "phase3:schemas": "node scripts/assert-phase3-schemas.mjs",
     "phase3:scenario": "node scripts/phase3-residual-reflection.mjs",
     "phase35:scenario": "node scripts/phase35-maintenance.mjs",
-    "verify": "pnpm format:check && pnpm lint && pnpm workspace:deps && pnpm boundaries && pnpm boundaries:fixture && pnpm boundaries:negative-fixture && pnpm typecheck && pnpm test && pnpm build && pnpm phase3:schemas && pnpm phase1:concurrency && pnpm phase1:crash && pnpm phase1:throughput && pnpm phase2:scenario && pnpm phase3:scenario && pnpm phase35:scenario"
+    "phase4:scenario": "node scripts/phase4-assets.mjs",
+    "verify": "pnpm format:check && pnpm lint && pnpm workspace:deps && pnpm boundaries && pnpm boundaries:fixture && pnpm boundaries:negative-fixture && pnpm typecheck && pnpm test && pnpm build && pnpm phase3:schemas && pnpm phase1:concurrency && pnpm phase1:crash && pnpm phase1:throughput && pnpm phase2:scenario && pnpm phase3:scenario && pnpm phase35:scenario && pnpm phase4:scenario"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

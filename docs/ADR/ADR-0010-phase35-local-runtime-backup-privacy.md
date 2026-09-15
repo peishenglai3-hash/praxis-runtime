@@ -21,6 +21,15 @@ manifest checksum and SQLite integrity, stages the replacement, and requires a
 safety copy before overwriting an existing destination; the caller then opens
 the restored database and runs projection rebuild plus doctor.
 
+Managed backup creation first reserves its destination in the managed-backup
+catalog. The reservation is deliberately incomplete until the manifest and
+file checksum are committed, so a crash between snapshot creation and catalog
+finalization becomes a doctor-visible missing/checksum issue rather than an
+untracked orphan file. Managed paths may be restricted to the configured
+backup root. A purge plan hashes the selected backup metadata and confirmation
+must present that dry-run `planHash`; a backup/path/status change therefore
+invalidates the confirmation before any deletion.
+
 ## Privacy purge
 
 `privacy purge --dry-run` only produces a closure plan. Confirmed session purge
@@ -42,4 +51,7 @@ Purge intentionally creates audited sequence gaps. Projection replay accepts onl
 gaps backed by `purged_seq_ranges`; an unexplained gap still fails closed. The
 `EventReader` and store are trusted low-level primitives; application callers
 must use the composition-root methods so ACL and lifecycle checks are not
-silently bypassed.
+silently bypassed. The composition root acquires the writer lock before the
+application opens and migrates the database. Restore uses a maintenance
+handoff to retain that lock while the store is closed; a post-restore doctor
+failure restores the safety copy before the lock is released.

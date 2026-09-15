@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { RuntimeCompositionRoot } from "@praxis/runtime";
+import { RuntimeCompositionRoot, WriterOwnershipLock } from "@praxis/runtime";
 import { SqliteEventStore } from "@praxis/store";
 
 function openRoot(): RuntimeCompositionRoot {
@@ -12,26 +12,45 @@ function openRoot(): RuntimeCompositionRoot {
     process.env.PRAXIS_MIGRATIONS_DIR ?? join(process.cwd(), "migrations"),
   );
   mkdirSync(dataDir, { recursive: true });
-  const store = new SqliteEventStore({
-    filename: join(dataDir, "events.db"),
-    migrationsDir,
-  });
-  return new RuntimeCompositionRoot({
-    store,
+  const backupsDir = join(dataDir, "backups");
+  mkdirSync(backupsDir, { recursive: true });
+  const databasePath = join(dataDir, "events.db");
+  const lock = new WriterOwnershipLock(`${databasePath}.writer.lock`);
+  lock.acquire({
+    pid: process.pid,
     mode: "daemon",
-    actor: {
-      type: "system",
-      id: process.env.PRAXIS_ACTOR_ID ?? "local-daemon",
-    },
-    writer: {
-      writerId: process.env.PRAXIS_WRITER_ID ?? "daemon:local",
-      kind: "runtime",
-      role: "COORDINATOR",
-      authn: "daemon-token",
-      scopes: ["event.read", "event.append", "state.read", "tool.execute"],
-      policyVersion: 1,
-    },
+    startedAt: new Date().toISOString(),
+    dbPath: resolve(databasePath),
   });
+  let store: SqliteEventStore | undefined;
+  try {
+    store = new SqliteEventStore({
+      filename: databasePath,
+      migrationsDir,
+      managedBackupRoot: backupsDir,
+    });
+    return new RuntimeCompositionRoot({
+      store,
+      lock,
+      mode: "daemon",
+      actor: {
+        type: "system",
+        id: process.env.PRAXIS_ACTOR_ID ?? "local-daemon",
+      },
+      writer: {
+        writerId: process.env.PRAXIS_WRITER_ID ?? "daemon:local",
+        kind: "runtime",
+        role: "COORDINATOR",
+        authn: "daemon-token",
+        scopes: ["event.read", "event.append", "state.read", "tool.execute"],
+        policyVersion: 1,
+      },
+    });
+  } catch (error) {
+    store?.close();
+    lock.release();
+    throw error;
+  }
 }
 
 const root = openRoot();
@@ -52,7 +71,7 @@ try {
       ready: true,
       mode: "daemon",
       database: root.databasePath,
-      writerLock: root.lock.path,
+      writerLock: root.writerLockPath,
       catchUp,
       doctor: report,
     })}\n`,

@@ -87,11 +87,42 @@ function event(
 }
 
 describe("Phase 3.5 runtime assembly and maintenance", () => {
+  it("does not expose a usable runtime facade before the root starts", () => {
+    directory = mkdtempSync(join(tmpdir(), "praxis-phase35-unstarted-"));
+    const store = new SqliteEventStore({
+      filename: join(directory, "events.db"),
+      migrationsDir,
+    });
+    root = new RuntimeCompositionRoot({
+      store,
+      mode: "embedded",
+      actor: { type: "human", id: "phase35-owner" },
+      writer,
+    });
+
+    expect(() =>
+      root?.runtime.appendEvent(event("unstarted-event", undefined)),
+    ).toThrowError("runtime composition root is not started");
+    expect((root as unknown as { lock?: unknown }).lock).toBeUndefined();
+    expect(
+      (root?.runtime as unknown as { phase3RuntimePorts?: unknown })
+        .phase3RuntimePorts,
+    ).toBeUndefined();
+  });
+
   it("keeps reads and asset controls behind explicit runtime boundaries", () => {
     const currentRoot = openRoot();
-    const source = currentRoot.runtime.appendEvent(
-      event("asset-source", undefined, "asset.candidate"),
+    const provenance = currentRoot.runtime.appendEvent(
+      event("asset-provenance", undefined),
     ).record;
+    const source = currentRoot.runtime.proposeAsset({
+      id: "asset-source",
+      kind: "pattern",
+      version: "1.0.0",
+      body: { note: "phase 4 managed candidate" },
+      derivedFrom: [{ eventId: provenance.id, origin: "direct" }],
+      createdAt: "2026-09-15T00:00:00.000Z",
+    }).record;
 
     expect(currentRoot.inspectEvent(source.id)?.id).toBe(source.id);
     expect(
@@ -275,8 +306,19 @@ describe("Phase 3.5 runtime assembly and maintenance", () => {
       "selected managed backups still contain data covered by this purge",
     ]);
 
+    currentRoot.createManagedBackup(join(directory!, "managed-backup-2.db"), {
+      id: "backup:managed-purge-2",
+    });
+    expect(() =>
+      currentRoot.privacyPurge("session-purge", {
+        confirm: true,
+        planHash: dryRun.plan.planHash,
+      }),
+    ).toThrowError("current dry-run plan hash");
+    const currentPlan = currentRoot.privacyPurge("session-purge");
     const result = currentRoot.privacyPurge("session-purge", {
       confirm: true,
+      planHash: currentPlan.plan.planHash,
       executedAt: Date.parse("2026-09-15T00:00:03.000Z"),
     });
     expect(result.receipt?.deletedEventCount).toBe(1);
@@ -285,6 +327,7 @@ describe("Phase 3.5 runtime assembly and maintenance", () => {
       "retained-event",
     ]);
     expect(existsSync(managed.path)).toBe(false);
+    expect(existsSync(join(directory!, "managed-backup-2.db"))).toBe(false);
     expect(currentRoot.getHealth().purgedSeqRanges).toEqual([
       {
         startSeq: 1,

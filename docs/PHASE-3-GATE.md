@@ -1,6 +1,9 @@
-# Phase 3 Gate Record
+# Phase 3 Gate Record (historical snapshot)
 
-Status: PASS (bounded local implementation; Phase 4 conditional). This is not a production-readiness claim and does not close the owner-input boundary below.
+Status: PASS (bounded local implementation; Phase 4 conditional). This is not
+a production-readiness claim. The entry-condition wording at the end of this
+historical snapshot is superseded by the reconciled Phase 3.5 and Phase 4 gate
+records; it is retained here to preserve the earlier decision state.
 
 ## Scope
 
@@ -62,6 +65,11 @@ The final current-worktree closeout review returned `ENGINEERING PASS` with no n
 2. The Final source materials: PASS for preserving lag, mismatch, breakpoint, reflection delay, asynchronous multi-agent positions, source ownership, and human subjectivity as engineering constraints rather than claiming solved theory.
 3. `docs/断点记录.md`: PASS for BP-023 through BP-029, including trigger-fixture failures, canonical validation, timing/round cursor binding, Node/TLS boundary, actor/idempotency conflict, source-path correction, and the human-input gate.
 
-## Phase 4 entry conditions
+## Historical Phase 4 entry conditions — superseded
 
-Before asset promotion begins, close or explicitly decide the human-only inputs in [`PHASE-3-INPUTS.md`](./PHASE-3-INPUTS.md): trusted writer/ACL, human-control API semantics, expectation time/resolution semantics, real sanitized asynchronous golden cases and external verification, production assembly, privacy/purge policy, and Node `22.13.0` runner evidence. These are one bounded Phase 4 entry package, not indefinite unscoped deferrals. No Phase 4 implementation may silently substitute synthetic fixtures for those decisions.
+The earlier gate required closing or explicitly deciding a broad Phase 4 input
+package. The Correction Pack and subsequent Gate Reconciliation froze the local
+writer/ACL, human-control, expectation/verification, production assembly, and
+privacy semantics. The current reconciled record is
+[`PHASE-3.5-GATE.md`](./PHASE-3.5-GATE.md); the only external Alpha evidence
+still pending is the exact Node `22.13.0` runner result.

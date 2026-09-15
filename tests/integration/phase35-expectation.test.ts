@@ -97,14 +97,17 @@ function definition(
   };
 }
 
-function runtimeFor(currentStore: SqliteEventStore): Phase3Runtime {
+function runtimeFor(
+  currentStore: SqliteEventStore,
+  writer = testWriter,
+): Phase3Runtime {
   return new Phase3Runtime({
     events: currentStore,
     projections: currentStore,
     clock: { now: () => new Date("2026-09-15T00:00:06.000Z") },
     ids: { next: () => "phase35-id" },
     actor: { type: "system", id: "phase35-runtime" },
-    writer: testWriter,
+    writer,
   });
 }
 
@@ -331,6 +334,34 @@ describe("Phase 3.5 expectation and verification replay", () => {
         evidence: [{ eventId: "async-window-source", origin: "direct" }],
       }),
     ).toThrowError("outside the expectation window");
+  });
+
+  it("binds expectation human controls to a human actor", () => {
+    const currentStore = openStore();
+    const runtime = runtimeFor(currentStore, {
+      ...testWriter,
+      kind: "human",
+    });
+    appendEvent(
+      currentStore,
+      sourceEvent("human-control-source", "2026-09-15T00:00:01.000Z"),
+    );
+    runtime.recordExpectationDefinition(
+      definition(
+        "HUMAN-CONTROL-ACTOR",
+        "2026-09-15T00:00:02.000Z",
+        "2026-09-15T00:00:04.000Z",
+        "2026-09-15T00:00:10.000Z",
+        "human-control-source",
+      ),
+    );
+
+    expect(() =>
+      runtime.recordExpectationStatusChange("HUMAN-CONTROL-ACTOR", "unknown"),
+    ).toThrowError("human control requires a human actor");
+    expect(() =>
+      runtime.recordExpectationCancellation("HUMAN-CONTROL-ACTOR"),
+    ).toThrowError("human control requires a human actor");
   });
 
   it("bridges structured verification into the bounded outcome residual path", () => {

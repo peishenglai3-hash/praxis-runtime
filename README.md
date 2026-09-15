@@ -121,8 +121,11 @@ Phase 3 / EPIC-005 and EPIC-006 is implemented and locally verified as a bounded
 - canonical Phase 3 payload/envelope validation runs before every EventWriter batch; migration `0006_phase3_derived_integrity.sql` adds preflight and SQLite trigger defenses, including derived-event no-delete protection;
 - four-process same-database residual/reflection idempotency, concurrent no-false-positive, and no-self-call scenarios: `PASS`;
 - versioned expectation/residual/reflection interchange shapes and checked schema conditionals are present in [`schemas/`](./schemas/);
-- full `pnpm verify` is `PASS` on system Node `v24.15.0` and bundled Node `v24.19.0`, with 51/51 tests;
-- trusted writer/ACL, human-control APIs, expectation-time policy, author-owned asynchronous golden cases, production CLI/daemon assembly, privacy/purge policy, and Node `22.13.0` runner evidence remain one explicitly bounded set of pre-Phase-4 owner inputs in [`docs/PHASE-3-INPUTS.md`](./docs/PHASE-3-INPUTS.md).
+- the Phase 3 gate-era `pnpm verify` was `PASS` on system Node `v24.15.0` and bundled Node `v24.19.0`, with 51/51 tests at that checkpoint; the current Phase 4 tree is recorded separately below;
+- the former Phase-4 owner-input register is reconciled by the Phase 3.5
+  Correction Pack into frozen local capability/production semantics; the
+  remaining external evidence is the exact Node `22.13.0` runner result in
+  [`docs/PHASE-3.5-GATE.md`](./docs/PHASE-3.5-GATE.md).
 
 Phase 3 does not turn a permission label into authorization and does not claim production readiness. The initial concurrency actor mismatch, the malformed JSON trigger, and the low-level hardening sequence are preserved in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The current local Phase 3 checkpoint is not pushed.
 
@@ -147,10 +150,28 @@ local candidate before Phase 4:
   were not overwritten; the unique Phase 3.5 ADR set and both compatibility
   mismatches are recorded in [`docs/PHASE-3.5-GATE.md`](./docs/PHASE-3.5-GATE.md).
 
-Phase 4 remains `NO-GO` while Gate D or the bounded owner-input package is
-pending. The current Phase 3.5 worktree is local only and has not been pushed.
-The asset invalidation record after physical purge is intentionally receipt-
-based; a separate non-content lifecycle event is still an owner policy choice.
+Phase 4 / EPIC-007 Reusable Assets is implemented as a local candidate:
+
+- versioned asset contracts, provenance, lifecycle transitions, and promotion
+  policy are implemented in `packages/contracts` and `packages/assets`;
+- atomic SQLite catalog/event writes, optimistic revision locking, lifecycle
+  integrity triggers, and doctor catalog-drift checks are implemented in
+  `packages/store` and migration `0010`;
+- the runtime exposes authorized proposal, promotion, challenge, disable,
+  restore, fork, inspect, and list boundaries; active promotion requires human
+  confirmation;
+- four-process CAS, low-level bypass, provenance-origin, purge invalidation,
+  and catalog-tamper scenarios are covered by the Phase 4 tests and
+  `pnpm phase4:scenario`;
+- the local Phase 4 candidate gate is recorded in
+  [`docs/PHASE-4-GATE.md`](./docs/PHASE-4-GATE.md), while formal Alpha/merge
+  remains `NO-GO` until exact Node `22.13.0` Ubuntu/Windows CI evidence exists.
+
+The current worktree is local only and has not been pushed. `VACUUM INTO`
+remains the backup path for the pinned Node baseline; `node:sqlite` is
+experimental in Node `22.13.0` even though the flag is no longer required.
+The asset invalidation record after physical purge is intentionally
+receipt-based.
 
 Phase 1 deliberately stores event materials rather than verified interpretations. Structured `evidence`, `links`, and required `provenance` round-trip as contract-bound references, while derived/candidate/confirmed record classification is deferred to the projection and context phases. The envelope actor is caller-declared, not an authenticated writer; runtime permissions are a later boundary.
 

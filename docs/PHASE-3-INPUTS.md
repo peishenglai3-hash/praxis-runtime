@@ -1,61 +1,85 @@
-# Phase 3 / Phase 4 Human Inputs
+# Phase 3 / Phase 4 Human Input Register — Reconciled
 
-This file distinguishes author/operator decisions from implementation work. The items below cannot be responsibly invented from the Bible, The Final documents, the public first-generation repository, or an AI-generated fixture. Synthetic values may keep Phase 3 tests running, but they do not close the Phase 4 entry gate.
+This file retains the original pre-Phase-4 input register for auditability.
+The original table described decisions that had not yet been frozen. The
+Phase 3.5 Correction Pack, the Implementation Bible, and the owner's explicit
+continuation instruction now reconcile those items into a bounded local
+capability contract. They are not a reason to repeatedly request the same four
+generic material packages.
 
-## Required before Phase 4
+The labels below distinguish implementation decisions from external evidence:
 
-| Input                                 | Why the owner must provide it                                                                                                                                          | Current status             |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| Trusted writer identity               | The current event envelope records a declared actor. It does not prove which process or person actually wrote the event.                                               | `OWNER INPUT REQUIRED`     |
-| Role/scope/ACL matrix                 | The system needs explicit permissions for human, agent, system, tool, and model actors, including cross-agent mailbox access and denied operations.                    | `OWNER INPUT REQUIRED`     |
-| Human-control semantics               | Define inspect, contest, disable, restore, fork, export, purge, stop/exit, confirmation levels, emergency stop, and the audit record for each.                         | `OWNER INPUT REQUIRED`     |
-| External-verification policy          | Define which outcomes may use a verifier, what evidence is acceptable, who can reject an internal result, and how conflicts are recorded.                              | `OWNER INPUT REQUIRED`     |
-| Expectation time/resolution semantics | Decide whether `validUntil` is inclusive, whether observations after it are invalid or merely late, when detection may occur, and which event resolves an expectation. | `OWNER INPUT REQUIRED`     |
-| Author-owned golden cases             | Supply sanitized cases with expectation, observation, context exposure, feedback, human explanation, counterexample, model/provider/version, and desired handling.     | `OWNER INPUT REQUIRED`     |
-| Production assembly                   | Set data directory, backup/lock/recovery policy, clock and ID source, default actor, config loading, daemon lifecycle, transport, and operator behavior.               | `OWNER INPUT REQUIRED`     |
-| Privacy and purge boundary            | Decide retention, redaction, export, irreversible purge, derived-data rebuild, source-document separation, and any legal constraints.                                  | `OWNER INPUT REQUIRED`     |
-| Node 22 runner path                   | Provide an accessible official Node `22.13.0` runner or approve the private CI/source-upload condition needed to obtain it.                                            | `PENDING / OWNER DECISION` |
+- `FROZEN LOCAL`: decided and implemented for the local runtime boundary;
+- `FROZEN STRUCTURAL`: the contract is implemented, while production evidence
+  is intentionally outside this local candidate;
+- `EXTERNAL EVIDENCE PENDING`: an actual runner or real-world artifact is still
+  required for the Alpha claim;
+- `OWNER POLICY IF EXPANDED`: only relevant if the project later expands beyond
+  the current local scope.
 
-## What can proceed with synthetic material
+## Reconciled register
 
-Phase 3 can and does use deterministic fixtures to verify that:
+| Input recorded before Phase 3.5       | Current reconciled status                                                                                                                             | Repository evidence                                                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Trusted writer identity               | `FROZEN LOCAL` as a validated local `WriterContext`; explicitly not OS/IAM identity proof                                                             | `packages/contracts/src/authorization.ts`, `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`           |
+| Role/scope/ACL matrix                 | `FROZEN LOCAL` for bounded roles, namespaces, explicit scopes, and `asset.restore`                                                                    | authorization contract and unit tests                                                                   |
+| Human-control semantics               | `FROZEN LOCAL` for inspect/export, challenge, disable, restore, fork, purge, and OWNER confirmation                                                   | `packages/runtime/src/index.ts`, `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`                     |
+| External-verification policy          | `FROZEN STRUCTURAL` for typed verifier outcomes and explicit validation reports; no claim of external-provider authority                              | `packages/contracts/src/expectations.ts`, `docs/ADR/ADR-0009-phase35-expectation-verification-async.md` |
+| Expectation time/resolution semantics | `FROZEN LOCAL` for ordered `validFrom`/`evaluateBy`/`expiresAt`, inclusive boundary, and explicit unknown/late handling                               | expectation contracts, replay tests, ASYNC fixtures                                                     |
+| Author-owned golden cases             | `FROZEN STRUCTURAL`: ASYNC-01~04 are synthetic regression fixtures; production cases remain optional evidence, not a blocker for local implementation | `fixtures/phase35/ASYNC-01.json` through `ASYNC-04.json`                                                |
+| Production assembly                   | `FROZEN LOCAL` for the local CLI/daemon composition root, one-writer lock, backup, restore, doctor, and purge flows                                   | `apps/cli`, `apps/daemon`, `docs/ADR/ADR-0010-phase35-local-runtime-backup-privacy.md`                  |
+| Privacy and purge boundary            | `FROZEN LOCAL` as best-effort local purge with audit receipt, rebuild, and visible pending cleanup; hardware-level irrecoverability is not claimed    | ADR-0010 and maintenance tests                                                                          |
+| Node 22 runner path                   | `EXTERNAL EVIDENCE PENDING`; exact GitHub Actions configuration exists, but no current-worktree source push was authorized                            | `.node-version`, `.nvmrc`, `.github/workflows/ci.yml`                                                   |
 
-- an outcome baseline must be declared;
-- timing requires subscription, sequence lag, and staleness;
-- rule checks are limited to declared requirements;
-- automatic effect remains `unknown`;
-- reflection stops without new evidence, obeys hard budgets, and only proposes;
-- concurrent identical logical operations are idempotent while mismatched event contents conflict;
-- low-level context-event writes cannot bypass the plan/source lineage checks.
+## What is allowed to proceed
 
-These tests demonstrate implementation behavior, not authorial correctness of a real production policy.
+The local implementation may proceed with the frozen contracts and synthetic
+fixtures. A synthetic fixture demonstrates code behavior; it does not become
+authorial production evidence or an external verification result. Phase 4
+promotion remains gated by the runtime policy, provenance checks, validation,
+and human confirmation described in `docs/ADR/ADR-0011-phase4-reusable-assets.md`.
+
+The exact Node `22.13.0` runner remains a separate Alpha evidence gate. Local
+Node `24.15.0` or bundled Node `24.19.0` results must not be relabelled as
+Node 22 evidence.
 
 ## Boundary not to misread
 
-`requiredPermission` on a Reflection action is currently descriptive metadata. It is not an ACL check, a human confirmation, or an execution grant. The current `Phase3Runtime` records a proposal only; it does not execute the recommended action or promote any asset. Phase 4 must not proceed by treating that label as authorization.
+`requiredPermission` on a Reflection action is descriptive metadata. It is
+not an ACL check, human confirmation, or execution grant. Phase 3 records a
+proposal only. Phase 4 uses an explicit promotion policy and a human OWNER
+confirmation for active assets; it does not execute a reflection proposal
+automatically.
 
-## Closure sequence before Phase 4
+The local `WriterContext` is a capability and provenance boundary. It does not
+prove which human controls the operating system, prevent a hostile local
+process from opening the database, or provide enterprise IAM. If those
+properties become a project requirement, the exact identity/transport
+interface and its acceptance evidence must be decided before that expansion.
 
-The remaining boundary is intentionally grouped into four decision packages so it does not become an indefinite list of postponements:
+## Closure sequence used for the current work
 
-1. **Authority and control:** trusted writer identity, role/scope/ACL, mailbox visibility, human-control operations, confirmation levels, emergency stop, and their audit events.
-2. **Meaning and evidence:** expectation time/resolution semantics, external-verification policy, and author-owned asynchronous golden cases with acceptable evidence and desired handling.
-3. **Production and privacy:** SQLite/config/clock/id/actor assembly, daemon/operator behavior, backups/recovery, retention, purge, export, and source-document separation.
-4. **Runner evidence:** an accessible Node `22.13.0` runner, or an explicit owner decision to allow the private CI/source-upload route required to obtain that evidence.
+1. Re-read the Implementation Bible and treat it as the controlling
+   engineering plan.
+2. Use The Final documents only as design provenance and review constraints;
+   do not convert their theory into unverified runtime claims.
+3. Reconcile implementation, tests, ADRs, and `docs/断点记录.md` after every
+   phase.
+4. Run the local verification and the targeted multi-process scenario.
+5. Keep Node `22.13.0` runner evidence separate from local Node 24 evidence.
+6. Record structural conflicts as `RFC MISMATCH`; never silently compensate.
 
-Phase 4 may begin only after the four packages are either supplied or explicitly decided by the owner. The implementation can prepare schemas and dry-run interfaces around them, but it must not invent their policy values or silently promote a candidate.
+## Owner handoff format for future expansion
 
-## Current provisional semantics (not owner confirmation)
-
-The synthetic Phase 3 tests use an inclusive `validUntil` boundary: an observation exactly at `validUntil` is accepted, an observation after it is rejected, and detection cannot precede observation. This is an implementation proposal recorded for review, not a decision attributed to the author.
-
-## Owner handoff format
-
-When supplying an input, preserve the original material and identify its status as one of:
+If a later phase expands the trust, transport, privacy, or production boundary,
+new material should be labelled as one of:
 
 1. direct author/operator decision;
 2. external verification or artifact evidence;
 3. implementation proposal;
 4. unresolved dispute or unknown.
 
-The repository should receive only the minimum sanitized contract/fixture needed for testing. Original The Final documents, credentials, private conversations, and unsanitized historical records remain outside the code repository unless a separate explicit publication decision is made.
+Only the minimum sanitized contract or fixture should enter the repository.
+Original The Final documents, credentials, private conversations, and
+unsanitized historical records remain outside the runtime database unless a
+separate publication decision is made.
