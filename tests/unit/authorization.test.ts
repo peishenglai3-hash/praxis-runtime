@@ -6,6 +6,7 @@ import {
   authorizeEventAppend,
   permissionScopes,
   requiredScopeForEventType,
+  validateWriterContext,
   type WriterContext,
 } from "../../packages/contracts/src/index.js";
 
@@ -113,5 +114,16 @@ describe("WriterContext capability authorization", () => {
         "residual.detected",
       ),
     ).not.toThrow();
+  });
+
+  it("freezes validated capability objects before runtime use", () => {
+    const validated = validateWriterContext(writer());
+
+    expect(Object.isFrozen(validated)).toBe(true);
+    expect(Object.isFrozen(validated.scopes)).toBe(true);
+    expect(() => validated.scopes.push("history.export")).toThrow();
+    expect(() => {
+      validated.role = "OBSERVER";
+    }).toThrow();
   });
 });

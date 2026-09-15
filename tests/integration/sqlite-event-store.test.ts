@@ -206,6 +206,15 @@ describe("SqliteEventStore", () => {
     ).toThrowError(expect.objectContaining({ code: "AUTHORIZATION_ERROR" }));
     expect(currentStore.getLastSeq()).toBe(1);
     expect(currentStore.query()).toHaveLength(1);
+
+    expect(() =>
+      currentStore.planPrivacyPurge("session-1", {
+        ...testWriter,
+        kind: "runtime",
+        role: "OWNER",
+        scopes: ["history.purge"],
+      }),
+    ).toThrowError(expect.objectContaining({ code: "AUTHORIZATION_ERROR" }));
   });
 
   it("makes retries idempotent and rejects key reuse with different content", () => {

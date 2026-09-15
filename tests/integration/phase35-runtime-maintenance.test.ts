@@ -268,6 +268,13 @@ describe("Phase 3.5 runtime assembly and maintenance", () => {
     );
     expect(existsSync(managed.path)).toBe(true);
 
+    const preserved = currentRoot.privacyPurge("session-purge", {
+      preserveManagedBackups: true,
+    });
+    expect(preserved.warnings).toEqual([
+      "selected managed backups still contain data covered by this purge",
+    ]);
+
     const result = currentRoot.privacyPurge("session-purge", {
       confirm: true,
       executedAt: Date.parse("2026-09-15T00:00:03.000Z"),

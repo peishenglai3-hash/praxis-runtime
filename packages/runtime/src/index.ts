@@ -491,7 +491,7 @@ export interface RuntimeStore
     options?: BackupOptions,
   ): BackupManifest;
   listManagedBackups(): ManagedBackup[];
-  planPrivacyPurge(sessionId: string): PrivacyPurgePlan;
+  planPrivacyPurge(sessionId: string, writer: WriterContext): PrivacyPurgePlan;
   privacyPurge(
     sessionId: string,
     writer: WriterContext,
@@ -1431,6 +1431,16 @@ function assertHumanActor(actor: ActorRef): void {
   }
 }
 
+function freezeActor(actor: ActorRef): ActorRef {
+  if (
+    !["human", "agent", "system", "tool", "model"].includes(actor.type) ||
+    actor.id.length < 1
+  ) {
+    throw new AuthorizationError("actor is invalid", { actor });
+  }
+  return Object.freeze({ type: actor.type, id: actor.id });
+}
+
 function readAllEvents(reader: EventReader): EventRecord[] {
   const events: EventRecord[] = [];
   let afterSeq = 0;
@@ -2207,7 +2217,7 @@ export class RuntimeCompositionRoot {
       projections: this.#store,
       clock: this.clock,
       ids: options.ids ?? { next: () => randomUUID() },
-      actor: options.actor,
+      actor: freezeActor(options.actor),
       writer: this.writer,
     });
   }
@@ -2295,7 +2305,12 @@ export class RuntimeCompositionRoot {
 
   planPrivacyPurge(sessionId: string): PrivacyPurgePlan {
     this.assertStarted();
-    return this.#store.planPrivacyPurge(sessionId);
+    authorizeHumanControl(
+      this.writer,
+      "privacy purge dry-run",
+      "history.purge",
+    );
+    return this.#store.planPrivacyPurge(sessionId, this.writer);
   }
 
   privacyPurge(

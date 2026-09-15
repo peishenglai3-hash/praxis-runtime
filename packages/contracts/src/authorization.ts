@@ -44,6 +44,13 @@ export interface WriterContext {
   policyVersion: number;
 }
 
+function freezeWriterContext(value: WriterContext): WriterContext {
+  return Object.freeze({
+    ...value,
+    scopes: Object.freeze([...value.scopes]),
+  }) as unknown as WriterContext;
+}
+
 export const writerContextSchema = z
   .object({
     writerId: z.string().min(1),
@@ -75,14 +82,14 @@ export const writerContextSchema = z
     }
   });
 
-export const migrationWriterContext: WriterContext = {
+export const migrationWriterContext: WriterContext = freezeWriterContext({
   writerId: "system:migration",
   kind: "runtime",
   role: "MIGRATION",
   authn: "system",
   scopes: ["system.migrate"],
   policyVersion: 1,
-};
+});
 
 export class AuthorizationError extends Error {
   readonly code = "AUTHORIZATION_ERROR" as const;
@@ -96,7 +103,7 @@ export class AuthorizationError extends Error {
 }
 
 export function parseWriterContext(value: unknown): WriterContext {
-  return writerContextSchema.parse(value) as WriterContext;
+  return freezeWriterContext(writerContextSchema.parse(value) as WriterContext);
 }
 
 export function validateWriterContext(value: unknown): WriterContext {
@@ -109,7 +116,7 @@ export function validateWriterContext(value: unknown): WriterContext {
       },
     );
   }
-  return parsed.data as WriterContext;
+  return freezeWriterContext(parsed.data as WriterContext);
 }
 
 export function authorizeWriterScope(

@@ -253,6 +253,7 @@ export interface PrivacyPurgeResult {
   plan: PrivacyPurgePlan;
   receipt?: PrivacyPurgeReceipt;
   cleanup?: PurgeCleanupResult;
+  warnings?: string[];
 }
 
 export interface PurgeCleanupResult {
@@ -637,14 +638,14 @@ export class SqliteEventStore
     }
     const lastEventSeq = this.getLastSeq();
     const sourceDbSha256 = sha256File(sourcePath);
+    const stagingPath = `${targetPath}.backup-pending-${randomUUID()}`;
     try {
       // VACUUM INTO is SQLite's portable online snapshot operation for the
       // supported Node 22.13 baseline. A raw copy of a live WAL database is
       // deliberately not used.
-      this.#database.exec(`VACUUM INTO ${sqlStringLiteral(targetPath)}`);
-      const backupLastSeq = validateSqliteFile(targetPath);
+      this.#database.exec(`VACUUM INTO ${sqlStringLiteral(stagingPath)}`);
+      const backupLastSeq = validateSqliteFile(stagingPath);
       if (backupLastSeq !== lastEventSeq) {
-        unlinkSync(targetPath);
         throw new StoreError(
           "STORAGE_ERROR",
           "backup sequence does not match the source snapshot",
@@ -654,10 +655,18 @@ export class SqliteEventStore
           },
         );
       }
-    } catch (error) {
       if (existsSync(targetPath)) {
+        throw new StoreError(
+          "STORAGE_ERROR",
+          "backup destination appeared during snapshot finalization",
+          { destinationPath: targetPath },
+        );
+      }
+      renameSync(stagingPath, targetPath);
+    } catch (error) {
+      if (existsSync(stagingPath)) {
         try {
-          unlinkSync(targetPath);
+          unlinkSync(stagingPath);
         } catch {
           // Preserve the original backup failure; doctor will surface the fragment.
         }
@@ -787,7 +796,16 @@ export class SqliteEventStore
     return rows.map((row) => this.managedBackupFromRow(row));
   }
 
-  planPrivacyPurge(sessionId: string): PrivacyPurgePlan {
+  planPrivacyPurge(sessionId: string, writer: WriterContext): PrivacyPurgePlan {
+    try {
+      authorizeHumanControl(writer, "privacy purge dry-run", "history.purge");
+    } catch (error) {
+      throw this.authorizationStoreError(error);
+    }
+    return this.buildPrivacyPurgePlan(sessionId);
+  }
+
+  private buildPrivacyPurgePlan(sessionId: string): PrivacyPurgePlan {
     this.assertOpen();
     this.assertNonEmpty(sessionId, "sessionId");
     const events = this.readAllEvents();
@@ -907,8 +925,19 @@ export class SqliteEventStore
     } catch (error) {
       throw this.authorizationStoreError(error);
     }
-    const plan = this.planPrivacyPurge(sessionId);
-    if (options.confirm !== true) return { dryRun: true, plan };
+    const plan = this.buildPrivacyPurgePlan(sessionId);
+    const warnings =
+      options.preserveManagedBackups === true &&
+      plan.managedBackupIds.length > 0
+        ? ["selected managed backups still contain data covered by this purge"]
+        : undefined;
+    if (options.confirm !== true) {
+      return {
+        dryRun: true,
+        plan,
+        ...(warnings === undefined ? {} : { warnings }),
+      };
+    }
     if (plan.eventSeqs.length === 0) {
       return {
         dryRun: false,
@@ -1055,6 +1084,7 @@ export class SqliteEventStore
         executedAt,
         writerId: authorized.writerId,
       },
+      ...(warnings === undefined ? {} : { warnings }),
     };
   }
 

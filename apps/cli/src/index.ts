@@ -107,7 +107,8 @@ function run(): void {
   }
   let root: RuntimeCompositionRoot | undefined;
   try {
-    root = openRoot(config, "embedded").start();
+    root = openRoot(config, "embedded");
+    root.start();
     if (command === "doctor") {
       const report = root.doctor();
       print(report);
