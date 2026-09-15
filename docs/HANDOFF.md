@@ -1,0 +1,140 @@
+# Praxis Runtime — External Agent Handoff
+
+**Handoff target:** private GitHub repository
+
+`https://github.com/peishenglai3-hash/praxis-runtime`
+
+**Owner:** Lai Peisheng
+
+**License:** MIT
+
+**Project generation:** second-generation fresh start after the public
+[`codex-habit`](https://github.com/peishenglai3-hash/codex-habit) prototype.
+
+This file is the shortest reliable entry point for Claude Code, DeepSeek,
+OpenCode, Codex, or another engineering agent joining the project. It is a
+repository handoff map, not a replacement for the controlling RFC or Bible.
+
+## Current checkpoint
+
+- Phase 4 / Bible `EPIC-007` Reusable Assets is implemented as a local
+  implementation candidate.
+- Gate A–C are `PASS` within the declared local capability boundary. Gate D is
+  `PENDING` until the exact Node.js `22.13.0` `pnpm verify` result exists on
+  both `ubuntu-latest` and `windows-latest`.
+- Phase 4 local implementation is `PASS candidate`; formal Alpha/merge is
+  `NO-GO` until Gate D closes.
+- Local verification was run on Node 24 and passed, but Node 24 is not Node
+  22 evidence. `node:sqlite` remains experimental in Node `22.13.0`; the
+  pinned backup path is `VACUUM INTO` plus manifest checksum, staged restore,
+  and doctor/replay verification.
+- Before changing code, run `git status --short --branch` and
+  `git log --graph --decorate --oneline -15`. Treat the current tip as a
+  reversible handoff checkpoint; never force-push or rewrite history.
+
+## First read order
+
+Read these files in order before implementation:
+
+1. `README.md` — mission, boundaries, current phase status, and project
+   motivation.
+2. `docs/RFC/RFC-0001.md` — controlling engineering index, dependency DAG,
+   phase order, invariants, and recorded `RFC MISMATCH` items.
+3. `docs/PHASE-3.5-GATE.md` — reconciled Gates A–D and the exact remaining
+   external evidence boundary.
+4. `docs/PHASE-4-GATE.md` — EPIC-007 issue coverage, tests, security boundary,
+   and Alpha/merge rule.
+5. `docs/ADR/ADR-0008-phase35-writer-identity-acl.md`,
+   `docs/ADR/ADR-0009-phase35-expectation-verification-semantics.md`,
+   `docs/ADR/ADR-0010-phase35-local-runtime-backup-privacy.md`, and
+   `docs/ADR/ADR-0011-phase4-reusable-assets.md` — accepted decisions for the
+   current security, expectation, maintenance, backup, privacy, and asset
+   boundaries.
+6. `docs/PHASE-3-INPUTS.md` — reconciled input register; do not resurrect the
+   superseded generic four-material request.
+7. `docs/断点记录.md` — append-only failure, mismatch, correction, and
+   rollback record, including `P35-01` and `BP-039`.
+8. `docs/SOURCE-MANIFEST.md` — fingerprints and interpretation boundaries for
+   the owner-supplied DOCX sources.
+
+The Bible is the engineering planning baseline. The two The Final documents
+are author-supplied intellectual provenance and review constraints. Neither
+is executable code instruction, and neither should be paraphrased as a new
+runtime guarantee without repository evidence.
+
+## Repository-to-task map
+
+| Repository path                                                     | Role                                                                                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `packages/contracts/src/`                                           | Lowest-level event, provenance, authorization, expectation, asset, JSON, and port contracts.                  |
+| `packages/store/src/sqlite.ts`                                      | SQLite WAL ledger, migrations, event writer/reader, managed maintenance, asset catalog, and integrity checks. |
+| `packages/state/src/index.ts`                                       | Deterministic projection/replay and cursor-safe state reconstruction.                                         |
+| `packages/context/src/index.ts`                                     | Explainable context ranking and exposure planning.                                                            |
+| `packages/residual/src/index.ts`                                    | Bounded residual detection with explicit unknown/ordering semantics.                                          |
+| `packages/reflection/src/index.ts`                                  | Bounded STOP/CONTINUE/ESCALATE proposals; no direct tool, agent, event, or asset promotion side effect.       |
+| `packages/assets/src/index.ts`                                      | Versioned reusable-asset lifecycle and promotion policy.                                                      |
+| `packages/runtime/src/index.ts`                                     | Composition/use-case boundary; authorization, human confirmation, and public runtime façade.                  |
+| `packages/agents/src/index.ts` and `packages/adapters/src/index.ts` | Cursor/mailbox-facing ports and provider-independent adapter seams.                                           |
+| `apps/cli/src/index.ts`                                             | CLI production composition root, maintenance, backup/restore, doctor, purge, and diagnostics.                 |
+| `apps/daemon/src/index.ts`                                          | Fail-closed daemon composition root and one-shot smoke path.                                                  |
+| `migrations/`                                                       | Forward-only SQLite migrations; `0010_reusable_assets.sql` is the Phase 4 catalog/lifecycle migration.        |
+| `schemas/`                                                          | Versioned external JSON Schemas; run schema parity before changing contracts.                                 |
+| `fixtures/phase35/` and `tests/`                                    | Synthetic async, unit, integration, regression, and boundary evidence.                                        |
+| `scripts/`                                                          | Multi-process concurrency, crash, throughput, replay, residual, maintenance, and asset scenario gates.        |
+| `legacy/`                                                           | Isolated first-generation migration inputs; do not silently import them into the core runtime.                |
+| `labs/`                                                             | Experiments outside the core runtime; no automatic promotion into production packages.                        |
+
+## Reproducible entry check
+
+From the clone root:
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm verify
+```
+
+The canonical package/runtime target is pnpm `11.19.0` and Node.js
+`22.13.0`, pinned by `package.json`, `.node-version`, `.nvmrc`, and
+`.github/workflows/ci.yml`. The CI workflow runs the same `pnpm verify` on
+Ubuntu and Windows. A local Node 24 pass is useful development evidence only.
+
+## Working protocol for an external model
+
+1. Start with a read-only audit and state the exact issue/phase being worked.
+2. Keep work in a short-lived branch or a clearly named local checkpoint;
+   preserve the current tip and use ordinary commits as rollback points.
+3. Do not overwrite raw events, historical breakpoints, accepted ADRs, or
+   source-manifest fingerprints. Add corrections as new evidence.
+4. Keep contracts/schema/migrations/tests synchronized. Run at least the
+   narrow relevant tests and then `pnpm verify` before claiming a phase.
+5. Any structural conflict with the Bible, RFC, or accepted ADR is an
+   explicit `RFC MISMATCH` containing requested state, observed state, impact,
+   evidence, and decision owner. Never silently compensate.
+6. Do not grant permission merely because a field says `requiredPermission`;
+   use the actual authorization and human-control boundary.
+7. Do not promote assets, call providers, or broaden privacy/IAM claims from
+   synthetic fixtures. Keep external evidence, author evidence, inference,
+   and unknowns labelled separately.
+8. Do not push, publish, change repository visibility, add secrets, or alter
+   GitHub Actions permissions without explicit owner authorization. Normal
+   non-force pushes are required for authorized synchronization.
+
+## Bible roadmap after the current checkpoint
+
+The remaining Bible delivery slices are:
+
+- **Phase 5 — EPIC-008 / EPIC-009:** audited Legacy migration plus CLI
+  diagnostics and operational evidence. This requires a hashed, dry-run,
+  reversible migration fixture and explicit treatment of malformed, duplicate,
+  privacy-sensitive, and unmapped legacy records.
+- **Phase 6 — EPIC-010:** dummy-first adapters and provider isolation. This
+  requires provider-independent contracts, deterministic fake adapters,
+  timeout/error/budget fixtures, and proof that provider SDKs cannot enter the
+  core dependency graph.
+- **Alpha/release closure:** exact Node `22.13.0` CI evidence on both runners,
+  final gate reconciliation, controlled visibility/publication decision, and
+  release documentation. The MIT license is already present; public release
+  is not implied by this private handoff.
+
+No external model should label the project “complete” merely because Phase 4
+code exists or local Node 24 verification passes.

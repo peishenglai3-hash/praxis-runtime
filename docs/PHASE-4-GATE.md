@@ -134,14 +134,16 @@ The same scenario is included in `pnpm verify`.
 The remaining blocker is Gate D in `docs/PHASE-3.5-GATE.md`: actual
 `pnpm verify` evidence on both `ubuntu-latest` and `windows-latest` with exact
 Node `22.13.0`. Local Node 24 results are retained as useful evidence but do
-not substitute for that runner evidence. No source has been pushed to the
-private GitHub repository, so no remote CI result can be claimed.
+not substitute for that runner evidence. Source synchronization to the
+private GitHub repository is authorized as a controlled handoff; the sync
+itself is not CI evidence and cannot close Gate D.
 
 ## Rollback point
 
-The Phase 4 work is kept as a local, ordinary Git commit after verification.
-The commit is a reversible checkpoint; the remote repository remains
-unchanged. If any future implementation change conflicts with this gate, stop,
-record the requested state, observed state, impact, evidence, and decision in
-`docs/断点记录.md`, and report `RFC MISMATCH` instead of silently widening the
-scope.
+The Phase 4 work is kept in ordinary, reversible Git commits after
+verification. The implementation checkpoint and the handoff merge preserve
+the pre-sync history; the remote update uses a normal fast-forward after that
+merge and never rewrites history. If any future implementation change
+conflicts with this gate, stop, record the requested state, observed state,
+impact, evidence, and decision in `docs/断点记录.md`, and report `RFC MISMATCH`
+instead of silently widening the scope.
