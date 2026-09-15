@@ -17,6 +17,7 @@ import { log } from "node:console";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { praxisConfigFields } from "../apps/cli/dist/config.js";
 import {
   legacyAnomalyClasses,
   legacyEventTypes,
@@ -181,6 +182,26 @@ for (const field of legacyOptionalSignalFields) {
       `docs/migration/LEGACY-FIELD-MAP.md does not document the optional field ${field}`,
     );
   }
+}
+
+// --- Operator configuration ---------------------------------------------------
+
+const configSchema = readSchema("praxis-config.v1.schema.json");
+assertEqual(
+  Object.keys(configSchema.properties ?? {}).sort(),
+  [...praxisConfigFields].sort(),
+  "praxis-config.v1 property set",
+);
+if (configSchema.additionalProperties !== false) {
+  throw new Error(
+    "praxis-config.v1 must reject unknown fields, because a misspelled key on a ledger-writing runtime is a mistake with consequences",
+  );
+}
+if (
+  configSchema.required?.length !== 1 ||
+  configSchema.required[0] !== "schemaVersion"
+) {
+  throw new Error("praxis-config.v1 must require only schemaVersion");
 }
 
 log("Phase 5 schema parity PASS");

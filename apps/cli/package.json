@@ -9,5 +9,14 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --tsconfig ../../tsconfig.json --format esm --dts --out-dir dist"
+  },
+  "bin": {
+    "praxis": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   }
 }

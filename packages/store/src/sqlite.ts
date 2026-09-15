@@ -269,6 +269,8 @@ export interface ProjectionHealth {
 export interface StoreHealth {
   filename: string;
   pragmas: SqlitePragmas;
+  migrationVersion: number;
+  migrationStatus: MigrationStatus;
   lastSeq: number;
   writerBackfillCount: number;
   projections: ProjectionHealth[];
@@ -1768,6 +1770,8 @@ export class SqliteEventStore
     return {
       filename: resolve(this.filename),
       pragmas: this.pragmas,
+      migrationVersion: this.migrationVersion,
+      migrationStatus: this.migrationStatus,
       lastSeq,
       writerBackfillCount: this.getWriterBackfillCount(),
       projections: this.getProjectionHealth(lastSeq),

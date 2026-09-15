@@ -36,6 +36,7 @@ import type {
   LegacyMigrationReport,
   LegacyPrivacyRule,
   ProjectionPersistence,
+  ProjectionStateRecord,
   ReusableAsset,
   WriterContext,
 } from "@praxis/contracts";
@@ -70,6 +71,7 @@ import type {
   ContextExposureProposal,
 } from "@praxis/context";
 import type {
+  ReflectionBudget,
   ReflectionEvidenceDelta,
   ReflectionInput,
   ReflectionResult,
@@ -129,6 +131,37 @@ export interface ContextExposureTiming {
   recordedAt?: string;
 }
 
+/**
+ * Event types that only a dedicated runtime use case may produce.
+ *
+ * The list lives here rather than in each caller so that the ledger's
+ * "record through the use case, not through the generic append" rule has one
+ * definition, and a command-line or test caller can ask the same question the
+ * runtime asks instead of repeating the vocabulary and drifting from it.
+ */
+export const runtimeReservedEventTypes: readonly string[] = [
+  "expectation.registered",
+  "expectation.created",
+  "expectation.updated",
+  "expectation.cancelled",
+  "expectation.status.changed",
+  "verification.requested",
+  "verification.completed",
+  "residual.detected",
+  "reflection.proposed",
+  "asset.candidate",
+  "asset.validated",
+  "asset.activate",
+  "asset.contest",
+  "asset.disable",
+  "asset.restore",
+  "asset.fork",
+];
+
+export function isRuntimeReservedEventType(type: string): boolean {
+  return runtimeReservedEventTypes.includes(type);
+}
+
 export interface Phase2RuntimePorts {
   events: EventReader & EventWriter;
   projections: ProjectionPersistence;
@@ -164,23 +197,7 @@ export class Phase2Runtime {
         "context events must be recorded through the runtime context use-cases",
       );
     }
-    if (
-      event.type === "expectation.registered" ||
-      event.type === "expectation.created" ||
-      event.type === "expectation.updated" ||
-      event.type === "expectation.cancelled" ||
-      event.type === "expectation.status.changed" ||
-      event.type === "verification.requested" ||
-      event.type === "verification.completed" ||
-      event.type === "residual.detected" ||
-      event.type === "reflection.proposed" ||
-      event.type === "asset.validated" ||
-      event.type === "asset.activate" ||
-      event.type === "asset.contest" ||
-      event.type === "asset.disable" ||
-      event.type === "asset.restore" ||
-      event.type === "asset.fork"
-    ) {
+    if (isRuntimeReservedEventType(event.type)) {
       throw new Error(
         "domain events must be recorded through their runtime use-cases",
       );
@@ -619,6 +636,74 @@ export class Phase3Runtime extends Phase2Runtime {
   runReflection(input: ReflectionInput): ReflectionResult {
     validateReflectionEvidenceDelta(this.#phase3Ports, input.evidenceDelta);
     return this.reflectionController.reflect(input);
+  }
+
+  /**
+   * Build a reflection input from a residual that is already in the ledger.
+   *
+   * The assembly lives here rather than in a caller so that the use-case
+   * boundary stays in the runtime: a caller names the recorded residual and
+   * supplies a budget, and the runtime reads the ledger to decide what the
+   * evidence delta actually is. A caller cannot hand in a residual that was
+   * never recorded, and cannot claim evidence it does not name.
+   */
+  reflectionInputForResidual(
+    residualEventId: string,
+    options: {
+      budget?: Partial<ReflectionBudget>;
+      evidenceEventIds?: readonly string[];
+    } = {},
+  ): ReflectionInput {
+    const record = this.#phase3Ports.events.getById(residualEventId);
+    if (record === null || record.type !== "residual.detected") {
+      throw new Error(`no recorded residual event matches ${residualEventId}`);
+    }
+    const residual = residualFromPayload(record.payload);
+    const budget: ReflectionBudget = {
+      maxDepth: 2,
+      maxHypotheses: 3,
+      maxToolCalls: 0,
+      maxElapsedMs: 30_000,
+      ...options.budget,
+    };
+    if (
+      budget.maxDepth < 1 ||
+      budget.maxHypotheses < 1 ||
+      budget.maxToolCalls < 0 ||
+      budget.maxElapsedMs < 1
+    ) {
+      throw new Error("reflection budget values are out of range");
+    }
+
+    const evidenceRecords = (options.evidenceEventIds ?? []).map((id) => {
+      const evidenceRecord = this.#phase3Ports.events.getById(id);
+      if (evidenceRecord === null) {
+        throw new Error(`no recorded event matches ${id}`);
+      }
+      return evidenceRecord;
+    });
+    if (evidenceRecords.some((item) => item.seq < record.seq)) {
+      throw new Error(
+        "reflection evidence must follow the residual it is evidence for",
+      );
+    }
+
+    const toSeq = evidenceRecords.reduce(
+      (highest, item) => Math.max(highest, item.seq),
+      record.seq,
+    );
+    return {
+      residual,
+      budget,
+      evidenceDelta: {
+        fromSeq: record.seq,
+        toSeq,
+        evidence: evidenceRecords.map((item) => ({
+          eventId: item.id,
+          origin: item.provenance.origin,
+        })),
+      },
+    };
   }
 
   recordExpectation(expectation: Expectation): EventAppendResult {
@@ -2064,6 +2149,126 @@ function referencePayload(reference: {
   return { kind: reference.kind, id: reference.id, value: reference.value };
 }
 
+/**
+ * Read a recorded residual payload back into a `Residual`.
+ *
+ * The mapping is the inverse of `residualPayload`. It is deliberately strict:
+ * a payload that does not carry the shape the writer produced is an error
+ * rather than something to coerce, so a corrupted record cannot quietly become
+ * a reflection input.
+ */
+function residualFromPayload(payload: JsonValue): Residual {
+  const object = asJsonObject(payload);
+  if (object === null) {
+    throw new Error("recorded residual payload is not an object");
+  }
+  const readString = (key: string): string => {
+    const value = object[key];
+    if (typeof value !== "string" || value.length === 0) {
+      throw new Error(`recorded residual payload is missing ${key}`);
+    }
+    return value;
+  };
+  const readReference = (
+    key: string,
+  ): { kind: string; id: string; value: JsonValue } => {
+    const reference = asJsonObject(object[key] ?? null);
+    if (reference === null) {
+      throw new Error(`recorded residual payload is missing ${key}`);
+    }
+    return {
+      kind: String(reference["kind"]),
+      id: String(reference["id"]),
+      value: reference["value"] ?? null,
+    };
+  };
+  const field = asJsonObject(object["field"] ?? null);
+  if (field === null) {
+    throw new Error("recorded residual payload is missing field context");
+  }
+  const magnitude = object["magnitude"];
+
+  return {
+    id: readString("residualId"),
+    kind: readString("kind") as Residual["kind"],
+    ...(typeof object["baselineId"] === "string"
+      ? { baselineId: object["baselineId"] }
+      : {}),
+    ...(object["baseline"] === undefined
+      ? {}
+      : { baseline: readReference("baseline") }),
+    observed: readReference("observed"),
+    field: {
+      ...(typeof field["taskType"] === "string"
+        ? { taskType: field["taskType"] }
+        : {}),
+      externalVerification: String(field["externalVerification"]) as never,
+      consequence: String(field["consequence"]) as never,
+      reversibility: String(field["reversibility"]) as never,
+      feedbackLatency: String(field["feedbackLatency"]) as never,
+      actors: (Array.isArray(field["actors"]) ? field["actors"] : []).map(
+        (actor) => {
+          const item = asJsonObject(actor as JsonValue);
+          if (item === null) throw new Error("residual actor is not an object");
+          return { type: String(item["type"]), id: String(item["id"]) };
+        },
+      ) as never,
+      explicitRules: (Array.isArray(field["explicitRules"])
+        ? field["explicitRules"]
+        : []
+      ).map((rule) => {
+        const item = asJsonObject(rule as JsonValue);
+        if (item === null) throw new Error("residual rule is not an object");
+        return {
+          id: String(item["id"]),
+          ...(Array.isArray(item["requiredEventTypes"])
+            ? {
+                requiredEventTypes: (
+                  item["requiredEventTypes"] as JsonValue[]
+                ).map(String),
+              }
+            : {}),
+          ...(Array.isArray(item["requiredCheckpoints"])
+            ? {
+                requiredCheckpoints: (
+                  item["requiredCheckpoints"] as JsonValue[]
+                ).map(String),
+              }
+            : {}),
+        };
+      }) as never,
+    },
+    ...(typeof magnitude === "number" ? { magnitude } : {}),
+    confidence: Number(object["confidence"] ?? 0),
+    persistence: String(object["persistence"]) as Residual["persistence"],
+    effect: String(object["effect"]) as Residual["effect"],
+    evidence: (Array.isArray(object["evidence"]) ? object["evidence"] : []).map(
+      (item) => {
+        const reference = asJsonObject(item as JsonValue);
+        if (reference === null) {
+          throw new Error("residual evidence is not an object");
+        }
+        return {
+          ...(typeof reference["eventId"] === "string"
+            ? { eventId: reference["eventId"] }
+            : {}),
+          ...(typeof reference["assetId"] === "string"
+            ? { assetId: reference["assetId"] }
+            : {}),
+          ...(typeof reference["artifactHash"] === "string"
+            ? { artifactHash: reference["artifactHash"] }
+            : {}),
+          origin: String(reference["origin"]) as EvidenceOrigin,
+          ...(typeof reference["exposureInfluenced"] === "boolean"
+            ? { exposureInfluenced: reference["exposureInfluenced"] }
+            : {}),
+        };
+      },
+    ),
+    detectedAt: readString("detectedAt"),
+  };
+}
+
 function fieldContextPayload(residual: Residual): JsonObject {
   const field = residual.field;
   return {
@@ -2759,6 +2964,12 @@ export interface LegacyImportApplication {
   appendedEvents: number;
   lastSeq: number;
   report: LegacyMigrationReport;
+  /**
+   * Filled in by the composition root, which catches the core projections up
+   * after a successful import so the derived state does not silently lag the
+   * records that were just written.
+   */
+  projectionCatchUp?: CatchUpResult[];
 }
 
 export class LegacyImportError extends Error {
@@ -2783,11 +2994,17 @@ export class LegacyImportError extends Error {
  * before any record is written. Imported events are registered under the
  * confined importer writer, never under the caller's identity.
  */
+/** Phase 5 adds no constructor options beyond the Phase 4 set. */
+export type Phase5RuntimeOptions = Phase4RuntimeOptions;
+
 export class Phase5Runtime extends Phase4Runtime {
   #phase5Ports: Phase5RuntimePorts;
 
-  constructor(phase5Ports: Phase5RuntimePorts) {
-    super(phase5Ports);
+  constructor(
+    phase5Ports: Phase5RuntimePorts,
+    options: Phase5RuntimeOptions = {},
+  ) {
+    super(phase5Ports, options);
     this.#phase5Ports = phase5Ports;
   }
 
@@ -2952,6 +3169,12 @@ export interface RuntimeCompositionOptions {
   ids?: IdGenerator;
   lockPath?: string;
   lock?: WriterOwnershipLock;
+  /**
+   * Operator-supplied promotion thresholds. Passed through to the asset
+   * policy; omitted values keep the package default rather than a value this
+   * boundary invents.
+   */
+  promotionPolicy?: AssetPromotionPolicyConfig;
 }
 
 export interface DoctorCheck {
@@ -2987,15 +3210,20 @@ export class RuntimeCompositionRoot {
       new WriterOwnershipLock(
         options.lockPath ?? `${options.store.filename}.writer.lock`,
       );
-    const runtime = new Phase5Runtime({
-      events: this.#store,
-      projections: this.#store,
-      clock: this.#clock,
-      ids: options.ids ?? { next: () => randomUUID() },
-      actor: freezeActor(options.actor),
-      writer: this.#writer,
-      legacy: this.#store,
-    });
+    const runtime = new Phase5Runtime(
+      {
+        events: this.#store,
+        projections: this.#store,
+        clock: this.#clock,
+        ids: options.ids ?? { next: () => randomUUID() },
+        actor: freezeActor(options.actor),
+        writer: this.#writer,
+        legacy: this.#store,
+      },
+      options.promotionPolicy === undefined
+        ? {}
+        : { promotionPolicy: options.promotionPolicy },
+    );
     this.#runtime = new Proxy(runtime, {
       get: (target, property) => {
         const value = Reflect.get(target, property, target);
@@ -3160,7 +3388,15 @@ export class RuntimeCompositionRoot {
   ): LegacyImportApplication {
     this.assertStarted();
     authorizeWriterScope(this.writer, "system.migrate", "legacy import");
-    return this.runtime.applyLegacyImport(request);
+    const application = this.runtime.applyLegacyImport(request);
+    if (!application.inserted) return application;
+    // Mirroring the confirmed-purge behaviour: a use case that appends a batch
+    // of records also brings the derived state forward, rather than leaving a
+    // lag that doctor would immediately, and correctly, report.
+    return {
+      ...application,
+      projectionCatchUp: this.runtime.catchUpCoreProjections(),
+    };
   }
 
   listLegacyImportRuns(): LegacyImportRunRecord[] {
@@ -3191,6 +3427,20 @@ export class RuntimeCompositionRoot {
     this.assertStarted();
     authorizeWriterScope(this.writer, "event.read", "legacy purge scope");
     return this.runtime.legacyImportSessionId(sourceFingerprint);
+  }
+
+  /**
+   * Read one projection's current state. This is a read of derived data: the
+   * ledger remains the source of truth, and a stale projection is reported as
+   * stale rather than silently treated as current.
+   */
+  getProjectionState(projectionName: string): ProjectionStateRecord | null {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "projection read");
+    if (projectionName.length < 1) {
+      throw new Error("projection name is required");
+    }
+    return this.#store.getProjectionState(projectionName);
   }
 
   exportEvents(query: EventQuery = {}): EventRecord[] {
