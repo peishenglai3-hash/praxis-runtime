@@ -2,3 +2,9 @@ node_modules
 dist
 coverage
 pnpm-lock.yaml
+
+# The Legacy fixture is byte-exact on purpose: several anomaly classes it must
+# reproduce are encoding facts (a UTF-8 byte-order mark, a CRLF frontmatter
+# anchor, a truncated NDJSON line). Reformatting it would erase the very
+# conditions the importer is required to detect and report.
+fixtures/legacy

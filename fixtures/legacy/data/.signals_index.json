@@ -1,0 +1,50 @@
+{
+  "signals": [
+    {
+      "id": "sig_20260601_001",
+      "type": "preference",
+      "category": "alpha",
+      "value": "one",
+      "timestamp": "2026-06-01T09:00:00.000Z",
+      "confidence": 0.5,
+      "source": "fixture-skill"
+    },
+    {
+      "id": "sig_20260601_002",
+      "type": "preference",
+      "category": "beta",
+      "value": "two",
+      "timestamp": "2026-06-01T09:01:00.000Z",
+      "confidence": 0.5,
+      "source": "fixture-skill"
+    },
+    {
+      "id": "sig_20260601_005",
+      "type": "rejection",
+      "category": "gamma",
+      "value": "three",
+      "timestamp": "2026-06-01T09:02:00.000Z",
+      "confidence": 0.5,
+      "source": "fixture-skill"
+    },
+    {
+      "id": "sig_20260601_006",
+      "type": "workflow",
+      "category": "delta",
+      "value": "four",
+      "timestamp": "2026-06-01T09:03:00.000Z",
+      "confidence": 0.5,
+      "source": "fixture-skill"
+    },
+    {
+      "id": "sig_20260602_001",
+      "type": "self_reflection",
+      "category": "epsilon",
+      "value": "five",
+      "timestamp": "2026-06-02T09:04:00.000Z",
+      "confidence": 0.5,
+      "source": "fixture-skill"
+    }
+  ],
+  "patterns": []
+}

@@ -31,6 +31,10 @@ import type {
   LedgerSeqGap,
   JsonObject,
   JsonValue,
+  LegacyAnomaly,
+  LegacyMigrationPlan,
+  LegacyMigrationReport,
+  LegacyPrivacyRule,
   ProjectionPersistence,
   ReusableAsset,
   WriterContext,
@@ -39,6 +43,7 @@ import {
   AuthorizationError,
   authorizeHumanControl,
   authorizeWriterScope,
+  legacyImportRunId,
   parseExpectationDefinition,
   parseExpectationRecord,
   parseVerificationResult,
@@ -96,6 +101,10 @@ import type { CatchUpResult, Projection } from "@praxis/state";
 import type {
   BackupManifest,
   BackupOptions,
+  LegacyImportRecordInput,
+  LegacyImportRecordResult,
+  LegacyImportRunRecord,
+  LegacyIntegrityIssue,
   ManagedBackup,
   PurgeCleanupResult,
   PrivacyPurgeOptions,
@@ -103,6 +112,16 @@ import type {
   PrivacyPurgeResult,
   StoreHealth,
 } from "@praxis/store";
+
+import {
+  buildLegacyImportEvents,
+  buildLegacyMigrationPlan,
+  legacyRootLabels,
+  legacySessionId,
+  NodeLegacyFileSystem,
+  writeLegacyArchive,
+} from "./legacy/index.js";
+import type { LegacyFileSystem } from "./legacy/index.js";
 
 export interface ContextExposureTiming {
   occurredAt?: string;
@@ -524,6 +543,14 @@ export interface RuntimeStore
   finalizePendingPurge(writer: WriterContext): PurgeCleanupResult;
   getPurgedSeqRanges(): LedgerSeqGap[];
   getHealth(): StoreHealth;
+  recordLegacyImport(
+    input: LegacyImportRecordInput,
+    writer: WriterContext,
+  ): LegacyImportRecordResult;
+  listLegacyImportRuns(): LegacyImportRunRecord[];
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null;
+  getLegacyAnomalies(runId: string): LegacyAnomaly[];
+  getLegacyIntegrityIssues(): LegacyIntegrityIssue[];
 }
 
 export interface RuntimePrivacyPurgeResult extends PrivacyPurgeResult {
@@ -2673,6 +2700,249 @@ export class WriterOwnershipLock {
   }
 }
 
+/**
+ * The Legacy import boundary. The composition root depends on this contract so
+ * a source-level test store and the packaged SQLite store remain structurally
+ * compatible without exposing the database handle.
+ */
+export interface LegacyImportStore {
+  recordLegacyImport(
+    input: LegacyImportRecordInput,
+    writer: WriterContext,
+  ): LegacyImportRecordResult;
+  listLegacyImportRuns(): LegacyImportRunRecord[];
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null;
+  getLegacyAnomalies(runId: string): LegacyAnomaly[];
+}
+
+export type Phase5RuntimePorts = Phase4RuntimePorts & {
+  legacy: LegacyImportStore;
+};
+
+/**
+ * The frozen writer every imported record is registered under.
+ *
+ * An import writes `legacy.*` events only. The role is confined to that
+ * namespace, so the importer cannot propose, validate or activate an asset —
+ * a first-generation pattern can never reach `validated` or `active` through
+ * the import path.
+ */
+export const legacyImporterWriterContext: WriterContext = Object.freeze({
+  writerId: "system:legacy-importer",
+  kind: "importer",
+  role: "IMPORTER",
+  authn: "system",
+  scopes: Object.freeze([
+    "system.migrate",
+    "event.read",
+  ]) as unknown as WriterContext["scopes"],
+  policyVersion: 1,
+}) as WriterContext;
+
+export interface LegacyImportPlanRequest {
+  roots: string[];
+  privacyRules?: LegacyPrivacyRule[];
+  fileSystem?: LegacyFileSystem;
+}
+
+export interface LegacyImportApplyRequest {
+  plan: LegacyMigrationPlan;
+  /** The hash of the plan the operator actually reviewed. */
+  planHash: string;
+  archiveRoot?: string;
+}
+
+export interface LegacyImportApplication {
+  runId: string;
+  status: LegacyMigrationReport["status"];
+  inserted: boolean;
+  appendedEvents: number;
+  lastSeq: number;
+  report: LegacyMigrationReport;
+}
+
+export class LegacyImportError extends Error {
+  readonly code:
+    | "LEGACY_PLAN_MISMATCH"
+    | "LEGACY_IMPORT_UNCONFIRMED"
+    | "LEGACY_ARCHIVE_UNCONFIGURED";
+
+  constructor(code: LegacyImportError["code"], message: string) {
+    super(message);
+    this.name = "LegacyImportError";
+    this.code = code;
+  }
+}
+
+/**
+ * Phase 5 is the audited Legacy migration use-case boundary.
+ *
+ * A dry run reads the corpus and returns a hashed plan without writing
+ * anything. Applying an import requires the hash of the plan that was
+ * reviewed, so a corpus or rule-set change invalidates the confirmation
+ * before any record is written. Imported events are registered under the
+ * confined importer writer, never under the caller's identity.
+ */
+export class Phase5Runtime extends Phase4Runtime {
+  #phase5Ports: Phase5RuntimePorts;
+
+  constructor(phase5Ports: Phase5RuntimePorts) {
+    super(phase5Ports);
+    this.#phase5Ports = phase5Ports;
+  }
+
+  /**
+   * A `legacy.*` record is only ever the result of a reviewed import. Allowing
+   * a direct append would let a caller record imported material without a run,
+   * an inventory, a corpus fingerprint or an archive, so the generic path is
+   * closed here as well as in the ledger trigger.
+   */
+  override appendEvent(event: EventEnvelope): EventAppendResult {
+    if (event.type.startsWith("legacy.")) {
+      throw new Error(
+        "legacy records must be registered through applyLegacyImport",
+      );
+    }
+    return super.appendEvent(event);
+  }
+
+  planLegacyImport(request: LegacyImportPlanRequest): LegacyMigrationPlan {
+    if (request.roots.length === 0) {
+      throw new LegacyImportError(
+        "LEGACY_PLAN_MISMATCH",
+        "a legacy import plan requires at least one source root",
+      );
+    }
+    return buildLegacyMigrationPlan({
+      roots: request.roots,
+      fileSystem: request.fileSystem ?? new NodeLegacyFileSystem(),
+      ...(request.privacyRules === undefined
+        ? {}
+        : { privacyRules: request.privacyRules }),
+      now: () => new Date(this.nowIso()),
+    });
+  }
+
+  applyLegacyImport(
+    request: LegacyImportApplyRequest,
+  ): LegacyImportApplication {
+    if (request.planHash !== request.plan.planHash) {
+      throw new LegacyImportError(
+        "LEGACY_PLAN_MISMATCH",
+        "the confirmed plan hash does not match the reviewed plan; re-run the dry run",
+      );
+    }
+    if (request.archiveRoot === undefined) {
+      throw new LegacyImportError(
+        "LEGACY_ARCHIVE_UNCONFIGURED",
+        "applying a legacy import requires an archive root outside the repository",
+      );
+    }
+
+    const startedAt = this.nowIso();
+    const archive = writeLegacyArchive({
+      archiveRoot: request.archiveRoot,
+      sourceFingerprint: request.plan.sourceFingerprint,
+      createdAt: startedAt,
+      entries: this.#readArchiveEntries(request.plan),
+    });
+
+    const events = buildLegacyImportEvents({
+      plan: request.plan,
+      actor: { type: "system", id: "legacy-importer" },
+      recordedAt: startedAt,
+      archiveEntryCount: archive.entries.length,
+    });
+
+    const completedAt = this.nowIso();
+    const report: LegacyMigrationReport = {
+      runId: legacyImportRunId(
+        request.plan.sourceFingerprint,
+        request.plan.planHash,
+      ),
+      status: "applied",
+      planHash: request.plan.planHash,
+      sourceFingerprint: request.plan.sourceFingerprint,
+      root: request.plan.root,
+      counts: request.plan.counts,
+      anomalySummary: summariseAnomalies(request.plan.inventory.anomalies),
+      archive,
+      startedAt,
+      completedAt,
+    };
+
+    const recorded = this.#phase5Ports.legacy.recordLegacyImport(
+      {
+        report,
+        inventory: request.plan.inventory.entries,
+        anomalies: request.plan.inventory.anomalies,
+        events,
+      },
+      legacyImporterWriterContext,
+    );
+
+    return {
+      runId: recorded.run.runId,
+      status: recorded.run.status,
+      inserted: recorded.inserted,
+      appendedEvents: recorded.appendedEvents,
+      lastSeq: recorded.lastSeq,
+      report: recorded.run,
+    };
+  }
+
+  listLegacyImportRuns(): LegacyImportRunRecord[] {
+    return this.#phase5Ports.legacy.listLegacyImportRuns();
+  }
+
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null {
+    return this.#phase5Ports.legacy.getLegacyImportRun(runId);
+  }
+
+  getLegacyImportAnomalies(runId: string): LegacyAnomaly[] {
+    return this.#phase5Ports.legacy.getLegacyAnomalies(runId);
+  }
+
+  /** Purge scope for one imported corpus. */
+  legacyImportSessionId(sourceFingerprint: string): string {
+    return legacySessionId(sourceFingerprint);
+  }
+
+  #readArchiveEntries(
+    plan: LegacyMigrationPlan,
+  ): Array<{ relativePath: string; bytes: Uint8Array }> {
+    const fileSystem = new NodeLegacyFileSystem();
+    const roots = plan.root.split(",");
+    const labels = legacyRootLabels(roots);
+    const entries: Array<{ relativePath: string; bytes: Uint8Array }> = [];
+    for (const [index, root] of roots.entries()) {
+      const label = labels[index] ?? `root-${index}`;
+      for (const file of fileSystem.readSourceFiles(root)) {
+        entries.push({
+          relativePath: `${label}/${file.relativePath}`,
+          bytes: file.bytes,
+        });
+      }
+    }
+    return entries;
+  }
+}
+
+function summariseAnomalies(
+  anomalies: readonly LegacyAnomaly[],
+): LegacyMigrationReport["anomalySummary"] {
+  const counts = new Map<LegacyAnomaly["class"], number>();
+  for (const anomaly of anomalies) {
+    counts.set(
+      anomaly.class,
+      (counts.get(anomaly.class) ?? 0) + anomaly.affectedCount,
+    );
+  }
+  return [...counts.entries()]
+    .map(([anomalyClass, count]) => ({ class: anomalyClass, count }))
+    .sort((left, right) => (left.class < right.class ? -1 : 1));
+}
+
 export interface RuntimeCompositionOptions {
   store: RuntimeStore;
   actor: ActorRef;
@@ -2701,7 +2971,7 @@ export class RuntimeCompositionRoot {
   readonly #store: RuntimeStore;
   readonly #lock: WriterOwnershipLock;
   readonly #writer: WriterContext;
-  readonly #runtime: Phase4Runtime;
+  readonly #runtime: Phase5Runtime;
   readonly #mode: RuntimeMode;
   readonly #clock: Clock;
   #started = false;
@@ -2717,13 +2987,14 @@ export class RuntimeCompositionRoot {
       new WriterOwnershipLock(
         options.lockPath ?? `${options.store.filename}.writer.lock`,
       );
-    const runtime = new Phase4Runtime({
+    const runtime = new Phase5Runtime({
       events: this.#store,
       projections: this.#store,
       clock: this.#clock,
       ids: options.ids ?? { next: () => randomUUID() },
       actor: freezeActor(options.actor),
       writer: this.#writer,
+      legacy: this.#store,
     });
     this.#runtime = new Proxy(runtime, {
       get: (target, property) => {
@@ -2741,7 +3012,7 @@ export class RuntimeCompositionRoot {
     return this.#writer;
   }
 
-  get runtime(): Phase4Runtime {
+  get runtime(): Phase5Runtime {
     return this.#runtime;
   }
 
@@ -2862,6 +3133,64 @@ export class RuntimeCompositionRoot {
     this.assertStarted();
     authorizeWriterScope(this.writer, "event.read", "list assets");
     return this.#store.listAssets();
+  }
+
+  /**
+   * Dry run: read the corpus and return a hashed plan. Writes nothing.
+   *
+   * `system.migrate` is required, so an observer or analysis writer cannot use
+   * the importer as a read side channel into an arbitrary directory.
+   */
+  planLegacyImport(request: LegacyImportPlanRequest): LegacyMigrationPlan {
+    this.assertStarted();
+    authorizeWriterScope(
+      this.writer,
+      "system.migrate",
+      "legacy import dry run",
+    );
+    return this.runtime.planLegacyImport(request);
+  }
+
+  /**
+   * Apply a reviewed plan. The confirmed hash must match the plan, which
+   * invalidates a confirmation whenever the corpus or the rule set changed.
+   */
+  applyLegacyImport(
+    request: LegacyImportApplyRequest,
+  ): LegacyImportApplication {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "system.migrate", "legacy import");
+    return this.runtime.applyLegacyImport(request);
+  }
+
+  listLegacyImportRuns(): LegacyImportRunRecord[] {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "list legacy import runs");
+    return this.runtime.listLegacyImportRuns();
+  }
+
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null {
+    this.assertStarted();
+    authorizeWriterScope(
+      this.writer,
+      "event.read",
+      "inspect legacy import run",
+    );
+    if (runId.length < 1) throw new Error("run id is required");
+    return this.runtime.getLegacyImportRun(runId);
+  }
+
+  getLegacyImportAnomalies(runId: string): LegacyAnomaly[] {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "inspect legacy anomalies");
+    if (runId.length < 1) throw new Error("run id is required");
+    return this.runtime.getLegacyImportAnomalies(runId);
+  }
+
+  legacyImportSessionId(sourceFingerprint: string): string {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "legacy purge scope");
+    return this.runtime.legacyImportSessionId(sourceFingerprint);
   }
 
   exportEvents(query: EventQuery = {}): EventRecord[] {
@@ -3024,6 +3353,16 @@ export class RuntimeCompositionRoot {
         details: projection as unknown as Record<string, unknown>,
       });
     }
+    const legacyIssues = this.#store.getLegacyIntegrityIssues();
+    checks.push({
+      name: "legacy-import-integrity",
+      status: legacyIssues.length === 0 ? "pass" : "fail",
+      message:
+        legacyIssues.length === 0
+          ? "imported legacy records are reachable from recorded runs"
+          : "legacy import records and the event ledger disagree",
+      details: { issues: legacyIssues },
+    });
     return {
       status: checks.some((check) => check.status === "fail") ? "fail" : "pass",
       checks,
@@ -3042,3 +3381,21 @@ export class RuntimeCompositionRoot {
     }
   }
 }
+
+// The Legacy scanner is part of the Phase 5 runtime surface: the CLI reads a
+// corpus through it, and tests inject a virtual filesystem through the same
+// port. The raw parse helpers stay internal to the legacy module.
+export {
+  buildLegacyImportEvents,
+  buildLegacyMigrationPlan,
+  classifyArtifact,
+  legacySessionId,
+  NodeLegacyFileSystem,
+  scanLegacySources,
+} from "./legacy/index.js";
+export type {
+  LegacyEventBuildInput,
+  LegacyFileSystem,
+  LegacyScanResult,
+  LegacySourceFile,
+} from "./legacy/index.js";

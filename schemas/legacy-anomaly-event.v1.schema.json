@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/legacy-anomaly-event.v1.schema.json",
+  "title": "Praxis legacy.anomaly payload v1",
+  "description": "An observation about the first-generation corpus rather than about the world. An anomaly records that material is malformed, duplicated, ambiguous, unrecoverable, unmapped or excluded; it never carries a repaired or inferred value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "materialClassification",
+    "sourceFingerprint",
+    "anomalyId",
+    "anomalyClass",
+    "reason",
+    "affectedCount"
+  ],
+  "properties": {
+    "materialClassification": { "const": "declared" },
+    "sourceFingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "anomalyId": { "type": "string", "minLength": 1 },
+    "anomalyClass": {
+      "enum": [
+        "possible_overwrite",
+        "ambiguous_pattern",
+        "source_metadata_conflict",
+        "unrecoverable_field",
+        "cartesian_relation",
+        "parse_error",
+        "encoding_marker",
+        "unmapped_path",
+        "privacy_sensitive"
+      ]
+    },
+    "reason": { "type": "string", "minLength": 1 },
+    "relativePath": { "type": "string", "minLength": 1 },
+    "affectedCount": { "type": "integer", "minimum": 1 },
+    "declaredValue": { "type": "string" }
+  }
+}

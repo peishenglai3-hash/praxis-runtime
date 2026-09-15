@@ -172,6 +172,7 @@ export function requiredScopeForEventType(type: string): PermissionScope {
   if (type.startsWith("privacy.") || type === "history.purge") {
     return "history.purge";
   }
+  if (type.startsWith("legacy.")) return "system.migrate";
   if (type.startsWith("system.")) return "system.migrate";
   return "event.append";
 }

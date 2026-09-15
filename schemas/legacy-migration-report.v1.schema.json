@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/legacy-migration-report.v1.schema.json",
+  "title": "Praxis Legacy migration report v1",
+  "description": "The stored outcome of one import run. It contains counts, anomaly classes, digests and the archive manifest. It deliberately contains no imported record value, so a report can be printed, exported or attached to a gate document without carrying the corpus with it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "runId",
+    "status",
+    "planHash",
+    "sourceFingerprint",
+    "root",
+    "counts",
+    "anomalySummary",
+    "archive",
+    "startedAt",
+    "completedAt"
+  ],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["dry-run", "applied", "already-imported"] },
+    "planHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "sourceFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "root": { "type": "string", "minLength": 1 },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scannedFiles",
+        "signals",
+        "patterns",
+        "graphEdges",
+        "anomalies",
+        "exclusions"
+      ],
+      "properties": {
+        "scannedFiles": { "type": "integer", "minimum": 0 },
+        "signals": { "type": "integer", "minimum": 0 },
+        "patterns": { "type": "integer", "minimum": 0 },
+        "graphEdges": { "type": "integer", "minimum": 0 },
+        "anomalies": { "type": "integer", "minimum": 0 },
+        "exclusions": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "anomalySummary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["class", "count"],
+        "properties": {
+          "class": {
+            "enum": [
+              "possible_overwrite",
+              "ambiguous_pattern",
+              "source_metadata_conflict",
+              "unrecoverable_field",
+              "cartesian_relation",
+              "parse_error",
+              "encoding_marker",
+              "unmapped_path",
+              "privacy_sensitive"
+            ]
+          },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "archive": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "archiveRoot",
+            "createdAt",
+            "sourceFingerprint",
+            "entries"
+          ],
+          "properties": {
+            "archiveRoot": { "type": "string", "minLength": 1 },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+            },
+            "sourceFingerprint": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "relativePath",
+                  "sha256",
+                  "sizeBytes",
+                  "archivedPath"
+                ],
+                "properties": {
+                  "relativePath": { "type": "string", "minLength": 1 },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "sizeBytes": { "type": "integer", "minimum": 0 },
+                  "archivedPath": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    }
+  }
+}
