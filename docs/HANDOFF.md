@@ -99,6 +99,22 @@ The canonical package/runtime target is pnpm `11.19.0` and Node.js
 `.github/workflows/ci.yml`. The CI workflow runs the same `pnpm verify` on
 Ubuntu and Windows. A local Node 24 pass is useful development evidence only.
 
+## Remote governance boundary
+
+- The repository is private and MIT-licensed. Its Git history is protected by
+  ordinary non-force synchronization and immutable commit ancestry, but the
+  current GitHub plan does not provide branch protection for this private
+  repository. Treat `main` as owner-controlled by protocol, not as a
+  server-enforced protected branch.
+- The repository Actions policy currently allows all actions. The checked-in
+  core workflow requests only `contents: read`, uses no provider secrets, and
+  has passed the exact Node 22 gate; workflow changes still require owner
+  review because action tags are an external supply-chain boundary.
+- An external model must work in an owner-created fork, review branch, or
+  pull-request branch and return ordinary commits/patches for review. It must
+  not push directly to `main`, change visibility, alter Actions permissions, or
+  add credentials.
+
 ## Working protocol for an external model
 
 1. Start with a read-only audit and state the exact issue/phase being worked.
