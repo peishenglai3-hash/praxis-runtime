@@ -6,3 +6,8 @@
 # endings or encoding in this directory. This is the same failure class the
 # Windows runner exposed as BP-040, applied deliberately instead of by accident.
 fixtures/legacy/** -text
+
+# Replay fixtures are golden inputs. One JSON step per line is the contract, so
+# the exact bytes are what a reviewer diffs and what the harness replays; Git
+# must not normalise line endings inside them.
+tests/replay/*.ndjson -text
