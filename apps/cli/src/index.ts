@@ -6,7 +6,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -17,11 +17,14 @@ import {
   stableStringify,
   type EventEnvelope,
   type JsonValue,
+  type LegacyMigrationReport,
   type WriterContext,
 } from "@praxis/contracts";
 import {
+  buildLegacyMigrationReport,
   isRuntimeReservedEventType,
   RuntimeCompositionRoot,
+  serialiseLegacyMigrationReport,
   WriterOwnershipLock,
   type RuntimeMode,
 } from "@praxis/runtime";
@@ -939,6 +942,30 @@ function commandHistoryExplain(
   }
 }
 
+/**
+ * Bible issue 085 requires the legacy import to offer a report path. The
+ * document written here is the same one the ledger stores — built by the
+ * runtime, never assembled by the CLI — so this function only decides where
+ * the bytes land. It overwrites, like `export --out`, because re-running an
+ * import of the same corpus produces the same report.
+ */
+function writeLegacyReport(
+  path: string,
+  report: LegacyMigrationReport,
+): string {
+  const target = resolve(path);
+  const directory = dirname(target);
+  if (!existsSync(directory)) {
+    throw new CliError(
+      "CONFIG_ERROR",
+      `report directory does not exist: ${directory}`,
+      { path: target },
+    );
+  }
+  writeFileSync(target, serialiseLegacyMigrationReport(report));
+  return target;
+}
+
 function commandLegacy(
   environment: ResolvedEnvironment,
   parsed: ParsedCommand,
@@ -1087,8 +1114,29 @@ function commandLegacy(
       );
     }
     if (booleanFlag(parsed, "dry-run")) {
+      // The dry run writes no ledger row, so its report exists only if the
+      // operator asked for a path. It is still built by the runtime from the
+      // same construction site as a committed run's report, so the two cannot
+      // describe the same corpus differently.
+      const at = root.clock.now().toISOString();
+      const report = buildLegacyMigrationReport({
+        plan,
+        status: "dry-run",
+        archive: null,
+        startedAt: at,
+        completedAt: at,
+      });
+      const reportPath = optionalFlag(parsed, "report");
+      const written =
+        reportPath === undefined ? null : writeLegacyReport(reportPath, report);
       return {
-        data: { schemaVersion: "1", dryRun: true, plan },
+        data: {
+          schemaVersion: "1",
+          dryRun: true,
+          plan,
+          report,
+          reportPath: written,
+        },
         lines: [
           `corpus fingerprint  ${plan.sourceFingerprint}`,
           `plan hash           ${plan.planHash}`,
@@ -1098,6 +1146,7 @@ function commandLegacy(
           `graph edges         ${plan.counts.graphEdges}`,
           `anomalies           ${plan.counts.anomalies}`,
           `exclusions          ${plan.counts.exclusions}`,
+          ...(written === null ? [] : [`report              ${written}`]),
           "",
           "anomalies:",
           ...plan.inventory.anomalies.map(
@@ -1121,7 +1170,8 @@ function commandLegacy(
     // is the point at which "not inside a Git working tree" has something to
     // protect. The dry run above deliberately does not check: it writes
     // nothing, and refusing it would hide the report that tells an operator
-    // what they are about to do.
+    // what they are about to do. `--archive` is already folded into this root
+    // by `resolveEnvironment`, which is the one place it is read.
     assertOutsideWorkingTree(
       environment.legacyArchiveRoot,
       "legacy archive root",
@@ -1131,14 +1181,28 @@ function commandLegacy(
       planHash: confirmed,
       archiveRoot: environment.legacyArchiveRoot,
     });
+    // Written only after the import returned, so a refused or rolled-back
+    // import cannot leave a report on disk that describes a run which did not
+    // happen. The document is the one the ledger stored, `status` included.
+    const reportPath = optionalFlag(parsed, "report");
+    const written =
+      reportPath === undefined
+        ? null
+        : writeLegacyReport(reportPath, application.report);
     return {
-      data: { schemaVersion: "1", dryRun: false, application },
+      data: {
+        schemaVersion: "1",
+        dryRun: false,
+        application,
+        reportPath: written,
+      },
       lines: [
         `status              ${application.status}`,
         `run                 ${application.runId}`,
         `events appended     ${application.appendedEvents}`,
         `last seq            ${application.lastSeq}`,
         `archive             ${environment.legacyArchiveRoot}`,
+        ...(written === null ? [] : [`report              ${written}`]),
         ...(application.planDiffersFromRecorded
           ? [
               "note                this corpus is already in the ledger under a different plan; nothing was written",
@@ -1574,8 +1638,8 @@ export function usageText(): string {
     "  praxis reflection run --residual <eventId> [--evidence <ids>]",
     "  praxis asset list | inspect <id> | contest|disable|restore|fork|activate <id> --reason <r>",
     "  praxis history explain <event-or-asset id>",
-    "  praxis legacy import <path> --dry-run",
-    "  praxis legacy import <path> --confirm --plan-hash <sha256> [--archive <dir>]",
+    "  praxis legacy import <path> --dry-run [--report <path>]",
+    "  praxis legacy import <path> --confirm --plan-hash <sha256> [--archive <dir>] [--report <path>]",
     "  praxis legacy runs | praxis legacy anomalies <runId>",
     "  praxis legacy patterns [--limit <n>] | praxis legacy pattern <eventId>",
     "  praxis legacy convert <patternEventId> --asset-id <id> --reason <text>",

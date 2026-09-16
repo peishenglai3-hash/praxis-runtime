@@ -35,6 +35,12 @@ export {
   type ParsedFrontmatter,
 } from "./parse.js";
 export {
+  buildLegacyMigrationReport,
+  serialiseLegacyMigrationReport,
+  summariseLegacyAnomalies,
+  type LegacyMigrationReportInput,
+} from "./report.js";
+export {
   buildLegacyMigrationPlan,
   classifyArtifact,
   scanLegacySources,

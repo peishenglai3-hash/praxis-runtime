@@ -44,7 +44,6 @@ import {
   AuthorizationError,
   authorizeHumanControl,
   authorizeWriterScope,
-  legacyImportRunId,
   parseExpectationDefinition,
   parseExpectationRecord,
   parseVerificationResult,
@@ -118,6 +117,7 @@ import type {
 import {
   buildLegacyImportEvents,
   buildLegacyMigrationPlan,
+  buildLegacyMigrationReport,
   legacyRootLabels,
   legacySessionId,
   NodeLegacyFileSystem,
@@ -3087,21 +3087,13 @@ export class Phase5Runtime extends Phase4Runtime {
     });
 
     const completedAt = this.nowIso();
-    const report: LegacyMigrationReport = {
-      runId: legacyImportRunId(
-        request.plan.sourceFingerprint,
-        request.plan.planHash,
-      ),
+    const report = buildLegacyMigrationReport({
+      plan: request.plan,
       status: "applied",
-      planHash: request.plan.planHash,
-      sourceFingerprint: request.plan.sourceFingerprint,
-      root: request.plan.root,
-      counts: request.plan.counts,
-      anomalySummary: summariseAnomalies(request.plan.inventory.anomalies),
       archive,
       startedAt,
       completedAt,
-    };
+    });
 
     const recorded = this.#phase5Ports.legacy.recordLegacyImport(
       {
@@ -3172,21 +3164,6 @@ export class Phase5Runtime extends Phase4Runtime {
     }
     return entries;
   }
-}
-
-function summariseAnomalies(
-  anomalies: readonly LegacyAnomaly[],
-): LegacyMigrationReport["anomalySummary"] {
-  const counts = new Map<LegacyAnomaly["class"], number>();
-  for (const anomaly of anomalies) {
-    counts.set(
-      anomaly.class,
-      (counts.get(anomaly.class) ?? 0) + anomaly.affectedCount,
-    );
-  }
-  return [...counts.entries()]
-    .map(([anomalyClass, count]) => ({ class: anomalyClass, count }))
-    .sort((left, right) => (left.class < right.class ? -1 : 1));
 }
 
 export interface RuntimeCompositionOptions {
@@ -3792,14 +3769,18 @@ export class RuntimeCompositionRoot {
 export {
   buildLegacyImportEvents,
   buildLegacyMigrationPlan,
+  buildLegacyMigrationReport,
   classifyArtifact,
   legacySessionId,
   NodeLegacyFileSystem,
   scanLegacySources,
+  serialiseLegacyMigrationReport,
+  summariseLegacyAnomalies,
 } from "./legacy/index.js";
 export type {
   LegacyEventBuildInput,
   LegacyFileSystem,
+  LegacyMigrationReportInput,
   LegacyScanResult,
   LegacySourceFile,
 } from "./legacy/index.js";

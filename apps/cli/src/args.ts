@@ -101,7 +101,7 @@ export const flagsByCommand: Record<string, readonly string[]> = {
   "asset fork": ["reason", "at", "new-id"],
   "asset activate": ["reason", "at", "review", "human-confirmed"],
   "history explain": [],
-  "legacy import": ["dry-run", "confirm", "plan-hash", "archive"],
+  "legacy import": ["dry-run", "confirm", "plan-hash", "archive", "report"],
   "legacy runs": [],
   "legacy anomalies": [],
   "legacy patterns": ["limit"],

@@ -1,4 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -417,5 +424,211 @@ describe("praxis command line", () => {
       (check) => check.status === "fail",
     );
     expect(failing.map((check) => check.name)).toContain("projection:project");
+  });
+
+  /**
+   * ISSUE-085 asks the legacy command line for a report path. The report is the
+   * document the ledger stores — counts, anomaly classes and digests — so the
+   * assertions below check both that it exists and that it is that document
+   * rather than a dump of the corpus.
+   */
+  describe("ISSUE-085 — the legacy migration report path", () => {
+    const reportSchema = JSON.parse(
+      readFileSync(
+        resolve(
+          fileURLToPath(
+            new URL(
+              "../../schemas/legacy-migration-report.v1.schema.json",
+              import.meta.url,
+            ),
+          ),
+        ),
+        "utf8",
+      ),
+    ) as { properties: Record<string, unknown>; required: string[] };
+
+    it("writes a dry-run report, and a dry run still writes nothing to the ledger", () => {
+      const cwd = workdir();
+      invoke(["init"], cwd);
+      const reportPath = join(cwd, "dry-run-report.json");
+
+      const result = invoke(
+        [
+          "legacy",
+          "import",
+          fixtureData,
+          "--dry-run",
+          "--report",
+          reportPath,
+          "--json",
+        ],
+        cwd,
+      );
+      expect(result.code).toBe(0);
+
+      const document = JSON.parse(result.stdout) as {
+        result: {
+          dryRun: boolean;
+          reportPath: string | null;
+          report: Record<string, unknown>;
+        };
+      };
+      expect(document.result.reportPath).toBe(resolve(reportPath));
+
+      // The file and the machine document are the same document, so a wrapper
+      // script and an operator reading the file are looking at one thing.
+      const text = readFileSync(reportPath, "utf8");
+      const report = JSON.parse(text) as Record<string, unknown>;
+      expect(report).toEqual(document.result.report);
+      expect(report["status"]).toBe("dry-run");
+      expect(report["archive"]).toBeNull();
+      expect(report["runId"]).toMatch(/^legacy-run:[a-f0-9]{64}:[a-f0-9]{64}$/);
+
+      // The property set is the schema's, so the report cannot quietly grow a
+      // field carrying the material it is supposed to summarise.
+      expect(Object.keys(report).sort()).toEqual(
+        Object.keys(reportSchema.properties).sort(),
+      );
+      for (const field of reportSchema.required) {
+        expect(Object.hasOwn(report, field)).toBe(true);
+      }
+
+      // A pattern's declared trigger and action are record values. The report
+      // describes the corpus; it must not travel with it.
+      expect(text).not.toContain("alpha trigger");
+      expect(text).not.toContain("beta action");
+
+      // `init` records one event. A dry run appends no second one.
+      const events = invoke(["event", "list", "--limit", "9", "--json"], cwd);
+      const listed = JSON.parse(events.stdout) as {
+        result: { events: unknown[] };
+      };
+      expect(listed.result.events).toHaveLength(1);
+    });
+
+    it("writes the applied report, honours --archive, and stays stable when re-run", () => {
+      const cwd = workdir();
+      invoke(["init"], cwd);
+      const firstReport = join(cwd, "report-applied.json");
+      const secondReport = join(cwd, "report-repeat.json");
+      const archiveRoot = join(cwd, "explicit-archive");
+
+      const dryRun = invoke(
+        ["legacy", "import", fixtureData, "--dry-run", "--json"],
+        cwd,
+      );
+      const planHash = (
+        JSON.parse(dryRun.stdout) as { result: { plan: { planHash: string } } }
+      ).result.plan.planHash;
+
+      const applied = invoke(
+        [
+          "legacy",
+          "import",
+          fixtureData,
+          "--confirm",
+          "--plan-hash",
+          planHash,
+          "--archive",
+          archiveRoot,
+          "--report",
+          firstReport,
+          "--json",
+        ],
+        cwd,
+      );
+      expect(applied.code).toBe(0);
+      const report = JSON.parse(readFileSync(firstReport, "utf8")) as {
+        status: string;
+        planHash: string;
+        sourceFingerprint: string;
+        counts: Record<string, number>;
+        anomalySummary: unknown;
+        archive: {
+          archiveRoot: string;
+          entries: Array<{ relativePath: string; sha256: string }>;
+        } | null;
+      };
+      expect(report.status).toBe("applied");
+      expect(report.archive?.entries.length ?? 0).toBeGreaterThan(0);
+      // The report records where the archive actually went, so a report that
+      // named the configured default while `--archive` pointed elsewhere would
+      // be caught here.
+      expect(report.archive?.archiveRoot).toBe(resolve(archiveRoot));
+      expect(existsSync(archiveRoot)).toBe(true);
+
+      // Re-importing the same corpus appends nothing, and the report says so
+      // rather than claiming a second application.
+      const again = invoke(
+        [
+          "legacy",
+          "import",
+          fixtureData,
+          "--confirm",
+          "--plan-hash",
+          planHash,
+          "--archive",
+          archiveRoot,
+          "--report",
+          secondReport,
+          "--json",
+        ],
+        cwd,
+      );
+      expect(again.code).toBe(0);
+      const repeat = JSON.parse(readFileSync(secondReport, "utf8")) as {
+        status: string;
+        planHash: string;
+        sourceFingerprint: string;
+        counts: Record<string, number>;
+        anomalySummary: unknown;
+        archive: {
+          entries: Array<{ relativePath: string; sha256: string }>;
+        } | null;
+      };
+      expect(repeat.status).toBe("already-imported");
+      expect(repeat.sourceFingerprint).toBe(report.sourceFingerprint);
+      expect(repeat.planHash).toBe(report.planHash);
+      expect(repeat.counts).toEqual(report.counts);
+      expect(repeat.anomalySummary).toEqual(report.anomalySummary);
+      // The archive is idempotent by digest, so the second run describes the
+      // same bytes even though its timestamps differ.
+      expect(
+        repeat.archive?.entries.map((entry) => [
+          entry.relativePath,
+          entry.sha256,
+        ]),
+      ).toEqual(
+        report.archive?.entries.map((entry) => [
+          entry.relativePath,
+          entry.sha256,
+        ]),
+      );
+    });
+
+    it("refuses a report path whose directory does not exist instead of writing nothing quietly", () => {
+      const cwd = workdir();
+      invoke(["init"], cwd);
+      const missing = join(cwd, "no-such-directory", "report.json");
+
+      const result = invoke(
+        [
+          "legacy",
+          "import",
+          fixtureData,
+          "--dry-run",
+          "--report",
+          missing,
+          "--json",
+        ],
+        cwd,
+      );
+      expect(result.code).toBe(3);
+      const document = JSON.parse(result.stderr) as {
+        error: { code: string };
+      };
+      expect(document.error.code).toBe("CONFIG_ERROR");
+      expect(existsSync(missing)).toBe(false);
+    });
   });
 });
