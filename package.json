@@ -30,7 +30,17 @@
     "phase5:schemas": "node scripts/assert-phase5-schemas.mjs",
     "phase5:scenario": "node scripts/phase5-legacy.mjs",
     "fixture:legacy": "node scripts/generate-legacy-fixture.mjs",
-    "verify": "pnpm format:check && pnpm lint && pnpm workspace:deps && pnpm boundaries && pnpm boundaries:fixture && pnpm boundaries:negative-fixture && pnpm typecheck && pnpm test && pnpm build && pnpm phase3:schemas && pnpm phase5:schemas && pnpm phase1:concurrency && pnpm phase1:crash && pnpm phase1:throughput && pnpm phase2:scenario && pnpm phase3:scenario && pnpm phase35:scenario && pnpm phase4:scenario && pnpm phase5:scenario && pnpm phase5:cli",
+    "verify:runtime": "node scripts/assert-runtime-pins.mjs",
+    "verify:deps": "node scripts/assert-workspace-deps.mjs",
+    "verify:lint": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm boundaries:fixture && pnpm boundaries:negative-fixture",
+    "verify:typecheck": "pnpm typecheck && pnpm phase3:schemas && pnpm phase5:schemas",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration tests/smoke.test.ts",
+    "test:replay": "vitest run tests/replay",
+    "test:regression": "vitest run tests/regression",
+    "smoke:cli": "pnpm phase1:concurrency && pnpm phase1:crash && pnpm phase1:throughput && pnpm phase2:scenario && pnpm phase3:scenario && pnpm phase4:scenario && pnpm phase5:scenario && pnpm phase5:cli",
+    "smoke:daemon": "pnpm phase35:scenario && node scripts/daemon-smoke.mjs",
+    "verify": "pnpm verify:runtime && pnpm verify:deps && pnpm verify:lint && pnpm verify:typecheck && pnpm test:unit && pnpm test:integration && pnpm test:replay && pnpm test:regression && pnpm build && pnpm smoke:cli && pnpm smoke:daemon",
     "phase5:cli": "node scripts/phase5-cli.mjs"
   },
   "devDependencies": {
