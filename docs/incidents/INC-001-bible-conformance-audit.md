@@ -334,3 +334,28 @@ distinction is what makes this recovery tractable without a rollback.
    event-type string literals; a type appearing only in docs is not thereby
    implemented, and the audit records the occurrence counts rather than a
    judgement per type.
+
+## 12. Corrections from the P6-R0 audit and the P5-OPEN repair (2026-09-16)
+
+The recovery gate was written from this audit, so the audit's errors propagated
+into the gate. The P6-R0 read-only audit re-derived every phase status from the
+tree rather than carrying wording forward, and the repair that followed
+corrected the following. They are recorded here rather than edited in place,
+because the value of this document is that it shows what the audit actually
+concluded at the time.
+
+| #   | What this audit concluded                                                                                                                                                                            | What was true                                                                                                                                                      | Where it went                                                                                                                              |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | §8's ASYNC-01~04 row treated the Correction Pack §3.7 requirement as satisfiable by the scenarios existing in the integration layer, and the recovery gate then recorded it as "closed structurally" | §3.7 is titled 「四个必须加入 tests/replay 的异步 fixture」 and Gate D requires 「ASYNC-01~04 replay 全绿」. Creating the directory is not delivering the fixtures | `BP-052`; fixed — four recorded streams with golden blocks now live in `tests/replay/`                                                     |
+| 2   | §10's roll-up did not carry the CI evidence forward past `75b5d23`                                                                                                                                   | Runs `34979980405` (`19ea305`) and `34981015312` (`15f6e2f`) also passed on both runners                                                                           | `BP-053`; corrected in the gate                                                                                                            |
+| 3   | Golden Fixture 01 was classified as a Phase 6 blocker in the gate's §12                                                                                                                              | Bible §15/EPIC-010 never names it; §18 criterion 11 makes it an **Alpha exit** blocker                                                                             | `BP-054`; registered as an `RFC MISMATCH`                                                                                                  |
+| 4   | §8's event-taxonomy divergence was recorded as a Medium finding inside this document only                                                                                                            | INV-10 requires a structural departure to be an `RFC MISMATCH` with a decision owner, not audit prose                                                              | `RFC MISMATCH: EVENT_TAXONOMY_VS_5_4`                                                                                                      |
+| 5   | §9.1's doctor finding was recorded as a gate Medium                                                                                                                                                  | Issue 081 names `cursors` and `context` in its acceptance criterion. That is an unmet acceptance condition for Phase 5, not a coverage note                        | `RFC MISMATCH: DOCTOR_SCOPE_VS_081`; Phase 5 gate status set to `PARTIAL`                                                                  |
+| 6   | no security or path scan was performed                                                                                                                                                               | `docs/SOURCE-MANIFEST.md` exposes the owner's local absolute paths, Windows username and personal directory names, and the repository is PUBLIC                    | `BP-055` records the failed scan pattern; `BP-056` and `RFC MISMATCH: REPOSITORY_VISIBILITY_VS_FROZEN_DECISION` record the visibility fact |
+
+**Two of these are the same failure as INC-001 itself.** Items 1 and 4 are
+cases where a requirement was satisfied in prose rather than in the artefact the
+requirement named — a directory instead of the fixtures, audit commentary
+instead of a registered mismatch. That the audit written to correct INC-001
+reproduced the pattern twice is the strongest available evidence for why the
+P6-R0 pass had to re-derive rather than re-read.

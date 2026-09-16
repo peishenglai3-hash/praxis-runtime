@@ -1,8 +1,19 @@
 # Praxis Runtime — External Agent Handoff
 
-**Handoff target:** private GitHub repository
-
+**Handoff target:** GitHub repository
 `https://github.com/peishenglai3-hash/praxis-runtime`
+
+> **Visibility correction, 2026-09-16.** This document, the README, the phase
+> gates and the INC-001 recovery all described this repository as **private**.
+> It is not: `gh repo view` reports `visibility: PUBLIC`, `isPrivate: false`,
+> created `2026-09-14T02:28:27Z`. It has been publicly readable since it
+> existed, and everything on `origin/main` is public. The audit of that tree
+> found no credential, no `.env`, no database file, no raw chat and no DOCX
+> body, and none of those paths was ever committed; `docs/SOURCE-MANIFEST.md`
+> does expose the owner's local absolute paths and personal directory names.
+> No change was made — the visibility decision belongs to the owner. See
+> `BP-056` in [`断点记录.md`](./%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). Until
+> that decision is made, treat every push as **publishing**.
 
 **Owner:** Lai Peisheng
 
@@ -17,8 +28,9 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 
 ## Current checkpoint
 
-- **Phase 5.5 / INC-001 recovery is complete.** An incident was opened after it
-  was established that Phase 5 had been implemented without the Bible being
+- **Phase 5.5 / INC-001 recovery is complete, and the P5-OPEN baseline repair
+  followed.** The incident was opened after it was established that Phase 5 had
+  been implemented without the Bible being
   read in full, and against a constraint set missing one of the three author
   documents. The recovery read every authoritative document, audited the
   repository against the Bible requirement by requirement, and repaired. Read
@@ -32,15 +44,17 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 - Phase 5 / Bible `EPIC-008` and `EPIC-009` is implemented and locally verified
   within the declared local capability boundary: audited Legacy migration plus
   command-line, diagnostics and operational evidence. `pnpm verify` passes
-  187/187 tests across 21 files, plus the Phase 1-5 scenarios, including a
+  205/205 tests across 23 files, plus the Phase 1-5 scenarios, including a
   four-process concurrent import and a real-process command-line scenario. No
   exact Node `22.13.0` runner evidence exists for this checkpoint yet, so it is
-  a local slice rather than a closed phase gate. Entry points:
+  a local slice rather than a closed phase gate. The phase is `PARTIAL`: issue
+  081's `cursors` and `context` doctor scope is uncovered, by owner decision.
+  Entry points:
   `docs/PHASE-5-GATE.md`, `docs/ADR/ADR-0012-phase5-legacy-migration.md`,
   `docs/ADR/ADR-0013-phase5-cli-diagnostics.md`, and
   `docs/migration/LEGACY-FIELD-MAP.md`. The Phase 5 review round and the three
   boundary findings it escalated (`BP-047` fixed by owner decision, `BP-048`
-  avoided, `BP-049` open) are set out in the gate document.
+  avoided, `BP-049` closed by the recovery) are set out in the gate document.
 - Phase 4 / Bible `EPIC-007` Reusable Assets is implemented and verified within
   the declared local capability boundary.
 - Gates A–D are `PASS` within that boundary. GitHub Actions run
@@ -125,11 +139,11 @@ Ubuntu and Windows. A local Node 24 pass is useful development evidence only.
 
 ## Remote governance boundary
 
-- The repository is private and MIT-licensed. Its Git history is protected by
-  ordinary non-force synchronization and immutable commit ancestry, but the
-  current GitHub plan does not provide branch protection for this private
-  repository. Treat `main` as owner-controlled by protocol, not as a
-  server-enforced protected branch.
+- The repository is **MIT-licensed and, as of 2026-09-16, verified PUBLIC** —
+  see the visibility correction at the top of this document. Its Git history is
+  protected by ordinary non-force synchronization and immutable commit
+  ancestry. Treat `main` as owner-controlled by protocol rather than as a
+  server-enforced protected branch, and treat every push as publishing.
 - The repository Actions policy currently allows all actions. The checked-in
   core workflow requests only `contents: read`, uses no provider secrets, and
   has passed the exact Node 22 gate; workflow changes still require owner

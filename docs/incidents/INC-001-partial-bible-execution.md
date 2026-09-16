@@ -152,3 +152,36 @@ In summary:
 does not substitute for reading the controlling document, and an audit whose
 checklist was derived from an unread source inherits that source's gaps. Phase
 gates must cite the Bible by section and line, not by paraphrase.
+
+## 9. Follow-up — the recovery repeated the pattern twice (2026-09-16)
+
+The P6-R0 read-only audit re-derived every phase status from the tree at
+`8bc8f95` instead of re-reading the recovery gate, and found that the audit
+written to correct this incident had reproduced its failure mode twice:
+
+- **A requirement satisfied in prose instead of in the artefact it named.**
+  Correction Pack §3.7 is titled 「四个必须加入 tests/replay 的异步 fixture」;
+  the gate recorded it as "closed structurally" because the _directory_ had
+  been created. The fixtures were still not in it. `BP-052`.
+- **A structural departure carried as commentary instead of registered.**
+  Bible §5.4's event taxonomy diverges from the implementation in nine names;
+  that was recorded as a Medium finding inside an audit document rather than as
+  an `RFC MISMATCH` with a decision owner, which is what INV-10 requires.
+  `RFC MISMATCH: EVENT_TAXONOMY_VS_5_4`.
+
+Both are this incident's own root cause in miniature: **the plan was satisfied
+in the document that described the work rather than in the work.** The recovery
+also understated existing CI evidence and mis-stated which gate Golden Fixture
+01 blocks (`BP-053`, `BP-054`), and its first audit of the tree for secrets and
+local paths reported clean from a pattern that could not match (`BP-055`).
+
+The conclusion section 8 draws is therefore not sufficient on its own. Reading
+the controlling document is necessary and was done; the second requirement is
+that **the evidence for a claim be the artefact the claim names**, checkable by
+someone who does not trust the prose. The frozen `pnpm verify` order, the
+recorded replay fixtures and the requirement-by-requirement matrix are what
+that looks like.
+
+Separately, `BP-056`: the repository is PUBLIC while this document, the gate,
+the README and the handoff all said private. The visibility decision belongs to
+the owner and no action was taken.

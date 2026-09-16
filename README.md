@@ -217,7 +217,7 @@ bounded implementation slice. This is not a production-readiness claim:
   every diagnostic goes to stderr;
 - `praxis.config.json` is versioned, strict and secret-free; `doctor` gained a
   config check, a legacy-import integrity check and the migration version;
-- `pnpm verify` passes 187/187 tests across 21 files plus the Phase 1-5
+- `pnpm verify` passes 205/205 tests across 23 files plus the Phase 1-5
   scenarios, including a four-process concurrent import and a real-process
   command-line scenario in which doctor has to locate two deliberately injected
   faults.
@@ -249,6 +249,15 @@ set that was missing one of the three author documents:
   projection;
 - Golden Fixture 01 is `WAITING_FOR_AUTHOR_SOURCE`. It is author history and
   must not be synthesised.
+
+**P5-OPEN** then followed: the ISSUE-085 report path was closed
+(`praxis legacy import ... --report <path>`), the four `ASYNC-01~04` fixtures
+the Correction Pack requires in `tests/replay/` were recorded, and the
+recovery's own gate was corrected where it had overstated a closure, understated
+the existing CI evidence, or named the wrong gate for Golden Fixture 01
+(`BP-052`–`BP-054`). Phase 5 remains `PARTIAL`: issue 081's `cursors` and
+`context` doctor scope is still uncovered, by owner decision. `pnpm verify`
+passes 205 tests across 23 files.
 
 The repository is synchronized to the private GitHub handoff target, and the
 exact remote CI gate is recorded above. `VACUUM INTO` remains the backup path
@@ -290,3 +299,14 @@ When implementation and the Bible diverge, stop structural expansion and record 
 This project is released under the MIT License. See [`LICENSE`](./LICENSE).
 
 The intended public release comes after the implementation and verification gates are complete. Until then, the repository may remain private; privacy, provenance, credentials, and responsibility are engineering conditions, not postscript details.
+
+**Visibility correction, 2026-09-16.** The sentence above, and the several
+places in this README and in `docs/HANDOFF.md` that describe a "private
+handoff", were wrong about the fact. `gh repo view` reports this repository as
+`visibility: PUBLIC`, created `2026-09-14T02:28:27Z`. It has been publicly
+readable since it existed. The audit found no credential, no `.env`, no
+database file, no raw chat and no DOCX body in the published history, and none
+of those paths was ever committed; `docs/SOURCE-MANIFEST.md` does expose the
+owner's local absolute paths and personal directory names. No change was made,
+because the visibility decision belongs to the owner. See `BP-056` in
+[`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md).
