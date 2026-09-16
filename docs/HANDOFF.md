@@ -20,7 +20,7 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 - Phase 5 / Bible `EPIC-008` and `EPIC-009` is implemented and locally verified
   within the declared local capability boundary: audited Legacy migration plus
   command-line, diagnostics and operational evidence. `pnpm verify` passes
-  141/141 tests across 18 files, plus the Phase 1-5 scenarios, including a
+  145/145 tests across 18 files, plus the Phase 1-5 scenarios, including a
   four-process concurrent import and a real-process command-line scenario. No
   exact Node `22.13.0` runner evidence exists for this checkpoint yet, so it is
   a local slice rather than a closed phase gate. Entry points:

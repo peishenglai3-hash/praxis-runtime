@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -96,7 +96,12 @@ function resolveEnvironment(
       env["PRAXIS_LEGACY_ARCHIVE"] ??
       join(dataDir, "legacy-archive"),
   );
-  assertOutsideWorkingTree(legacyArchiveRoot, "legacy archive root");
+  // The working-tree rule is about the archive *write*, not about resolving a
+  // path. Enforcing it here made every command whose cwd sits inside a Git
+  // working tree fail — including `doctor`, whose whole job is to run when
+  // something is wrong — and the repository this ships in is itself such a
+  // tree. The rule is enforced where the archive is actually written; see
+  // `commandLegacyImport`.
 
   const actor = {
     type: config.actor?.type ?? ("human" as const),
@@ -428,8 +433,12 @@ function commandEvent(
         payload: payload as JsonValue,
         evidence: [
           {
-            artifactHash:
-              optionalFlag(parsed, "artifact-hash") ?? "0".repeat(64),
+            // A placeholder digest is indistinguishable from a real one once
+            // it is in the ledger, so an append that has no artifact to cite
+            // is refused rather than given sixty-four zeroes. This is the same
+            // rule `legacy/events.ts` applies when an anomaly cannot cite a
+            // real artifact; see BP-050.
+            artifactHash: requireFlag(parsed, "artifact-hash"),
             origin: "declared",
           },
         ],
@@ -963,6 +972,15 @@ function commandLegacy(
       );
     }
     const confirmed = requireFlag(parsed, "plan-hash");
+    // A confirmed import is the point at which the archive is written, so it
+    // is the point at which "not inside a Git working tree" has something to
+    // protect. The dry run above deliberately does not check: it writes
+    // nothing, and refusing it would hide the report that tells an operator
+    // what they are about to do.
+    assertOutsideWorkingTree(
+      environment.legacyArchiveRoot,
+      "legacy archive root",
+    );
     const application = root.applyLegacyImport({
       plan,
       planHash: confirmed,
@@ -1067,13 +1085,21 @@ function commandExport(
       exportedAt: root.clock.now().toISOString(),
       eventCount: records.length,
       lastSeq: root.getHealth().lastSeq,
-      digest: stableStringify(
-        records.map((record) => ({
-          seq: record.seq,
-          id: record.id,
-          contentHash: record.contentHash,
-        })) as unknown as JsonValue,
-      ).length,
+      // The manifest's digest is what makes the export checkable, so it is a
+      // SHA-256 over the exported identity list. It previously held
+      // `stableStringify(...).length` — a character count, which a consumer
+      // verifying against it would have compared against nothing. See BP-050.
+      digest: createHash("sha256")
+        .update(
+          stableStringify(
+            records.map((record) => ({
+              seq: record.seq,
+              id: record.id,
+              contentHash: record.contentHash,
+            })) as unknown as JsonValue,
+          ),
+        )
+        .digest("hex"),
     };
     const out = optionalFlag(parsed, "out");
     if (out !== undefined) {

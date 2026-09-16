@@ -38,6 +38,7 @@ export {
   buildLegacyMigrationPlan,
   classifyArtifact,
   scanLegacySources,
+  withRoot,
   type LegacyFileSystem,
   type LegacyPlanInput,
   type LegacyScanOptions,

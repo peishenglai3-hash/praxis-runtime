@@ -101,7 +101,16 @@ export function classifyArtifact(relativePath: string): LegacyArtifactKind {
   return "unmapped_path";
 }
 
-function withRoot(root: string, relativePath: string): string {
+/**
+ * The spelling the scanner uses for a source path: the source root as it was
+ * given, then the file's path inside it.
+ *
+ * This is exported because an exclusion is recorded in this spelling, and
+ * anything that has to decide "was this path excluded?" must decide it the
+ * same way rather than by re-deriving a comparable form. The archive is the
+ * second such caller. See BP-050.
+ */
+export function withRoot(root: string, relativePath: string): string {
   const trimmed = root.endsWith("/") ? root.slice(0, -1) : root;
   return `${trimmed}/${relativePath}`;
 }

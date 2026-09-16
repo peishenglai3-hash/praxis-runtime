@@ -22,5 +22,10 @@ jobs:
           cache: pnpm
       - name: Install from the lockfile
         run: pnpm install --frozen-lockfile
-      - name: Run provider-independent adapter smoke
+      # This step was named "Run provider-independent adapter smoke" while the
+      # test it ran asserted `expect(true).toBe(true)` — a guarantee the step
+      # did not test. The name now says what the test actually does. The
+      # adapter half of that guarantee belongs to EPIC-010 and is not claimed
+      # until that epic exists. See BP-050.
+      - name: Run the repository smoke path
         run: pnpm exec vitest run tests/smoke.test.ts

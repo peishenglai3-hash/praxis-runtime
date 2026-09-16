@@ -125,6 +125,50 @@ describe("privacy rules exclude the material they match", () => {
     }
   });
 
+  it("does not copy excluded material into the archive", () => {
+    const cwd = workdir();
+    const corpus = corpusCopy(cwd);
+    const archiveRoot = join(cwd, "archive");
+    const root = openRoot(cwd);
+    try {
+      const plan = root.planLegacyImport({
+        roots: [join(corpus, "data")],
+        privacyRules: [
+          {
+            ruleId: "patterns",
+            pathPrefix: "patterns",
+            reason: "pattern bodies carry free text",
+          },
+        ],
+      });
+      expect(plan.exclusions.length).toBeGreaterThan(0);
+
+      const applied = root.applyLegacyImport({
+        plan,
+        planHash: plan.planHash,
+        archiveRoot,
+      });
+
+      // The archive holds bytes, not a summary of bytes. A rule that keeps a
+      // path out of the ledger while the archive copies the very material it
+      // matched is a nominal control: the exclusion is reported, the bytes are
+      // elsewhere. See BP-050.
+      const archived = applied.report.archive?.entries ?? [];
+      expect(
+        archived.some((entry) => entry.relativePath.includes("patterns/")),
+      ).toBe(false);
+
+      // ...and the archive is still a copy, so the assertion above is not
+      // passing merely because nothing was archived.
+      expect(archived.length).toBeGreaterThan(0);
+      expect(
+        archived.some((entry) => entry.relativePath.includes("signals/")),
+      ).toBe(true);
+    } finally {
+      root.close();
+    }
+  });
+
   it("reports a declared rule that matched nothing", () => {
     const cwd = workdir();
     const corpus = corpusCopy(cwd);
@@ -304,18 +348,44 @@ describe("command-line argument handling", () => {
     expect(result.code).toBe(0);
   });
 
-  it("refuses an archive inside a Git working tree", () => {
+  it("refuses an archive inside a Git working tree, at the write and not at the resolve", () => {
     const cwd = workdir();
     invoke(["init"], cwd);
     mkdirSync(join(cwd, ".git"), { recursive: true });
-    const result = invoke(
+    const archive = join(cwd, "archive");
+
+    // A dry run writes nothing, so the rule has nothing to protect yet.
+    // Enforcing it here is what made every command — `doctor` included —
+    // unrunnable inside any Git working tree, which is where this repository
+    // itself lives. See BP-050.
+    const dryRun = invoke(
       [
         "legacy",
         "import",
         join(fixtureRoot, "data"),
         "--dry-run",
         "--archive",
-        join(cwd, "archive"),
+        archive,
+        "--json",
+      ],
+      cwd,
+    );
+    expect(dryRun.code).toBe(0);
+    const planHash = (
+      JSON.parse(dryRun.stdout) as { result: { plan: { planHash: string } } }
+    ).result.plan.planHash;
+
+    // The confirmed import is the step that writes the archive.
+    const result = invoke(
+      [
+        "legacy",
+        "import",
+        join(fixtureRoot, "data"),
+        "--confirm",
+        "--plan-hash",
+        planHash,
+        "--archive",
+        archive,
         "--json",
       ],
       cwd,

@@ -138,8 +138,10 @@ therefore a breaking change, and two statements inside that file are now stale
 rather than wrong-in-behaviour:
 
 - the `legacy_event_integrity` comment claims the trigger enforces
-  "deterministic identity". It does not and cannot: the identity is a SHA-256
-  over canonical JSON, which SQLite cannot recompute at that point. The trigger
+  "deterministic identity". It does not and cannot: the identity is derived by
+  `legacyEventId` in the runtime — a canonical, escaped composite of the family
+  and the record identifiers, not a hash — which SQLite cannot recompute at
+  that point. The trigger
   enforces writer role, a 64-hex corpus fingerprint, a non-empty operation id,
   a non-empty evidence array, a source ref equal to the payload fingerprint,
   fixed provenance per event family, and a known verb. **Identity determinism

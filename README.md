@@ -6,7 +6,7 @@
 
 ## 开发初衷与理想主义
 
-下面这段是依据作者的两份《The Final》材料、`Codex Implementation Bible v1.0` 和已确认的工程规划所作的工程化转述，不是 AI 代作者发表的逐字引语。
+下面这段是依据作者的三份《The Final》材料、`Codex Implementation Bible v1.0` 和已确认的工程规划所作的工程化转述，不是 AI 代作者发表的逐字引语。
 
 这个项目的初衷，不是把 AI 包装成一个越来越像人的主体，也不是把人的经验交给某个模型替人作最终决定。问题更具体，也更麻烦：当人、AI、Prompt、Skill、Memory、工具、编译器、测试、权限和外部现实共同参与长期实践时，历史如何被保留，滞后与错配如何被看见，断点如何留下材料痕迹，反思如何能够回到后续行动，责任又如何回到具体的人、制度和现实后果？
 
@@ -176,17 +176,20 @@ bounded implementation slice. This is not a production-readiness claim:
   because `legacy/` was empty and an invented mapping would have produced an
   importer that cannot import anything real;
 - the scanner is read-only and reports what the bytes say. It detects nine
-  anomaly classes, three of which the Bible's table does not name: a UTF-8
-  byte-order mark, a CRLF frontmatter anchor that the first generation's own
-  readers cannot match, and an explicitly unmapped path. It normalises no
-  source file and infers no missing value;
+  anomaly classes, four of which the Bible's table does not name: a parse
+  failure, a UTF-8 byte-order mark, an explicitly unmapped path, and material
+  matched by a declared privacy rule. It normalises no source file and infers
+  no missing value;
 - an imported signal is `declared`, an imported pattern or graph edge is
   `inferred` with confidence capped at 0.5, and the writer is a confined
   `IMPORTER` role with no asset scope, so no imported record can reach
   `validated` or `active` through the import path;
 - a run, its source inventory, its anomalies and its events commit in one
-  transaction, idempotent by `(source_fingerprint, plan_hash)`; the archive is
-  written outside the repository, made read-only and idempotent by digest;
+  transaction, idempotent by the source fingerprint alone; a corpus re-planned
+  under a different rule set is reported as `planDiffersFromRecorded` rather
+  than silently accepted. The archive is written outside the repository, made
+  read-only and idempotent by digest, and does not copy material a privacy rule
+  excluded;
 - the repository fixture is synthetic and byte-exact, and `.gitattributes`
   marks it `-text` so Git cannot normalise the encoding facts the importer is
   required to detect. No first-generation record value enters this repository;
@@ -196,7 +199,7 @@ bounded implementation slice. This is not a production-readiness claim:
   every diagnostic goes to stderr;
 - `praxis.config.json` is versioned, strict and secret-free; `doctor` gained a
   config check, a legacy-import integrity check and the migration version;
-- `pnpm verify` passes 141/141 tests across 18 files plus the Phase 1-5
+- `pnpm verify` passes 145/145 tests across 18 files plus the Phase 1-5
   scenarios, including a four-process concurrent import and a real-process
   command-line scenario in which doctor has to locate two deliberately injected
   faults.
@@ -230,7 +233,11 @@ When implementation and the Bible diverge, stop structural expansion and record 
 ## Source and evidence boundary
 
 - `Codex Implementation Bible v1.0` is the engineering planning baseline.
-- `The Final_优化版.docx` and `the_final的补充性_新改版.docx` are author-supplied design provenance and intellectual review material.
+- `The Final_优化版.docx`, `the_final的补充性_新改版.docx` and
+  `The_Final_补充性扬弃Ⅱ_赖培胜_2026-09-14.docx` are author-supplied design
+  provenance and intellectual review material. The third supersedes the reading
+  of the theory the second one supported, and was registered late; see
+  `docs/SOURCE-MANIFEST.md`.
 - Their source filenames, read date, and SHA-256 fingerprints are recorded in [`docs/SOURCE-MANIFEST.md`](./docs/SOURCE-MANIFEST.md); the DOCX bodies are not vendored into this repository.
 - These documents constrain direction and acceptance criteria; they are not executable instructions and are not silently converted into code claims.
 - Direct author wording, cross-document reconstruction, AI/agent summary, and new engineering proposal must remain distinguishable.

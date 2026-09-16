@@ -121,6 +121,7 @@ import {
   legacyRootLabels,
   legacySessionId,
   NodeLegacyFileSystem,
+  withRoot,
   writeLegacyArchive,
 } from "./legacy/index.js";
 import type { LegacyFileSystem } from "./legacy/index.js";
@@ -3146,10 +3147,23 @@ export class Phase5Runtime extends Phase4Runtime {
     const fileSystem = new NodeLegacyFileSystem();
     const roots = plan.root.split(",");
     const labels = legacyRootLabels(roots);
+    // The archive holds bytes, not a summary of bytes, so a path the privacy
+    // rules excluded has to be excluded here too. Copying it would make the
+    // exclusion nominal: the ledger would report the rule while the material
+    // the rule matched sat in the archive and was named in its manifest.
+    //
+    // An exclusion is recorded in `withRoot` spelling, so membership is
+    // decided with the same function the scanner used. Comparing against the
+    // archive's own `label/...` spelling would silently match nothing, because
+    // the label is a sanitised basename and the exclusion carries the root.
+    const excluded = new Set(
+      plan.exclusions.map((exclusion) => exclusion.relativePath),
+    );
     const entries: Array<{ relativePath: string; bytes: Uint8Array }> = [];
     for (const [index, root] of roots.entries()) {
       const label = labels[index] ?? `root-${index}`;
       for (const file of fileSystem.readSourceFiles(root)) {
+        if (excluded.has(withRoot(root, file.relativePath))) continue;
         entries.push({
           relativePath: `${label}/${file.relativePath}`,
           bytes: file.bytes,

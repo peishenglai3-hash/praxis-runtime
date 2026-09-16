@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -174,6 +174,8 @@ describe("praxis command line", () => {
         JSON.stringify({ note: "cli round trip" }),
         "--session",
         "cli-session",
+        "--artifact-hash",
+        "a".repeat(64),
         "--json",
       ],
       cwd,
@@ -188,6 +190,128 @@ describe("praxis command line", () => {
       result: { count: number };
     };
     expect(document.result.count).toBe(1);
+  });
+
+  it("refuses an append that has no artifact to cite rather than inventing a digest", () => {
+    // A fabricated digest is indistinguishable from a real one once it is in
+    // the ledger, so the command has no honest fallback here. Before the fix
+    // it wrote sixty-four zeroes with `origin: "declared"`; see BP-050.
+    const cwd = workdir();
+    invoke(["init"], cwd);
+
+    const refused = invoke(
+      [
+        "event",
+        "append",
+        "--type",
+        "interaction.recorded",
+        "--payload",
+        JSON.stringify({ note: "no artifact" }),
+        "--json",
+      ],
+      cwd,
+    );
+    expect(refused.code).toBe(2);
+    const document = JSON.parse(refused.stderr) as {
+      error: { code: string; message: string };
+    };
+    expect(document.error.code).toBe("USAGE_ERROR");
+    expect(document.error.message).toContain("--artifact-hash");
+
+    // Nothing may have been written by the refused call.
+    const listed = invoke(
+      ["event", "list", "--type", "interaction.recorded", "--json"],
+      cwd,
+    );
+    const after = JSON.parse(listed.stdout) as { result: { count: number } };
+    expect(after.result.count).toBe(0);
+  });
+
+  it("exports a manifest whose digest is a digest, not a length", () => {
+    // The manifest's `digest` field used to hold `stableStringify(...).length`
+    // — a character count. Anyone verifying an export against it would have
+    // been comparing against a number. See BP-050.
+    const cwd = workdir();
+    invoke(["init"], cwd);
+    const append = (note: string) =>
+      invoke(
+        [
+          "event",
+          "append",
+          "--type",
+          "interaction.recorded",
+          "--payload",
+          JSON.stringify({ note }),
+          "--artifact-hash",
+          "b".repeat(64),
+          "--json",
+        ],
+        cwd,
+      );
+
+    const manifestOf = () => {
+      const exported = invoke(["export", "--json"], cwd);
+      expect(exported.code).toBe(0);
+      return (
+        JSON.parse(exported.stdout) as {
+          result: { manifest: { digest: string; eventCount: number } };
+        }
+      ).result.manifest;
+    };
+
+    const before = manifestOf();
+    expect(before.digest).toMatch(/^[a-f0-9]{64}$/);
+
+    append("first");
+    const after = manifestOf();
+    expect(after.eventCount).toBe(before.eventCount + 1);
+
+    // A digest of the exported content changes when the content does; a length
+    // of it need not. This is the assertion that tells the two apart, and it
+    // is why the counts above are relative: `init` writes events of its own.
+    expect(after.digest).not.toBe(before.digest);
+  });
+
+  it("runs inside a Git working tree, and still refuses to archive into one", () => {
+    // The repository this command line ships in is itself a Git working tree,
+    // so a rule enforced while merely *resolving* paths made `doctor`
+    // unrunnable in the most ordinary situation there is — and `doctor` is the
+    // command you reach for when something is already wrong. The rule belongs
+    // at the archive write, which is the point it protects. See BP-050.
+    const cwd = workdir();
+    mkdirSync(join(cwd, ".git"), { recursive: true });
+    expect(invoke(["init"], cwd).code).toBe(0);
+    expect(invoke(["doctor", "--json"], cwd).code).toBe(0);
+
+    // A confirmed import is where the rule has something to protect: the
+    // default archive root lives under the same tree.
+    const dryRun = invoke(
+      ["legacy", "import", fixtureData, "--dry-run", "--json"],
+      cwd,
+    );
+    expect(dryRun.code).toBe(0);
+    const planHash = (
+      JSON.parse(dryRun.stdout) as { result: { plan: { planHash: string } } }
+    ).result.plan.planHash;
+
+    const refused = invoke(
+      [
+        "legacy",
+        "import",
+        fixtureData,
+        "--confirm",
+        "--plan-hash",
+        planHash,
+        "--json",
+      ],
+      cwd,
+    );
+    expect(refused.code).toBe(3);
+    const document = JSON.parse(refused.stderr) as {
+      error: { code: string; message: string };
+    };
+    expect(document.error.code).toBe("CONFIG_ERROR");
+    expect(document.error.message).toContain("Git working tree");
   });
 
   it("requires a reviewed plan hash before a legacy import writes anything", () => {

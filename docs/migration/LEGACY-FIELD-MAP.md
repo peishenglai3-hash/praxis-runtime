@@ -190,17 +190,17 @@ folded into an existing one, because folding would report a parse failure as
 This provenance is recorded as `RFC MISMATCH: LEGACY_ANOMALY_CLASSES_EXTENDED`
 in `docs/RFC/RFC-0001.md`; the decision owner is the repository owner.
 
-| Class                      | Detection rule as implemented                                                                                                          | Handling                                                                                                                           |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `possible_overwrite`       | An ordinal that repeats inside one date bucket, or an unused ordinal value **inside the range a bucket actually occupies**.            | Keep the surviving file. Record the count of unused ordinals. Do not renumber as "true history".                                   |
-| `ambiguous_pattern`        | More than one distinct `<category>:<value>` association pair mapping to one `patternId`.                                               | Record the collision count. The survivor is a `candidate` asset at low provenance. Never auto-`active`.                            |
-| `source_metadata_conflict` | Two source files declaring different versions of the same component, or a declared version that does not match the code's own header.  | Record both declarations verbatim as metadata. Do not elect a winner.                                                              |
-| `unrecoverable_field`      | A declared field with no value in any observed record, or a field dropped at the persistence boundary.                                 | Record the field name and the reason. Never infer a value.                                                                         |
-| `cartesian_relation`       | An association set whose cardinality equals the pairwise product of its grouping key rather than the count of observed co-occurrences. | Import as `legacy` candidate evidence only. Never as a mechanism fact.                                                             |
-| `parse_error`              | A file whose declared format cannot be parsed (malformed JSON, unreadable frontmatter).                                                | Record path, size, digest and the failure. Do not repair.                                                                          |
-| `encoding_marker`          | A leading UTF-8 BOM on a file whose parser anchors at byte zero.                                                                       | Record it as the reason for a `parse_error` when it causes one.                                                                    |
-| `unmapped_path`            | A path under the source root that the field map does not describe.                                                                     | Record it. Never guess a mapping.                                                                                                  |
-| `privacy_sensitive`        | A path matched by a declared privacy rule — by absolute prefix or by the relative prefix the field map names it with.                  | Excluded from import, counted, and reported with the rule id. A declared rule that matched nothing is reported too. See section 7. |
+| Class                      | Detection rule as implemented                                                                                                          | Handling                                                                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `possible_overwrite`       | An ordinal that repeats inside one date bucket, or an unused ordinal value **inside the range a bucket actually occupies**.            | Keep the surviving file. Record the count of unused ordinals. Do not renumber as "true history".                                                                 |
+| `ambiguous_pattern`        | More than one distinct `<category>:<value>` association pair mapping to one `patternId`.                                               | Record the collision count. The survivor is a `candidate` asset at low provenance. Never auto-`active`.                                                          |
+| `source_metadata_conflict` | Two source files declaring different versions of the same component, or a declared version that does not match the code's own header.  | Record both declarations verbatim as metadata. Do not elect a winner.                                                                                            |
+| `unrecoverable_field`      | A declared field with no value in any observed record, or a field dropped at the persistence boundary.                                 | Record the field name and the reason. Never infer a value.                                                                                                       |
+| `cartesian_relation`       | An association set whose cardinality equals the pairwise product of its grouping key rather than the count of observed co-occurrences. | Import as `legacy` candidate evidence only. Never as a mechanism fact.                                                                                           |
+| `parse_error`              | A file whose declared format cannot be parsed (malformed JSON, unreadable frontmatter).                                                | Record path, size, digest and the failure. Do not repair.                                                                                                        |
+| `encoding_marker`          | A leading UTF-8 BOM on a file whose parser anchors at byte zero.                                                                       | Record it as the reason for a `parse_error` when it causes one.                                                                                                  |
+| `unmapped_path`            | A path under the source root that the field map does not describe.                                                                     | Record it. Never guess a mapping.                                                                                                                                |
+| `privacy_sensitive`        | A path matched by a declared privacy rule — by absolute prefix or by the relative prefix the field map names it with.                  | Excluded from import **and from the archive copy**, counted, and reported with the rule id. A declared rule that matched nothing is reported too. See section 7. |
 
 ### 5.1 Corpus census (owner-local observation, structure only)
 
@@ -257,14 +257,14 @@ parse prose for version strings, which is inference, not reading.
 
 ## 6. Import mapping
 
-| First-generation material | Runtime event / object                                               | Provenance |
-| ------------------------- | -------------------------------------------------------------------- | ---------- |
-| signal record             | `legacy.signal.imported`                                             | `declared` |
-| pattern record            | `legacy.pattern.imported`                                            | `inferred` |
-| graph association         | `legacy.graph-edge.imported`                                         | `inferred` |
-| anomaly                   | `legacy.anomaly`                                                     | `direct`   |
-| import run                | `legacy.import.completed`                                            | `direct`   |
-| archive copy              | files under the archive root + `LegacyArchiveManifest` in the report | `direct`   |
+| First-generation material | Runtime event / object                                                                                        | Provenance |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------- |
+| signal record             | `legacy.signal.imported`                                                                                      | `declared` |
+| pattern record            | `legacy.pattern.imported`                                                                                     | `inferred` |
+| graph association         | `legacy.graph-edge.imported`                                                                                  | `inferred` |
+| anomaly                   | `legacy.anomaly`                                                                                              | `direct`   |
+| import run                | `legacy.import.completed`                                                                                     | `direct`   |
+| archive copy              | files under the archive root **except those a privacy rule excluded** + `LegacyArchiveManifest` in the report | `direct`   |
 
 The Bible's section 12 sentence "旧 patterns → candidate asset，不自动
 active" describes the destination of a first-generation pattern in the second
@@ -290,8 +290,15 @@ The Bible requires an explicit privacy position rather than a silent one.
   patterns as sensitive.
 - A record matching a sensitive rule is **excluded and counted**, not
   truncated. The report states how many were excluded and by which rule id.
+- The exclusion reaches the **archive** as well as the ledger. The archive
+  holds bytes rather than a summary of bytes, so a rule that kept a path out of
+  the imported families while the archive copied the same material would be a
+  nominal control: the exclusion would be reported and the bytes would be
+  elsewhere. Excluded paths are absent from the archive and from its manifest.
 - The archive copy is written under the configured archive root, never inside
-  the repository working tree, and is never staged by Git.
+  the repository working tree, and is never staged by Git. That rule is checked
+  when the archive is **written** (a confirmed import); a dry run writes nothing
+  and is not refused by it.
 - The migration does not claim to delete or alter the original source. The
   original directory is read-only input and is left untouched.
 - The report contains counts and anomaly classes. It does not contain record
