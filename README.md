@@ -196,7 +196,7 @@ bounded implementation slice. This is not a production-readiness claim:
   every diagnostic goes to stderr;
 - `praxis.config.json` is versioned, strict and secret-free; `doctor` gained a
   config check, a legacy-import integrity check and the migration version;
-- `pnpm verify` passes 139/139 tests across 18 files plus the Phase 1-5
+- `pnpm verify` passes 141/141 tests across 18 files plus the Phase 1-5
   scenarios, including a four-process concurrent import and a real-process
   command-line scenario in which doctor has to locate two deliberately injected
   faults.

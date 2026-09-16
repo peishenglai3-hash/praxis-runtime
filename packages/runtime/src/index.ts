@@ -3566,7 +3566,10 @@ export class RuntimeCompositionRoot {
           health.managedBackups.invalidChecksums.length === 0
             ? "pass"
             : "fail",
-        message: "managed backup paths and checksums are checked",
+        message:
+          health.managedBackups.unfinalizedReservations.length === 0
+            ? "managed backup paths and checksums are checked"
+            : `managed backup paths and checksums are checked; ${health.managedBackups.unfinalizedReservations.length} reservation(s) have no recorded digest yet`,
         details: health.managedBackups,
       },
       {

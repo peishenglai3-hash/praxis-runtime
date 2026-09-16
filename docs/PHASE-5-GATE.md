@@ -191,17 +191,32 @@ after the behaviour that was wrong.
 | `--archive=` (empty value) resolved to the process working directory.                                             | An empty flag value counts as absent.                                                       |
 | A fixed safety-backup name blocked the second restore.                                                            | The safety copy is unique per restore, and is rolled back from on failure.                  |
 
-Two findings were **not** fixed and are recorded instead, because neither is
-Phase 5's to change:
+Three findings were escalated to the owner rather than fixed unilaterally:
 
 - **`BP-047`** — a managed backup's snapshot carries its own unfinalized
-  reservation row, so restoring from a managed backup fails its own doctor
-  gate. Pre-existing (the managed-backup design comes from ADR-0010); needs an
-  owner decision between three candidate fixes set out in the breakpoint entry.
+  reservation row, whose digest is not recorded until after the snapshot
+  exists. Pre-existing (the managed-backup design comes from ADR-0010), and it
+  made every managed restore fail its own doctor gate. **Owner decision:
+  correct the doctor's classification.** An active row with no digest is no
+  longer compared as a checksum; an absent digest and a wrong digest are
+  different conditions, and only the second is evidence that a backup file
+  changed. The state is still disclosed, as
+  `managedBackups.unfinalizedReservations`, and a new regression test tampers
+  with a backup file to prove the check keeps its teeth. Both restores in the
+  test now exit `0`, where before the fix both exited `5`.
 - **`BP-048`** — a committed migration file is content-addressed, so its
   comments are frozen too and cannot be corrected in place without invalidating
   every existing database. Two statements in `0011` are stale; the corrections
   live in ADR-0012 §5.1.
+- **`BP-049`** — two build steps write the same `dist/`. `pnpm build` (tsup)
+  emits a bundled `dist/index.d.ts`; `pnpm typecheck` (`tsc --build`) emits
+  per-file declarations and, incrementally, does not rewrite the file tsup
+  bundled. Because `pnpm verify` runs `typecheck` and `test` **before**
+  `build`, a package type change can make typecheck fail against correct code,
+  and a bare `npx vitest run` can test — or pass against — stale code. CI is
+  unaffected (a clean checkout forces a full emit); it is a local-iteration
+  hazard. Not fixed: changing it means changing what `pnpm verify` is, which is
+  the owner's call. Candidate fixes are in the breakpoint entry.
 
 ## Known deviations recorded rather than closed
 
@@ -315,30 +330,36 @@ non-goals.
 | BP-044 | the toolchain materialising escape sequences as real control bytes in source                  | fixed; a byte-scan guard added             |
 | BP-045 | three real implementation defects (path mismatch, anomaly id collision, append-only conflict) | fixed                                      |
 | BP-046 | write paths did not converge derived state, found by the real-process scenario                | fixed                                      |
-| BP-047 | a managed backup's snapshot carries its own unfinalized reservation                           | **open — owner decision**                  |
+| BP-047 | a managed backup's snapshot carries its own unfinalized reservation                           | fixed (owner decision: reclassify)         |
 | BP-048 | a committed migration is content-addressed, so a comment edit breaks every database           | avoided; correction moved to ADR-0012 §5.1 |
+| BP-049 | two build steps write one `dist/`, so local iteration can test stale code                     | open — changes what `pnpm verify` is       |
 
-BP-047 and BP-048 are the more useful entries, because they are the two the
-phase could not close by writing code: one crosses an ADR-frozen boundary, and
-one crosses the boundary of what a frozen artefact can be edited to say. Both
-were surfaced rather than worked around, which is the behaviour the process
-requirement exists to produce.
+The two most useful entries are BP-047 and BP-049, because neither is a coding
+mistake: BP-047 crosses an ADR-frozen boundary, and BP-049 is a defect in the
+**verification apparatus itself** — the thing that tells you whether anything
+else is right. BP-048 crosses the boundary of what a frozen artefact can be
+edited to say. All three were surfaced rather than worked around, which is the
+behaviour the process requirement exists to produce.
 
 ### Viable correction directions
 
-1. **BP-047 needs an owner decision, not a patch.** Recommended: correct the
-   doctor's classification so an unfinalized reservation is reported as an
-   unfinalized reservation rather than as a checksum mismatch, since the row is
-   what it says it is and the check is what mislabels it. The other two options
-   and their costs are in the breakpoint entry.
+1. **BP-049 changes what `pnpm verify` means, so it needs an owner decision
+   rather than a quiet reorder.** Recommended: move `pnpm build` ahead of
+   `pnpm test` in the `verify` script, so the tests exercise the build that this
+   run produced. The alternative — aliasing every workspace package to `src` in
+   `vitest.config.mjs`, as `@praxis/contracts` already is — removes the
+   dual-writer mismatch entirely but changes the object under test from built
+   artefacts to sources.
 2. **The three undeclared §13.2 knobs** (context-ranking weights, reflection
    budgets, timing-residual thresholds) stay named gaps until the owner decides
-   whether to thread them through the Phase 3/4 constructor boundaries.
+   whether to thread them through the Phase 3/4 constructor boundaries. Owner
+   decision taken: keep them named.
 3. **`promotionPolicy` is already delivered** and should no longer be counted
    as a gap — corrected here and in `docs/RFC/RFC-0001.md` during this review.
 4. **The external runner evidence** is the only remaining formal gate. It is
-   the same boundary Gate D closed for Phase 4, and it requires a push, which
-   requires explicit owner authorization.
+   the same boundary Gate D closed for Phase 4, and it requires a push.
+   **Owner decision taken: do not push yet**, so this gate stays `PENDING` and
+   Phase 5 remains a local `PASS` rather than a closed gate.
 
 ## Formal gate result
 

@@ -20,15 +20,15 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 - Phase 5 / Bible `EPIC-008` and `EPIC-009` is implemented and locally verified
   within the declared local capability boundary: audited Legacy migration plus
   command-line, diagnostics and operational evidence. `pnpm verify` passes
-  139/139 tests across 18 files, plus the Phase 1-5 scenarios, including a
+  141/141 tests across 18 files, plus the Phase 1-5 scenarios, including a
   four-process concurrent import and a real-process command-line scenario. No
   exact Node `22.13.0` runner evidence exists for this checkpoint yet, so it is
   a local slice rather than a closed phase gate. Entry points:
   `docs/PHASE-5-GATE.md`, `docs/ADR/ADR-0012-phase5-legacy-migration.md`,
   `docs/ADR/ADR-0013-phase5-cli-diagnostics.md`, and
-  `docs/migration/LEGACY-FIELD-MAP.md`. The Phase 5 review round and the two
-  defects it recorded rather than fixed (`BP-047`, `BP-048`) are set out in the
-  gate document.
+  `docs/migration/LEGACY-FIELD-MAP.md`. The Phase 5 review round and the three
+  boundary findings it escalated (`BP-047` fixed by owner decision, `BP-048`
+  avoided, `BP-049` open) are set out in the gate document.
 - Phase 4 / Bible `EPIC-007` Reusable Assets is implemented and verified within
   the declared local capability boundary.
 - Gates A–D are `PASS` within that boundary. GitHub Actions run

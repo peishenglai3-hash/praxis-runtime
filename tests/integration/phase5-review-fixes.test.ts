@@ -1,4 +1,5 @@
 import {
+  appendFileSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
@@ -370,24 +371,80 @@ describe("backup restore", () => {
 
     // A fixed safety-file name made the second restore fail with "restore
     // safety backup path is invalid" and no hint about which file to remove.
-    // The safety copy is now unique per restore, so that refusal is gone. The
-    // remaining failure is a separate, pre-existing condition recorded as
-    // BP-047: a managed backup's snapshot carries its own unfinalized
-    // reservation, so any managed restore fails its own doctor gate.
+    // The safety copy is unique per restore, so that refusal is gone.
+    //
+    // A second, pre-existing condition had to be fixed for a restore to
+    // complete at all (BP-047): a managed backup's snapshot carries the
+    // reservation row it was taken under, whose digest is not recorded until
+    // after the snapshot exists. That row is an unfinalized reservation, not a
+    // checksum mismatch, and doctor now says so instead of failing.
     for (const result of [restoreOne, restoreTwo]) {
       expect(result.stderr).not.toContain(
         "restore safety backup path is invalid",
       );
     }
-    expect(restoreOne.code).toBe(restoreTwo.code);
-    if (restoreOne.code !== 0) {
-      const document = JSON.parse(restoreOne.stderr) as {
-        error: { details?: { failingChecks?: string[] } };
+    expect(restoreOne.code).toBe(0);
+    expect(restoreTwo.code).toBe(0);
+  });
+
+  it("still reports a backup file whose bytes changed", () => {
+    const cwd = workdir();
+    invoke(["init"], cwd);
+    const created = invoke(
+      ["backup", "create", join(cwd, ".praxis", "backups", "a.db"), "--json"],
+      cwd,
+    );
+    expect(created.code).toBe(0);
+
+    // Doctor must keep its teeth: the fix above separates "no digest yet" from
+    // "digest does not match", and only the second one is corruption.
+    appendFileSync(join(cwd, ".praxis", "backups", "a.db"), "\n");
+
+    const doctor = invoke(["doctor", "--json"], cwd);
+    expect(doctor.code).toBe(6);
+    const document = JSON.parse(doctor.stdout) as {
+      result: {
+        status: string;
+        checks: Array<{ name: string; status: string }>;
       };
-      expect(document.error.details?.failingChecks).toContain(
-        "managed-backup-integrity",
-      );
-    }
+    };
+    expect(document.result.status).toBe("fail");
+    const check = document.result.checks.find(
+      (item) => item.name === "managed-backup-integrity",
+    );
+    expect(check?.status).toBe("fail");
+  });
+
+  it("discloses an unfinalized reservation without calling it corruption", () => {
+    const cwd = workdir();
+    invoke(["init"], cwd);
+    const created = invoke(
+      ["backup", "create", join(cwd, ".praxis", "backups", "a.db"), "--json"],
+      cwd,
+    );
+    expect(created.code).toBe(0);
+    const restored = invoke(
+      ["backup", "restore", join(cwd, ".praxis", "backups", "a.db"), "--json"],
+      cwd,
+    );
+    expect(restored.code).toBe(0);
+
+    // The restored copy carries its own reservation. It passes, and the state
+    // is still visible rather than smoothed away.
+    const doctor = invoke(["doctor", "--json"], cwd);
+    expect(doctor.code).toBe(0);
+    const document = JSON.parse(doctor.stdout) as {
+      result: {
+        checks: Array<{
+          name: string;
+          details: { unfinalizedReservations?: string[] };
+        }>;
+      };
+    };
+    const check = document.result.checks.find(
+      (item) => item.name === "managed-backup-integrity",
+    );
+    expect(check?.details.unfinalizedReservations?.length).toBe(1);
   });
 });
 

@@ -282,6 +282,14 @@ export interface StoreHealth {
     deleted: number;
     missingFiles: string[];
     invalidChecksums: string[];
+    /**
+     * Active rows with no digest recorded yet. A backup records its digest
+     * after the snapshot is taken, so a database that was itself snapshotted
+     * between those two steps carries its own unfinalized reservation. That
+     * row is not a checksum mismatch — its digest is absent, not wrong — and
+     * it is disclosed here rather than counted as corruption. See BP-047.
+     */
+    unfinalizedReservations: string[];
   };
   invalidatedAssetCount: number;
   assetIntegrityIssues: string[];
@@ -1749,10 +1757,22 @@ export class SqliteEventStore
     const activeBackups = managedBackups.filter(
       (item) => item.status === "active",
     );
+    // An active row with no digest is a reservation whose backup has not been
+    // registered yet. It is kept apart from the checksum comparison: an absent
+    // digest and a wrong digest are different conditions, and only the second
+    // is evidence that a backup file changed. A managed backup's own snapshot
+    // contains such a row — the reservation it was taken under — so treating
+    // it as corruption made every restore fail its own doctor gate (BP-047).
+    const unfinalizedReservations = activeBackups
+      .filter((item) => item.backupSha256.length === 0)
+      .map((item) => item.id);
+    const finalizedBackups = activeBackups.filter(
+      (item) => item.backupSha256.length > 0,
+    );
     const missingFiles = activeBackups
       .filter((item) => !existsSync(item.path))
       .map((item) => item.id);
-    const invalidChecksums = activeBackups
+    const invalidChecksums = finalizedBackups
       .filter((item) => {
         if (!existsSync(item.path)) return false;
         try {
@@ -1793,6 +1813,7 @@ export class SqliteEventStore
           .length,
         missingFiles,
         invalidChecksums,
+        unfinalizedReservations,
       },
       invalidatedAssetCount,
       assetIntegrityIssues,
