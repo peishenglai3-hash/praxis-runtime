@@ -199,7 +199,7 @@ bounded implementation slice. This is not a production-readiness claim:
   every diagnostic goes to stderr;
 - `praxis.config.json` is versioned, strict and secret-free; `doctor` gained a
   config check, a legacy-import integrity check and the migration version;
-- `pnpm verify` passes 145/145 tests across 18 files plus the Phase 1-5
+- `pnpm verify` passes 187/187 tests across 21 files plus the Phase 1-5
   scenarios, including a four-process concurrent import and a real-process
   command-line scenario in which doctor has to locate two deliberately injected
   faults.
@@ -207,6 +207,30 @@ bounded implementation slice. This is not a production-readiness claim:
 One gap is named rather than closed: Bible section 13.2's context-ranking
 weights, reflection budgets and timing-residual thresholds remain package
 defaults. See [`docs/PHASE-5-GATE.md`](./docs/PHASE-5-GATE.md).
+
+Phase 5.5 / INC-001 recovery followed, after it was established that Phase 5 had
+been implemented without the Bible being read in full and against a constraint
+set that was missing one of the three author documents:
+
+- the incident is recorded in
+  [`docs/incidents/INC-001-partial-bible-execution.md`](./docs/incidents/INC-001-partial-bible-execution.md),
+  the requirement-by-requirement audit in
+  [`docs/incidents/INC-001-bible-conformance-audit.md`](./docs/incidents/INC-001-bible-conformance-audit.md),
+  and the outcome in [`docs/PHASE-5.5-RECOVERY-GATE.md`](./docs/PHASE-5.5-RECOVERY-GATE.md);
+- **no CRITICAL mismatch and no violated invariant was found**; the drift was in
+  coverage, declared structure and naming, which is why the recovery repaired
+  rather than reverted;
+- the frozen test layers now exist: `tests/replay/` (a hand-computed golden
+  stream) and `tests/regression/` (the named regressions with no equivalent
+  elsewhere);
+- `pnpm verify` runs the eleven steps in their frozen order, and tests resolve
+  workspace packages to source, which removes the dual-`dist` hazard recorded
+  as `BP-049` rather than scheduling around it;
+- the P0 operator surface has executable coverage, and writing it exposed three
+  real defects (`BP-051`), including `praxis projection show` rebuilding every
+  projection;
+- Golden Fixture 01 is `WAITING_FOR_AUTHOR_SOURCE`. It is author history and
+  must not be synthesised.
 
 The repository is synchronized to the private GitHub handoff target, and the
 exact remote CI gate is recorded above. `VACUUM INTO` remains the backup path

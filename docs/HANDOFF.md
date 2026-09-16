@@ -17,10 +17,22 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 
 ## Current checkpoint
 
+- **Phase 5.5 / INC-001 recovery is complete.** An incident was opened after it
+  was established that Phase 5 had been implemented without the Bible being
+  read in full, and against a constraint set missing one of the three author
+  documents. The recovery read every authoritative document, audited the
+  repository against the Bible requirement by requirement, and repaired. Read
+  [`incidents/INC-001-partial-bible-execution.md`](./incidents/INC-001-partial-bible-execution.md),
+  [`incidents/INC-001-bible-conformance-audit.md`](./incidents/INC-001-bible-conformance-audit.md)
+  and [`PHASE-5.5-RECOVERY-GATE.md`](./PHASE-5.5-RECOVERY-GATE.md) **before**
+  any phase gate — a gate written before the recovery states things the
+  recovery changed. No CRITICAL mismatch was found and no invariant was
+  violated, so the classification was REPAIR, not REVERT. Golden Fixture 01 is
+  `WAITING_FOR_AUTHOR_SOURCE` and must not be synthesised.
 - Phase 5 / Bible `EPIC-008` and `EPIC-009` is implemented and locally verified
   within the declared local capability boundary: audited Legacy migration plus
   command-line, diagnostics and operational evidence. `pnpm verify` passes
-  145/145 tests across 18 files, plus the Phase 1-5 scenarios, including a
+  187/187 tests across 21 files, plus the Phase 1-5 scenarios, including a
   four-process concurrent import and a real-process command-line scenario. No
   exact Node `22.13.0` runner evidence exists for this checkpoint yet, so it is
   a local slice rather than a closed phase gate. Entry points:
