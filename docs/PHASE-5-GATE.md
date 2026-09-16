@@ -257,24 +257,88 @@ baseline.
 
 ## Three-way review
 
-1. **Bible.** EPIC-008 and EPIC-009 are delivered at the acceptance criteria
-   listed above; the package DAG and the composition-root boundary are intact
-   and machine-checked. No provider SDK, no second event store, and no
-   automatic promotion entered the phase. Where the Bible's prose and the
-   evidence disagreed, the disagreement is recorded as an `RFC MISMATCH` with
-   its decision owner rather than solved by widening scope.
-2. **The Final source materials.** The phase's constraints come from the
-   theory: lag and mismatch are recorded rather than smoothed; provenance is
-   never upgraded by the importer; the human confirmation step is preserved
-   (`planHash`); a correction is a new run, not an edit; and the code makes no
-   claim to have recovered a history that is gone. The importer reports what
-   the bytes say and stops there.
-3. **`docs/断点记录.md`.** `BP-043` records the Phase 5 audit;
-   `BP-044` the toolchain injecting control bytes into source; `BP-045` three
-   real implementation defects; `BP-046` the projection lag the complex
-   scenario found; `BP-047` the pre-existing managed-backup restore defect;
-   `BP-048` the content-addressed migration boundary. Each names the fact, the
-   fix or the reason there is no fix, and the boundary of the claim.
+Read together: the Bible (the controlling engineering plan), the two _The
+Final_ theory documents (the intellectual provenance and review constraint),
+and `docs/断点记录.md` (this project's own record of where it broke). The
+review asks one question of the phase: do the three agree about what was built,
+and where do they disagree, what is the viable correction direction?
+
+### 1. Bible — where the implementation is measured
+
+| Bible requirement                                                                      | Where it lands                                                                                                                |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| §12: the migration must not pretend the history is fully recoverable                   | `possible_overwrite` reports only unused ordinals inside an observed range; destroyed patterns are counted, never re-derived. |
+| §12: recover each source file's path, size, mtime, sha256, parse status, anomaly flags | `legacy_source_inventory`, one row per file, plus the qualified anomaly join.                                                 |
+| §12: repeated import of one source fingerprint is idempotent                           | Fingerprint-keyed; verified by a four-process concurrent scenario.                                                            |
+| §12: no old pattern becomes `active` automatically                                     | The importer's `IMPORTER` role holds no `asset.*` scope at all, so this is structural rather than a rule it follows.          |
+| §12: `--dry-run` first, then commit                                                    | `planHash` is the confirmation token; committing requires presenting the hash of the plan that was reviewed.                  |
+| §13: exit codes, `--json`, stderr diagnostics                                          | Exit-code taxonomy, one versioned machine document on stdout, every diagnostic on stderr.                                     |
+| §13.1: doctor covers legacy import manifest and anomaly status                         | The `legacy-import-integrity` check, now purge-receipt-aware.                                                                 |
+
+Departures are recorded, not absorbed: `LEGACY_INPUT_NOT_IN_REPOSITORY`,
+`LEGACY_ANOMALY_CLASSES_EXTENDED`, `OPEN GAP: CONFIGURATION_SURFACE`.
+
+### 2. The Final — the constraint the phase is judged by
+
+The theory's relevant claim is that material must be kept precisely where the
+process was _folded closed_, so that a later reader can reopen it: the record
+of how something became a fact is not the same object as the fact, and it is
+the first that is irreplaceable. It also insists that difference produces
+mismatch, mismatch produces breakpoints, and breakpoints are what reflection is
+made of — a frictionless record produces no reflection at all.
+
+The phase's answers to that constraint:
+
+- the ledger is append-first and a correction is a new run, never an edit, so
+  the process stays reopenable;
+- an anomaly is recorded as an observation about the source, with `direct`
+  provenance, and is never a repaired value — the repair is what would fold the
+  process closed;
+- the six theory fields the first-generation writer declared but never
+  persisted are carried as `absentFields` on every record, and the four
+  defaulted index fields are named there too, so what is _not_ present cannot be
+  read as present;
+- the exclusion of a privacy-matched record is counted and reported rather than
+  silently dropped, because a silent omission reads as "nothing was there".
+
+Where the theory constrains the phase rather than being served by it: the
+archive and the report are evidence about the _source_, not about the owner.
+The migration makes no claim about what the history means — only about what the
+bytes say. That limit is the honest one, and it is stated in the field map's
+non-goals.
+
+### 3. `docs/断点记录.md` — what this project broke on, and what that is for
+
+| Entry  | What it records                                                                               | Status                                     |
+| ------ | --------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| BP-043 | the Phase 5 legacy audit and its quantified findings                                          | recorded                                   |
+| BP-044 | the toolchain materialising escape sequences as real control bytes in source                  | fixed; a byte-scan guard added             |
+| BP-045 | three real implementation defects (path mismatch, anomaly id collision, append-only conflict) | fixed                                      |
+| BP-046 | write paths did not converge derived state, found by the real-process scenario                | fixed                                      |
+| BP-047 | a managed backup's snapshot carries its own unfinalized reservation                           | **open — owner decision**                  |
+| BP-048 | a committed migration is content-addressed, so a comment edit breaks every database           | avoided; correction moved to ADR-0012 §5.1 |
+
+BP-047 and BP-048 are the more useful entries, because they are the two the
+phase could not close by writing code: one crosses an ADR-frozen boundary, and
+one crosses the boundary of what a frozen artefact can be edited to say. Both
+were surfaced rather than worked around, which is the behaviour the process
+requirement exists to produce.
+
+### Viable correction directions
+
+1. **BP-047 needs an owner decision, not a patch.** Recommended: correct the
+   doctor's classification so an unfinalized reservation is reported as an
+   unfinalized reservation rather than as a checksum mismatch, since the row is
+   what it says it is and the check is what mislabels it. The other two options
+   and their costs are in the breakpoint entry.
+2. **The three undeclared §13.2 knobs** (context-ranking weights, reflection
+   budgets, timing-residual thresholds) stay named gaps until the owner decides
+   whether to thread them through the Phase 3/4 constructor boundaries.
+3. **`promotionPolicy` is already delivered** and should no longer be counted
+   as a gap — corrected here and in `docs/RFC/RFC-0001.md` during this review.
+4. **The external runner evidence** is the only remaining formal gate. It is
+   the same boundary Gate D closed for Phase 4, and it requires a push, which
+   requires explicit owner authorization.
 
 ## Formal gate result
 
