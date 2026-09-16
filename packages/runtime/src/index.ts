@@ -3333,6 +3333,40 @@ export class RuntimeCompositionRoot {
     );
   }
 
+  /** The projection names this build can rebuild, in registration order. */
+  coreProjectionNames(): string[] {
+    return createCoreProjections().map((projection) => projection.name);
+  }
+
+  /**
+   * Rebuild one registered projection by name.
+   *
+   * Bible section 13 specifies `praxis rebuild [--projection <name>]`. The
+   * argument only means something if a single projection can actually be
+   * rebuilt, so an unknown name is refused with the set that would have
+   * worked, rather than accepted and ignored: silently rebuilding everything
+   * would answer a different question than the one the operator asked, and
+   * every projection costs a full ledger replay.
+   */
+  rebuildProjection(name: string): CatchUpResult {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "projection rebuild");
+    const projections = createCoreProjections();
+    const projection = projections.find((candidate) => candidate.name === name);
+    if (projection === undefined) {
+      const error = new Error(`unknown projection ${name}`);
+      Object.assign(error, {
+        code: "UNKNOWN_PROJECTION",
+        details: {
+          requested: name,
+          available: projections.map((candidate) => candidate.name),
+        },
+      });
+      throw error;
+    }
+    return this.runtime.rebuild(projection);
+  }
+
   createManagedBackup(
     destinationPath: string,
     options: { id?: string; createdAt?: number } = {},
@@ -3390,6 +3424,94 @@ export class RuntimeCompositionRoot {
     this.assertStarted();
     authorizeWriterScope(this.writer, "event.read", "list assets");
     return this.#store.listAssets();
+  }
+
+  /**
+   * Imported first-generation patterns, as the material an explicit human
+   * conversion works from.
+   *
+   * Bible section 12 and issue 073 say 「旧 patterns → candidate asset，不自动
+   * active」. The importer's frozen `IMPORTER` writer holds no `asset.*` scope
+   * at all, so a pattern lands in the ledger as inferred material and stops
+   * there. This method is the read half of the second half of that
+   * requirement: turning one into a candidate asset is a separate human action
+   * (`convertLegacyPattern`) that goes through the Phase 4 Asset Service under
+   * a writer that actually holds `asset.propose`. See INC-001 section 8.
+   */
+  listLegacyPatterns(limit = 200): Array<{
+    eventId: string;
+    seq: number;
+    patternId: string;
+    trigger: string;
+    action: string;
+    confidence: number;
+    sourceFingerprint: string;
+    origin: string;
+  }> {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "list imported patterns");
+    return this.#store
+      .query({ type: "legacy.pattern.imported", limit })
+      .map((record) => {
+        const payload = (record.payload ?? {}) as Record<string, unknown>;
+        return {
+          eventId: record.id,
+          seq: record.seq,
+          patternId: String(payload["patternId"] ?? ""),
+          trigger: String(payload["trigger"] ?? ""),
+          action: String(payload["action"] ?? ""),
+          confidence: Number(payload["confidence"] ?? 0),
+          sourceFingerprint: String(payload["sourceFingerprint"] ?? ""),
+          origin: record.provenance.origin,
+        };
+      });
+  }
+
+  /**
+   * Convert one imported pattern into a candidate asset.
+   *
+   * This is the explicit human step INC-001 section 8 froze. The importer
+   * never holds `asset.*`; the conversion runs under `asset.propose` and
+   * carries the pattern's own provenance into the new asset's evidence rather
+   * than upgrading it — an inferred pattern must not become a directly
+   * observed one by being copied. The asset starts at `candidate`, so
+   * activation still requires the full Phase 4 promotion policy and a human
+   * confirmation. Nothing here can reach `active` on its own.
+   */
+  convertLegacyPattern(input: {
+    patternEventId: string;
+    assetId: string;
+    reason: string;
+    at: string;
+  }): EventAppendResult {
+    this.assertStarted();
+    authorizeWriterScope(
+      this.writer,
+      "asset.propose",
+      "convert an imported pattern into a candidate asset",
+    );
+    const record = this.inspectEvent(input.patternEventId);
+    if (record === null || record.type !== "legacy.pattern.imported") {
+      throw new Error(
+        `no imported pattern event matches ${input.patternEventId}`,
+      );
+    }
+    const payload = (record.payload ?? {}) as Record<string, unknown>;
+    return this.runtime.proposeAsset({
+      id: input.assetId,
+      kind: "pattern",
+      version: "1.0.0",
+      body: {
+        patternId: String(payload["patternId"] ?? ""),
+        trigger: String(payload["trigger"] ?? ""),
+        action: String(payload["action"] ?? ""),
+        sourceFingerprint: String(payload["sourceFingerprint"] ?? ""),
+        sourceEventId: record.id,
+        conversionReason: input.reason,
+      },
+      derivedFrom: [{ eventId: record.id, origin: record.provenance.origin }],
+      createdAt: input.at,
+    });
   }
 
   /**
