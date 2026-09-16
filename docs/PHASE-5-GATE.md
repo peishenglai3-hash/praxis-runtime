@@ -175,6 +175,28 @@ defect recorded as `BP-046` was found by the second scenario and by no unit or
 integration test, because those call the runtime directly instead of following
 the operator's "write, then look" sequence.
 
+### Command-line coverage, stated rather than implied
+
+The gate previously marked issues 082-086 `PASS` without saying which commands
+anything actually executes. Counted against `apps/cli/src/args.ts`, these
+command paths have **no executable coverage** in `tests/` or `scripts/`:
+
+```
+state show          rebuild                projection rebuild
+context plan        residual list          reflection run
+asset list          asset contest          asset disable
+asset restore       asset fork             asset activate
+history explain     legacy anomalies       backup list
+lock inspect        lock clear-stale
+```
+
+`export` was in this list too and now has a test, because its manifest digest
+was found to be a character count. The rest remain uncovered. The EPIC-009
+gate's "every main command has `--json`" is a statement about the argument
+parser, which is exercised; it is **not** a statement that each command has
+been run. That distinction is now on the record instead of being carried by a
+`PASS` row.
+
 ## Review round
 
 Two independent reviews were run against the phase's new results — one for
