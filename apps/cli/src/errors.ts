@@ -134,6 +134,8 @@ function mapSourceCode(sourceCode: string | undefined): {
       return { exitCode: exitCodes.migration, cliCode: "MIGRATION_ERROR" };
     case "INVALID_EVENT":
       return { exitCode: exitCodes.validation, cliCode: "VALIDATION_ERROR" };
+    case "UNKNOWN_PROJECTION":
+      return { exitCode: exitCodes.validation, cliCode: "VALIDATION_ERROR" };
     case "EVENT_ID_CONFLICT":
     case "OPERATION_ID_CONFLICT":
     case "ASSET_REVISION_CONFLICT":

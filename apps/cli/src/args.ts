@@ -26,7 +26,7 @@ export const subcommandsByCommand: Record<string, readonly string[]> = {
     "activate",
   ],
   history: ["explain"],
-  legacy: ["import", "runs", "anomalies"],
+  legacy: ["import", "runs", "anomalies", "patterns", "pattern", "convert"],
   privacy: ["purge"],
   backup: ["create", "list", "restore"],
   lock: ["inspect", "clear-stale"],
@@ -55,9 +55,10 @@ export const globalFlags = [
 export const flagsByCommand: Record<string, readonly string[]> = {
   init: [],
   doctor: [],
-  rebuild: [],
+  rebuild: ["projection"],
   export: ["type", "limit", "out"],
-  "projection rebuild": [],
+  "projection rebuild": ["projection"],
+  "projection show": ["projection"],
   "event append": [
     "type",
     "payload",
@@ -103,6 +104,9 @@ export const flagsByCommand: Record<string, readonly string[]> = {
   "legacy import": ["dry-run", "confirm", "plan-hash", "archive"],
   "legacy runs": [],
   "legacy anomalies": [],
+  "legacy patterns": ["limit"],
+  "legacy pattern": [],
+  "legacy convert": ["asset-id", "reason", "at"],
   "privacy purge": [
     "session",
     "dry-run",

@@ -522,13 +522,39 @@ function commandState(
   }
 }
 
+/**
+ * `projection` is a namespace with two verbs, but the dispatch table keys on
+ * the first path segment alone. Without this router `praxis projection show`
+ * reached the rebuild handler and rewrote every projection — a command whose
+ * name reads as a query performing a destructive write, and reporting
+ * `"command": "projection show"` while doing it. `show` reads; `rebuild`
+ * rebuilds. Found by the INC-001 conformance audit (IR-01).
+ */
+function commandProjection(
+  environment: ResolvedEnvironment,
+  parsed: ParsedCommand,
+): CommandOutcome {
+  return parsed.path[1] === "show"
+    ? commandState(environment, parsed)
+    : commandRebuild(environment, parsed);
+}
+
 function commandRebuild(
   environment: ResolvedEnvironment,
-  _parsed: ParsedCommand,
+  parsed: ParsedCommand,
 ): CommandOutcome {
   const { root } = openRoot(environment, "embedded");
   try {
-    const results = root.rebuildCoreProjections();
+    // Bible section 13: `praxis rebuild [--projection <name>]`. Without the
+    // flag every core projection is rebuilt; with it, exactly one — the
+    // argument was previously accepted by no flag list at all and the command
+    // ignored its parsed input entirely. The name is resolved by the runtime,
+    // which owns the projection registry, rather than restated here.
+    const requested = optionalFlag(parsed, "projection");
+    const results =
+      requested === undefined
+        ? root.rebuildCoreProjections()
+        : [root.rebuildProjection(requested)];
     return {
       data: { schemaVersion: "1", rebuilt: results },
       lines: results.map(
@@ -540,6 +566,14 @@ function commandRebuild(
     root.close();
   }
 }
+
+/**
+ * The values `--mode` accepts. This is flag vocabulary, not domain logic: it
+ * exists so an unrecognised mode is a usage error rather than silently falling
+ * through to the planner's `reindex` branch, which is what an unvalidated cast
+ * did before. See the INC-001 conformance audit (IR-01).
+ */
+const CONTEXT_MODES = ["reuse", "reindex", "refresh"] as const;
 
 function commandContext(
   environment: ResolvedEnvironment,
@@ -565,9 +599,38 @@ function commandContext(
   const { root } = openRoot(environment, "embedded");
   try {
     const health = root.getHealth();
+    // The planner reads a different candidate field per mode: `reindex` reads
+    // `candidates`, `refresh` reads `refreshCandidates`, `reuse` reads a
+    // previous plan. The command has exactly one source of candidates — the
+    // file — so it hands them to whichever field the chosen mode actually
+    // reads. Before this, the default mode was `refresh` while the only
+    // candidate flag fed `candidates`, so the plain invocation
+    // `praxis context plan --candidates <file>` failed and named a flag the
+    // command does not offer. See the INC-001 conformance audit (IR-01).
+    const requestedMode = optionalFlag(parsed, "mode") ?? "refresh";
+    if (
+      !CONTEXT_MODES.includes(requestedMode as (typeof CONTEXT_MODES)[number])
+    ) {
+      throw new CliError(
+        "USAGE_ERROR",
+        `--mode must be one of ${CONTEXT_MODES.join(", ")}`,
+        { requested: requestedMode, accepted: [...CONTEXT_MODES] },
+      );
+    }
+    const mode = requestedMode as (typeof CONTEXT_MODES)[number];
+    if (mode === "reuse") {
+      // `reuse` recomputes from a previous plan, which the command cannot
+      // name. Refusing here keeps it a usage error rather than a
+      // storage-class failure that reads like a corrupt database.
+      throw new CliError(
+        "USAGE_ERROR",
+        "--mode reuse requires a previous plan, which this command cannot supply; use reindex or refresh",
+      );
+    }
     const plan = root.runtime.buildContextPlan({
-      mode: (optionalFlag(parsed, "mode") ?? "refresh") as never,
+      mode,
       candidates: candidates as never,
+      ...(mode === "refresh" ? { refreshCandidates: candidates as never } : {}),
       budget: {
         maxItems: integerFlag(parsed, "max-items", 20),
         maxTokens: integerFlag(parsed, "max-tokens", 4000),
@@ -893,6 +956,88 @@ function commandLegacy(
                 (run) =>
                   `${run.runId}\n  status ${run.status}  corpus ${run.sourceFingerprint}  anomalies ${run.counts.anomalies}  archive ${run.hasArchive ? "yes" : "no"}`,
               ),
+      };
+    } finally {
+      root.close();
+    }
+  }
+
+  if (parsed.subcommand === "patterns" || parsed.subcommand === "pattern") {
+    // The explicit human path from an imported pattern to a candidate asset.
+    // Bible section 12 requires it and gives no command for it; INC-001
+    // section 8 froze the shape (importer keeps no `asset.*` scope). See
+    // `convertLegacyPattern` for why this cannot be automatic.
+    const { root } = openRoot(environment, "embedded");
+    try {
+      const patterns = root.listLegacyPatterns(
+        parsed.subcommand === "pattern"
+          ? 1000
+          : integerFlag(parsed, "limit", 200),
+      );
+      if (parsed.subcommand === "patterns") {
+        return {
+          data: { schemaVersion: "1", count: patterns.length, patterns },
+          lines:
+            patterns.length === 0
+              ? ["(no imported patterns)"]
+              : patterns.map(
+                  (pattern) =>
+                    `${pattern.eventId}\n  ${pattern.patternId}  ${pattern.trigger} -> ${pattern.action}  confidence ${pattern.confidence}  origin ${pattern.origin}`,
+                ),
+        };
+      }
+      const eventId = requirePositional(parsed, 0, "pattern event id");
+      const pattern = patterns.find(
+        (candidate) => candidate.eventId === eventId,
+      );
+      if (pattern === undefined) {
+        throw new CliError(
+          "VALIDATION_ERROR",
+          `no imported pattern event matches ${eventId}`,
+        );
+      }
+      return {
+        data: { schemaVersion: "1", pattern },
+        lines: [
+          pattern.patternId,
+          `trigger     ${pattern.trigger}`,
+          `action      ${pattern.action}`,
+          `confidence  ${pattern.confidence}  origin ${pattern.origin}`,
+          `corpus      ${pattern.sourceFingerprint}`,
+          "imported as inferred material; converting it is a separate explicit action",
+        ],
+      };
+    } finally {
+      root.close();
+    }
+  }
+
+  if (parsed.subcommand === "convert") {
+    const eventId = requirePositional(parsed, 0, "pattern event id");
+    const assetId = requireFlag(parsed, "asset-id");
+    const reason = requireFlag(parsed, "reason");
+    const { root } = openRoot(environment, "embedded");
+    try {
+      const at = optionalFlag(parsed, "at") ?? root.clock.now().toISOString();
+      const result = root.convertLegacyPattern({
+        patternEventId: eventId,
+        assetId,
+        reason,
+        at,
+      });
+      return {
+        data: {
+          schemaVersion: "1",
+          patternEventId: eventId,
+          assetId,
+          status: "candidate",
+          seq: result.record.seq,
+          eventId: result.record.id,
+        },
+        lines: [
+          `converted ${eventId} into candidate asset ${assetId} at seq ${result.record.seq}`,
+          "the asset is a candidate; activation still requires the promotion policy and a human confirmation",
+        ],
       };
     } finally {
       root.close();
@@ -1350,7 +1495,7 @@ const handlers: Record<
   event: commandEvent,
   state: commandState,
   rebuild: commandRebuild,
-  projection: commandRebuild,
+  projection: commandProjection,
   context: commandContext,
   residual: commandResidualList,
   reflection: commandReflectionRun,
@@ -1423,7 +1568,7 @@ export function usageText(): string {
     "  praxis event append --type <t> --payload <json> [...]",
     "  praxis event list [--type <t>] [--limit <n>]",
     "  praxis state show [--projection <name>]",
-    "  praxis rebuild | praxis projection rebuild",
+    "  praxis rebuild [--projection <name>] | praxis projection rebuild [--projection <name>]",
     "  praxis context plan --candidates <file> [--mode reuse|reindex|refresh] [--record]",
     "  praxis residual list [--limit <n>]",
     "  praxis reflection run --residual <eventId> [--evidence <ids>]",
@@ -1432,6 +1577,8 @@ export function usageText(): string {
     "  praxis legacy import <path> --dry-run",
     "  praxis legacy import <path> --confirm --plan-hash <sha256> [--archive <dir>]",
     "  praxis legacy runs | praxis legacy anomalies <runId>",
+    "  praxis legacy patterns [--limit <n>] | praxis legacy pattern <eventId>",
+    "  praxis legacy convert <patternEventId> --asset-id <id> --reason <text>",
     "  praxis privacy purge --session <id> --dry-run",
     "  praxis privacy purge --session <id> --confirm --plan-hash <sha256>",
     "  praxis privacy purge --finalize-pending",
