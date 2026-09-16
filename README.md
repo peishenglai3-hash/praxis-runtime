@@ -1,5 +1,23 @@
 # Praxis Runtime
 
+> **Pre-alpha / Research Preview.** This is not a stable release. It is not
+> ready for production use, for third-party integration, or for anyone to
+> depend on.
+>
+> **Phase 5 is complete. Phase 6 has not started.** What exists is the event
+> ledger, deterministic projections and replay, context planning, bounded
+> residual detection and reflection, reusable assets, the audited Legacy
+> migration path, and the command line with its diagnostics. What does not
+> exist is any provider adapter — `packages/adapters` is an empty stub, and
+> connecting a real model is Phase 6 work.
+>
+> The contracts, the database schema and the command-line surface can still
+> change without notice, and the verification gate has known gaps that are
+> recorded rather than papered over. Start with
+> [`docs/PHASE-5-GATE.md`](./docs/PHASE-5-GATE.md) and
+> [`docs/incidents/INC-001-bible-conformance-audit.md`](./docs/incidents/INC-001-bible-conformance-audit.md)
+> before assuming anything here is finished.
+
 `Praxis Runtime` 是一个从零开始的、local-first 的 TypeScript 长期人机协作运行时。它把交互历史作为可追溯材料保存下来，在不覆盖原始记录的前提下重建派生状态、选择当前上下文、识别有边界的残差，并把经过验证的协作经验转化为可检查、可撤销、可 Fork 的 Rule、Skill 或 Workflow。
 
 当前仓库是 `codex-habit` 之后的第二代 fresh start。第一代公开原型仅作为未来 Legacy migration 的输入基线，不作为本仓库的代码依赖，也不被静默复制或改写：<https://github.com/peishenglai3-hash/codex-habit>。

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/peishenglai3-hash/praxis-runtime/security/advisories/new
+    about: Do not open a public issue for a security problem. See SECURITY.md.
+  - name: Read the current status first
+    url: https://github.com/peishenglai3-hash/praxis-runtime/blob/main/README.md
+    about: This project is pre-alpha. Phase 5 is complete; Phase 6 has not started.
