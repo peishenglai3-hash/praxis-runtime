@@ -244,6 +244,13 @@ export interface LegacyGraphEdge {
   strength: number;
   frequency: number;
   relationClass: LegacyRelationClass;
+  /**
+   * When the source says its association graph was built. The first generation
+   * records one build time for the whole graph, not a time per association, so
+   * an association with no build time is imported without a claimed instant
+   * rather than with the import's own clock read.
+   */
+  declaredBuiltAt?: string;
 }
 
 export const legacyGraphEdgeSchema = z
@@ -253,6 +260,7 @@ export const legacyGraphEdgeSchema = z
     strength: z.number().finite(),
     frequency: z.number().int().nonnegative(),
     relationClass: legacyRelationClassSchema,
+    declaredBuiltAt: utcTimestampSchema.optional(),
   })
   .strict();
 

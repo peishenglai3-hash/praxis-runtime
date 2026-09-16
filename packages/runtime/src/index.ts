@@ -2965,6 +2965,12 @@ export interface LegacyImportApplication {
   lastSeq: number;
   report: LegacyMigrationReport;
   /**
+   * `true` when the corpus is already in the ledger under a different plan.
+   * Nothing was written; the caller is told so instead of being handed a
+   * silent success.
+   */
+  planDiffersFromRecorded: boolean;
+  /**
    * Filled in by the composition root, which catches the core projections up
    * after a successful import so the derived state does not silently lag the
    * records that were just written.
@@ -3062,6 +3068,14 @@ export class Phase5Runtime extends Phase4Runtime {
       sourceFingerprint: request.plan.sourceFingerprint,
       createdAt: startedAt,
       entries: this.#readArchiveEntries(request.plan),
+      // The plan names the digests of the corpus it was derived from, so the
+      // archive is proven to hold that corpus rather than merely asserted to.
+      expectedDigests: new Map(
+        request.plan.inventory.entries.map((entry) => [
+          entry.relativePath,
+          entry.sha256,
+        ]),
+      ),
     });
 
     const events = buildLegacyImportEvents({
@@ -3105,6 +3119,7 @@ export class Phase5Runtime extends Phase4Runtime {
       appendedEvents: recorded.appendedEvents,
       lastSeq: recorded.lastSeq,
       report: recorded.run,
+      planDiffersFromRecorded: recorded.planDiffersFromRecorded,
     };
   }
 

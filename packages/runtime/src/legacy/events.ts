@@ -50,12 +50,41 @@ function firstEntryOfKind(
   kind: LegacySourceEntry["artifactKind"],
 ): EvidenceSource {
   const entry = inventory.find((item) => item.artifactKind === kind);
-  // The inventory is the plan's own record of what was read, so a missing
-  // entry here is a programming error rather than a source-condition.
-  return {
-    artifactHash: entry?.sha256 ?? "0".repeat(64),
-    relativePath: entry?.relativePath ?? kind,
-  };
+  if (entry === undefined) {
+    // The inventory is the plan's own record of what was read, so this is a
+    // programming error rather than a source condition. Refusing is the only
+    // honest response: a placeholder digest would be indistinguishable from a
+    // real one in the ledger, and the evidence would point at nothing.
+    throw new Error(
+      `legacy plan carries no ${kind} entry, so an imported record would cite evidence that does not exist`,
+    );
+  }
+  return { artifactHash: entry.sha256, relativePath: entry.relativePath };
+}
+
+/**
+ * The digest an anomaly's evidence should name.
+ *
+ * An anomaly about one file names that file's digest. An anomaly about the
+ * corpus as a whole — conflicting manifest versions, a privacy rule that
+ * matched nothing, an artifact family that was read but not imported — has no
+ * single file, and its evidence names the corpus fingerprint, which is a real
+ * digest of exactly what was read.
+ */
+function anomalyEvidenceHash(
+  hashes: ReadonlyMap<string, string>,
+  relativePath: string | undefined,
+  corpusFingerprint: string,
+  label: string,
+): string {
+  if (relativePath === undefined) return corpusFingerprint;
+  const digest = hashes.get(relativePath);
+  if (digest === undefined) {
+    throw new Error(
+      `${label} cites ${relativePath}, which is not in the plan inventory`,
+    );
+  }
+  return digest;
 }
 
 function evidenceFor(
@@ -155,8 +184,11 @@ export function buildLegacyImportEvents(
           frequency: edge.frequency,
           relationClass: edge.relationClass,
         },
-        occurredAt: recordedAt,
-        observedAt: recordedAt,
+        // The source declares one build time for the whole association set.
+        // When it declares none, the association is imported without a claimed
+        // instant rather than with the importing host's clock read.
+        occurredAt: edge.declaredBuiltAt ?? recordedAt,
+        observedAt: edge.declaredBuiltAt ?? recordedAt,
         recordedAt,
         sessionId,
         actor,
@@ -172,7 +204,7 @@ export function buildLegacyImportEvents(
       buildEvent({
         type: "legacy.anomaly",
         payload: {
-          materialClassification: "declared",
+          materialClassification: "direct",
           sourceFingerprint: plan.sourceFingerprint,
           anomalyId: anomaly.id,
           anomalyClass: anomaly.class,
@@ -192,7 +224,12 @@ export function buildLegacyImportEvents(
         actor,
         source,
         evidence: evidenceFor(
-          hashes.get(anomaly.relativePath ?? "") ?? indexHash.artifactHash,
+          anomalyEvidenceHash(
+            hashes,
+            anomaly.relativePath,
+            plan.sourceFingerprint,
+            "legacy anomaly",
+          ),
           "direct",
         ),
         provenance: { origin: "direct", confidence: 1 },
@@ -204,7 +241,7 @@ export function buildLegacyImportEvents(
     buildEvent({
       type: "legacy.import.completed",
       payload: {
-        materialClassification: "declared",
+        materialClassification: "direct",
         sourceFingerprint: plan.sourceFingerprint,
         root: plan.root,
         planHash: plan.planHash,

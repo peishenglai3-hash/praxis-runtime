@@ -168,20 +168,39 @@ millisecond collide and the per-event mirror file is overwritten.
 
 ## 5. Anomaly classes
 
-These are the classes the Bible requires the importer to detect and report.
 Detection must be evidence-based; a flagged row is never rewritten.
 
-| Class                      | Detection rule (structural)                                                                                                            | Handling                                                                                                |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `possible_overwrite`       | A signal identifier sequence that restarts, or two records sharing an identifier across flush batches.                                 | Keep the surviving file. Record the restart. Do not renumber as "true history".                         |
-| `ambiguous_pattern`        | More than one distinct `<category>:<value>` association pair mapping to one `patternId`.                                               | Record the collision count. The survivor is a `candidate` asset at low provenance. Never auto-`active`. |
-| `source_metadata_conflict` | Two source files declaring different versions of the same component, or a declared version that does not match the code's own header.  | Record both declarations verbatim as metadata. Do not elect a winner.                                   |
-| `unrecoverable_field`      | A declared field with no value in any observed record, or a field dropped at the persistence boundary.                                 | Record the field name and the reason. Never infer a value.                                              |
-| `cartesian_relation`       | An association set whose cardinality equals the pairwise product of its grouping key rather than the count of observed co-occurrences. | Import as `legacy` candidate evidence only. Never as a mechanism fact.                                  |
-| `parse_error`              | A file whose declared format cannot be parsed (malformed JSON, unreadable frontmatter).                                                | Record path, size, digest and the failure. Do not repair.                                               |
-| `encoding_marker`          | A leading UTF-8 BOM on a file whose parser anchors at byte zero.                                                                       | Record it as the reason for a `parse_error` when it causes one.                                         |
-| `unmapped_path`            | A path under the source root that the field map does not describe.                                                                     | Record it. Never guess a mapping.                                                                       |
-| `privacy_sensitive`        | A record whose payload matches a declared privacy rule set.                                                                            | Excluded from import by default; counted in the report. See section 7.                                  |
+### 5.0 Where the class list comes from
+
+The Bible's section 12 table has five rows. Four of them name a class
+explicitly — `possible_overwrite`, `ambiguous_pattern`,
+`source_metadata_conflict`, `unrecoverable_field`. The fifth row describes a
+condition ("graph cartesian relation") and states its handling, but names no
+class; this implementation gave it the name `cartesian_relation`.
+
+The Phase 5 audit found four further conditions the audited corpus exhibits and
+the table cannot express: a file whose declared format cannot be parsed
+(`parse_error`), a leading byte-order mark on a file whose parser anchors at
+byte zero (`encoding_marker`), a path the field map does not describe
+(`unmapped_path`), and material matched by a privacy rule
+(`privacy_sensitive`). They are implemented as distinct classes rather than
+folded into an existing one, because folding would report a parse failure as
+"possibly overwritten" — a claim about history the evidence does not support.
+
+This provenance is recorded as `RFC MISMATCH: LEGACY_ANOMALY_CLASSES_EXTENDED`
+in `docs/RFC/RFC-0001.md`; the decision owner is the repository owner.
+
+| Class                      | Detection rule as implemented                                                                                                          | Handling                                                                                                                           |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `possible_overwrite`       | An ordinal that repeats inside one date bucket, or an unused ordinal value **inside the range a bucket actually occupies**.            | Keep the surviving file. Record the count of unused ordinals. Do not renumber as "true history".                                   |
+| `ambiguous_pattern`        | More than one distinct `<category>:<value>` association pair mapping to one `patternId`.                                               | Record the collision count. The survivor is a `candidate` asset at low provenance. Never auto-`active`.                            |
+| `source_metadata_conflict` | Two source files declaring different versions of the same component, or a declared version that does not match the code's own header.  | Record both declarations verbatim as metadata. Do not elect a winner.                                                              |
+| `unrecoverable_field`      | A declared field with no value in any observed record, or a field dropped at the persistence boundary.                                 | Record the field name and the reason. Never infer a value.                                                                         |
+| `cartesian_relation`       | An association set whose cardinality equals the pairwise product of its grouping key rather than the count of observed co-occurrences. | Import as `legacy` candidate evidence only. Never as a mechanism fact.                                                             |
+| `parse_error`              | A file whose declared format cannot be parsed (malformed JSON, unreadable frontmatter).                                                | Record path, size, digest and the failure. Do not repair.                                                                          |
+| `encoding_marker`          | A leading UTF-8 BOM on a file whose parser anchors at byte zero.                                                                       | Record it as the reason for a `parse_error` when it causes one.                                                                    |
+| `unmapped_path`            | A path under the source root that the field map does not describe.                                                                     | Record it. Never guess a mapping.                                                                                                  |
+| `privacy_sensitive`        | A path matched by a declared privacy rule — by absolute prefix or by the relative prefix the field map names it with.                  | Excluded from import, counted, and reported with the rule id. A declared rule that matched nothing is reported too. See section 7. |
 
 ### 5.1 Corpus census (owner-local observation, structure only)
 
@@ -225,22 +244,41 @@ The importer classifies each case as `parse_error` with reason
 `format_anchor_mismatch` (line-ending anchor) or `encoding_marker` (BOM). It
 records the file and the reason and does not normalise the source in place.
 
+**Coverage boundary of the version row.** The `declared versions` row is an
+audit observation across five declaration sites, but `source_metadata_conflict`
+is raised only from the two **machine-readable manifests** the field map
+classifies as `source_manifest` (`hub-manifest.json` and
+`.codex-plugin/plugin.json`). Version strings in `README.md`, in script
+headers, and in the skill roadmap are prose: the scanner does not read them,
+and the files carrying them are disclosed as `unmapped_path`. That is a real
+gap between what the audit observed and what the importer reports, stated here
+rather than left implicit — closing it would mean teaching the importer to
+parse prose for version strings, which is inference, not reading.
+
 ## 6. Import mapping
 
-| First-generation material | Runtime event / object                                 | Provenance |
-| ------------------------- | ------------------------------------------------------ | ---------- |
-| signal record             | `legacy.signal.imported`                               | `declared` |
-| pattern record            | `legacy.pattern.imported` + `candidate` reusable asset | `inferred` |
-| graph association         | `legacy.graph-edge.imported`                           | `inferred` |
-| anomaly                   | `legacy.anomaly`                                       | `direct`   |
-| import run                | `legacy.import.completed`                              | `direct`   |
-| archive copy              | manifest row in `legacy_archive_manifest`              | `direct`   |
+| First-generation material | Runtime event / object                                               | Provenance |
+| ------------------------- | -------------------------------------------------------------------- | ---------- |
+| signal record             | `legacy.signal.imported`                                             | `declared` |
+| pattern record            | `legacy.pattern.imported`                                            | `inferred` |
+| graph association         | `legacy.graph-edge.imported`                                         | `inferred` |
+| anomaly                   | `legacy.anomaly`                                                     | `direct`   |
+| import run                | `legacy.import.completed`                                            | `direct`   |
+| archive copy              | files under the archive root + `LegacyArchiveManifest` in the report | `direct`   |
 
-No first-generation pattern may reach `validated` or `active` without the
-Phase 4 promotion policy, independent evidence, and human confirmation. The
-importer's writer is the frozen `IMPORTER` role, whose namespace is `legacy.*`
-only; it holds no `asset.*` scope. Candidate creation is therefore a separate,
-explicit runtime step.
+The Bible's section 12 sentence "旧 patterns → candidate asset，不自动
+active" describes the destination of a first-generation pattern in the second
+generation. The importer delivers the **first** half and stops: it writes
+`legacy.pattern.imported` with `inferred` provenance, and it does **not**
+create a candidate asset. The importer's writer is the frozen `IMPORTER` role,
+whose namespace is `legacy.*` only and which holds no `asset.*` scope, so it
+could not create one. Candidate-asset creation is a separate, explicit runtime
+step taken by a writer that holds the asset scope — and the second half of the
+sentence, "不自动 active", is enforced by the Phase 4 promotion policy, which
+no import path can satisfy on its own.
+
+No first-generation pattern may reach `validated` or `active` without that
+policy, independent evidence, and human confirmation.
 
 ## 7. Privacy rule set (default)
 
@@ -258,6 +296,27 @@ The Bible requires an explicit privacy position rather than a silent one.
   original directory is read-only input and is left untouched.
 - The report contains counts and anomaly classes. It does not contain record
   values.
+
+### 7.1 Absolute paths are disclosed, not hidden
+
+Every path the importer records **inside a record** is root-relative: anomaly
+rows, event payloads and the inventory carry the path as the field map names
+it, so a report stays portable and does not carry the operator's directory
+layout into an event payload.
+
+Three surfaces do carry an absolute host path, and they do so deliberately:
+
+1. the import run's `root`, which names what was read;
+2. the archive manifest's `archiveRoot` and each entry's `archivedPath`;
+3. the command line's `legacy import` `archive` line and `legacy runs --json`.
+
+They are kept because a migration record that cannot name its own input is not
+auditable, and because the ledger already holds the root — redacting it from
+the report would make the report disagree with the ledger. The consequence is
+that these documents name the operator's home directory. **They are
+owner-local operational evidence and are not publication material.** Anything
+derived from them that leaves this machine should be reduced to the
+root-relative paths and the corpus fingerprint first.
 
 ## 8. Non-goals
 

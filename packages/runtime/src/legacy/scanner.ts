@@ -64,6 +64,22 @@ export interface LegacyScanOptions {
   now?: () => Date;
 }
 
+/**
+ * Index-level fields that have a usable default. The default keeps a record
+ * readable; it never stands in for a declared value, because every field that
+ * fell back to it is named in the record's `absentFields`.
+ */
+const indexFieldDefaults = [
+  "type",
+  "category",
+  "confidence",
+  "source",
+] as const;
+
+function isDeclared(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== "";
+}
+
 const SIGNAL_BODY_PATTERN = /^signals\/[^/]+\/[^/]+\.md$/;
 const PATTERN_BODY_PATTERN = /^patterns\/(?:active|archived)\/[^/]+\.md$/;
 const EVENT_RECORD_PATTERN = /^\.events\/[^/]+\.json$/;
@@ -123,6 +139,13 @@ class AnomalyCollector {
   ): void {
     // Components are digested individually rather than joined by a
     // separator character, so no component can forge a boundary.
+    //
+    // `artifactKind` is stored on the anomaly but is deliberately not part of
+    // the key. Every call site derives it from the same path that is in the
+    // key (`classifyArtifact`), and where a kind stands alone it is carried in
+    // `declaredValue`, so two anomalies can never differ by kind alone. Adding
+    // it would change every anomaly id — and therefore every plan hash — for
+    // no change in behaviour.
     const key = [
       anomalyClass,
       reason,
@@ -202,6 +225,9 @@ export function scanLegacySources(
 
   const scanned: ScannedFile[] = [];
   const exclusions: LegacyExclusion[] = [];
+  const excludedPaths = new Set<string>();
+  const excludedKeys = new Set<string>();
+  const matchedRuleIds = new Set<string>();
 
   for (const { root, file } of rawFiles) {
     const relativePath = file.relativePath;
@@ -217,7 +243,7 @@ export function scanLegacySources(
         "encoding_marker",
         "file begins with a UTF-8 byte-order mark",
         {
-          relativePath,
+          relativePath: withRoot(root, relativePath),
           artifactKind,
           declaredValue: "utf8-bom",
         },
@@ -227,7 +253,7 @@ export function scanLegacySources(
       anomalyClasses.push("parse_error");
       parseStatus = "failed";
       anomalies.add("parse_error", "file is not valid UTF-8", {
-        relativePath,
+        relativePath: withRoot(root, relativePath),
         artifactKind,
       });
     }
@@ -237,28 +263,35 @@ export function scanLegacySources(
         "unmapped_path",
         "path is not described by the legacy field map",
         {
-          relativePath,
+          relativePath: withRoot(root, relativePath),
           artifactKind,
         },
       );
     }
 
-    const matchedRule = privacyRules.find((rule) =>
-      withRoot(root, relativePath).startsWith(rule.pathPrefix),
+    // A rule may be written against the absolute source path or against the
+    // path as the field map names it. Matching only the absolute form would
+    // make the more natural spelling silently match nothing.
+    const matchedRule = privacyRules.find(
+      (rule) =>
+        withRoot(root, relativePath).startsWith(rule.pathPrefix) ||
+        relativePath.startsWith(rule.pathPrefix),
     );
     if (matchedRule !== undefined) {
       anomalyClasses.push("privacy_sensitive");
-      const qualified = withRoot(root, relativePath);
+      matchedRuleIds.add(matchedRule.ruleId);
       exclusions.push({
         ruleId: matchedRule.ruleId,
-        relativePath: qualified,
+        relativePath: withRoot(root, relativePath),
         reason: matchedRule.reason,
       });
       anomalies.add("privacy_sensitive", matchedRule.reason, {
-        relativePath,
+        relativePath: withRoot(root, relativePath),
         artifactKind,
         declaredValue: matchedRule.ruleId,
       });
+      excludedPaths.add(withRoot(root, relativePath));
+      excludedKeys.add(relativePath);
     }
 
     scanned.push({
@@ -278,11 +311,21 @@ export function scanLegacySources(
     });
   }
 
-  const signals = collectSignals(scanned, anomalies);
-  const patterns = collectPatterns(scanned, anomalies);
-  const graphEdges = collectGraphEdges(scanned, anomalies);
+  const signals = collectSignals(scanned, anomalies, excludedKeys);
+  const patterns = collectPatterns(scanned, anomalies, excludedKeys);
+  const graphEdges = collectGraphEdges(scanned, anomalies, excludedKeys);
   collectEventLog(scanned, anomalies);
   collectVersionDeclarations(scanned, anomalies);
+  collectUnsupportedFamilies(scanned, anomalies);
+
+  for (const rule of privacyRules) {
+    if (matchedRuleIds.has(rule.ruleId)) continue;
+    anomalies.add(
+      "privacy_sensitive",
+      "a declared privacy rule matched nothing under this source root",
+      { declaredValue: rule.ruleId },
+    );
+  }
 
   const countsByArtifactKind: Record<string, number> = {};
   for (const file of scanned) {
@@ -296,10 +339,14 @@ export function scanLegacySources(
       (countsByAnomalyClass[anomaly.class] ?? 0) + anomaly.affectedCount;
   }
 
+  // The fingerprint identifies the corpus by content and layout, not by where
+  // it currently lives. Including the root would make the same corpus at a new
+  // path a different corpus, so a move would re-import every record instead of
+  // being recognised as the same material.
   const fingerprint = sha256Hex(
     stableStringify(
       scanned.map((file) => ({
-        path: file.entry.relativePath,
+        path: file.key,
         sha256: file.entry.sha256,
       })) as never,
     ),
@@ -349,6 +396,7 @@ function markFailure(
 function collectSignals(
   scanned: readonly ScannedFile[],
   anomalies: AnomalyCollector,
+  excludedKeys: ReadonlySet<string>,
 ): LegacySignalRecord[] {
   const bodyFieldCounts = new Map<string, number>();
   let bodyCount = 0;
@@ -402,6 +450,9 @@ function collectSignals(
 
   const indexFile = findFile(scanned, ".signals_index.json");
   if (indexFile === undefined) return [];
+  // A privacy rule that matches the index excludes the material it carries,
+  // rather than only reporting that it matched.
+  if (excludedKeys.has(indexFile.key)) return [];
   const parsed = parseJsonDocument(indexFile.text, indexFile.hadBom);
   if (parsed.failure !== undefined) {
     indexFile.entry.parseStatus = "failed";
@@ -415,12 +466,27 @@ function collectSignals(
   }
 
   const indexRecord = asRecord(parsed.value);
-  const rawSignals = asArray(indexRecord?.["signals"]);
+  if (indexRecord === undefined || !Array.isArray(indexRecord["signals"])) {
+    // A file classified as the signal index that parses but carries no
+    // signal array is a shape the field map does not describe. Reporting
+    // zero signals and zero anomalies would drop a whole artifact family.
+    markFailure(indexFile, "parse_error");
+    anomalies.add(
+      "parse_error",
+      "the signal index parsed but declares no signal array, so no record in it could be read",
+      {
+        relativePath: indexFile.entry.relativePath,
+        artifactKind: "signal_index",
+        declaredValue: "signals-array-absent",
+      },
+    );
+    return [];
+  }
+  const rawSignals = asArray(indexRecord["signals"]);
   const observedFields = new Set<string>();
   const sequenceByBucket = new Map<string, number[]>();
   const records: LegacySignalRecord[] = [];
   let excludedCount = 0;
-  let normalisedCount = 0;
 
   for (const raw of rawSignals) {
     const record = asRecord(raw);
@@ -433,7 +499,6 @@ function collectSignals(
       excludedCount += 1;
       continue;
     }
-    if (timestamp.normalised) normalisedCount += 1;
 
     const match = /^(sig_\d{8})_(\d+)$/.exec(recordId);
     if (match !== null) {
@@ -444,9 +509,16 @@ function collectSignals(
       sequenceByBucket.set(bucket, ordinals);
     }
 
+    // Four index-level fields fall back to a default so the record stays
+    // readable. Every field that did is named in `absentFields`, so a reader
+    // never mistakes a default for something the source declared, and the
+    // producer is not given a name it never claimed.
+    const defaulted = indexFieldDefaults.filter(
+      (field) => !isDeclared(record[field]),
+    );
     records.push({
       recordId,
-      signalKind: asString(record["type"], "unknown"),
+      signalKind: asString(record["type"], "undeclared"),
       category: asString(record["category"], "uncategorized"),
       value: asString(record["value"]),
       occurredAt: timestamp.value,
@@ -455,34 +527,24 @@ function collectSignals(
         1,
         Math.max(0, asFiniteNumber(record["confidence"], 0.5)),
       ),
-      source: asString(record["source"], "codex"),
+      source: asString(record["source"], "undeclared"),
       sourcePath: indexFile.entry.relativePath,
       declaredFields: Object.keys(record).sort(comparePaths),
-      absentFields: legacyOptionalSignalFields.filter(
-        (field) => !(field in record),
-      ),
+      absentFields: [
+        ...defaulted,
+        ...legacyOptionalSignalFields.filter((field) => !(field in record)),
+      ].sort(comparePaths),
     });
   }
 
   if (excludedCount > 0) {
     anomalies.add(
       "parse_error",
-      "index entry has no usable identifier or no valid declared instant and was excluded from import",
+      "index entry carries no usable identifier, or its declared instant has no time-zone designator and cannot be read from the declaration alone; the entry was excluded from import rather than given an instant this host chose",
       {
         artifactKind: "signal_index",
         affectedCount: excludedCount,
         declaredValue: "excluded-entries",
-      },
-    );
-  }
-  if (normalisedCount > 0) {
-    anomalies.add(
-      "unrecoverable_field",
-      "declared timestamp was not in canonical UTC form; the same instant was converted and the original spelling is preserved on the record",
-      {
-        artifactKind: "signal_index",
-        affectedCount: normalisedCount,
-        declaredValue: "non-canonical-timestamp",
       },
     );
   }
@@ -557,11 +619,13 @@ function detectOrdinalGaps(
 function collectPatterns(
   scanned: readonly ScannedFile[],
   anomalies: AnomalyCollector,
+  excludedKeys: ReadonlySet<string>,
 ): LegacyPatternRecord[] {
   const byId = new Map<string, LegacyPatternRecord>();
 
   for (const file of scanned) {
     if (file.entry.artifactKind !== "pattern_body") continue;
+    if (excludedKeys.has(file.key)) continue;
     const result = parseFrontmatter(file.text);
     if (result.parsed === undefined) {
       file.entry.parseStatus = "failed";
@@ -631,9 +695,11 @@ function collectPatterns(
 function collectGraphEdges(
   scanned: readonly ScannedFile[],
   anomalies: AnomalyCollector,
+  excludedKeys: ReadonlySet<string>,
 ): LegacyGraphEdge[] {
   const graphFile = findFile(scanned, ".graph_state.json");
   if (graphFile === undefined) return [];
+  if (excludedKeys.has(graphFile.key)) return [];
   const parsed = parseJsonDocument(graphFile.text, graphFile.hadBom);
   if (parsed.failure !== undefined) {
     graphFile.entry.parseStatus = "failed";
@@ -647,6 +713,9 @@ function collectGraphEdges(
   }
 
   const graph = asRecord(parsed.value);
+  // One build time is declared for the whole association set. It is carried on
+  // each edge so an imported association is not stamped with the import clock.
+  const declaredBuiltAt = canonicalizeDeclaredTimestamp(graph?.["lastBuilt"]);
   const edges: LegacyGraphEdge[] = [];
   const strengths = new Set<number>();
   const groupingKeys = new Set<string>();
@@ -667,7 +736,34 @@ function collectGraphEdges(
       strength,
       frequency: Math.max(0, asInteger(association["frequency"], 0)),
       relationClass: "value_pair",
+      ...(declaredBuiltAt === undefined
+        ? {}
+        : { declaredBuiltAt: declaredBuiltAt.value }),
     });
+  }
+
+  const pairCounts = new Map<string, number>();
+  for (const edge of edges) {
+    const pair = `${edge.from}\u0000${edge.to}`;
+    pairCounts.set(pair, (pairCounts.get(pair) ?? 0) + 1);
+  }
+  const duplicatePairs = [...pairCounts.entries()].filter(
+    ([, count]) => count > 1,
+  );
+  if (duplicatePairs.length > 0) {
+    // An association pair is the edge's event identity, so the source emitting
+    // the same pair twice with different strengths cannot become two records.
+    // The condition is reported here, before anything is written, rather than
+    // surfacing later as a generic identity conflict.
+    anomalies.add(
+      "parse_error",
+      "the association set declares the same from/to pair more than once with differing quantities; the pair is one event identity and only its first reading is imported",
+      {
+        artifactKind: "graph_state",
+        affectedCount: duplicatePairs.length,
+        declaredValue: `${duplicatePairs.length} repeated pair(s)`,
+      },
+    );
   }
 
   if (edges.length > 0) {
@@ -796,6 +892,38 @@ function collectEventLog(
   }
 }
 
+/**
+ * Artifact families the scanner classifies and hashes but does not import.
+ *
+ * The field map names these paths, so they are not `unmapped_path`; but no
+ * collector reads them either. Reporting only a count in
+ * `countsByArtifactKind` leaves an operator unable to tell "read and imported"
+ * from "read and set aside", so each such family is disclosed as an anomaly.
+ */
+const classifiedNotImported: readonly LegacyArtifactKind[] = [
+  "signal_buffer",
+  "event_record",
+  "subscription_index",
+  "profile_document",
+];
+
+function collectUnsupportedFamilies(
+  scanned: readonly ScannedFile[],
+  anomalies: AnomalyCollector,
+): void {
+  for (const kind of classifiedNotImported) {
+    const count = scanned.filter(
+      (file) => file.entry.artifactKind === kind,
+    ).length;
+    if (count === 0) continue;
+    anomalies.add(
+      "unmapped_path",
+      `artifact family is classified but not imported by this importer; the files were read and hashed and no record was taken from them`,
+      { artifactKind: kind, affectedCount: count, declaredValue: kind },
+    );
+  }
+}
+
 function collectVersionDeclarations(
   scanned: readonly ScannedFile[],
   anomalies: AnomalyCollector,
@@ -851,11 +979,10 @@ export function buildLegacyMigrationPlan(
     ...(input.now === undefined ? {} : { now: input.now }),
   });
 
-  const signals = scan.exclusions.some((exclusion) =>
-    exclusion.relativePath.endsWith("/.signals_index.json"),
-  )
-    ? []
-    : scan.signals;
+  // The scanner withholds excluded material from every family it extracts, so
+  // the plan takes the scan's output directly rather than re-applying the
+  // rule set and risking a second, different interpretation of it.
+  const signals = scan.signals;
 
   const counts: LegacyMigrationCounts = {
     scannedFiles: scan.inventory.fileCount,

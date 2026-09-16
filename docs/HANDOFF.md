@@ -17,6 +17,18 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 
 ## Current checkpoint
 
+- Phase 5 / Bible `EPIC-008` and `EPIC-009` is implemented and locally verified
+  within the declared local capability boundary: audited Legacy migration plus
+  command-line, diagnostics and operational evidence. `pnpm verify` passes
+  139/139 tests across 18 files, plus the Phase 1-5 scenarios, including a
+  four-process concurrent import and a real-process command-line scenario. No
+  exact Node `22.13.0` runner evidence exists for this checkpoint yet, so it is
+  a local slice rather than a closed phase gate. Entry points:
+  `docs/PHASE-5-GATE.md`, `docs/ADR/ADR-0012-phase5-legacy-migration.md`,
+  `docs/ADR/ADR-0013-phase5-cli-diagnostics.md`, and
+  `docs/migration/LEGACY-FIELD-MAP.md`. The Phase 5 review round and the two
+  defects it recorded rather than fixed (`BP-047`, `BP-048`) are set out in the
+  gate document.
 - Phase 4 / Bible `EPIC-007` Reusable Assets is implemented and verified within
   the declared local capability boundary.
 - Gates A–D are `PASS` within that boundary. GitHub Actions run
@@ -140,10 +152,11 @@ Ubuntu and Windows. A local Node 24 pass is useful development evidence only.
 
 The remaining Bible delivery slices are:
 
-- **Phase 5 — EPIC-008 / EPIC-009:** audited Legacy migration plus CLI
-  diagnostics and operational evidence. This requires a hashed, dry-run,
-  reversible migration fixture and explicit treatment of malformed, duplicate,
-  privacy-sensitive, and unmapped legacy records.
+- **Phase 5 — EPIC-008 / EPIC-009:** implemented. The remaining external gate
+  is exact Node `22.13.0` Ubuntu/Windows CI evidence for this checkpoint, which
+  is the same runner boundary Gate D closed for Phase 4. One scope gap is named
+  in `docs/PHASE-5-GATE.md`: Bible section 13.2's context-ranking weights,
+  reflection budgets and timing-residual thresholds remain package defaults.
 - **Phase 6 — EPIC-010:** dummy-first adapters and provider isolation. This
   requires provider-independent contracts, deterministic fake adapters,
   timeout/error/budget fixtures, and proof that provider SDKs cannot enter the

@@ -180,21 +180,31 @@ export function parseNdjson(text: string): NdjsonParseResult {
 }
 
 /**
+ * A declaration must carry its own zone designator.
+ *
+ * Without one, `Date.parse` resolves the string against the *host* time zone,
+ * so the same bytes would name a different instant on a different machine: the
+ * instant would be invented by the reader rather than read from the
+ * declaration. Such a declaration is refused and the caller records the
+ * refusal, instead of converting it and claiming the instant was preserved.
+ */
+const ZONE_DESIGNATOR = /(?:Z|[+-]\d{2}:?\d{2})$/;
+
+/**
  * Canonicalise a declared timestamp without inventing an instant. A value that
- * names a valid instant in a non-canonical spelling is converted; a value that
- * does not name a valid instant is rejected so the caller can exclude the
- * record instead of guessing.
+ * names a valid instant in a non-canonical spelling is converted, which is a
+ * faithful format conversion of the same instant; a value that does not name
+ * an instant on its own is rejected so the caller can exclude the record
+ * instead of guessing.
  */
 export function canonicalizeDeclaredTimestamp(
   declared: unknown,
 ): { value: string; normalised: boolean } | undefined {
   if (typeof declared !== "string" || declared.length === 0) return undefined;
+  if (!ZONE_DESIGNATOR.test(declared)) return undefined;
   const parsed = Date.parse(declared);
   if (!Number.isFinite(parsed)) return undefined;
   const canonical = new Date(parsed).toISOString();
-  if (canonical !== declared && canonical !== declared.replace(/Z$/, ".000Z")) {
-    return { value: canonical, normalised: true };
-  }
   return { value: canonical, normalised: canonical !== declared };
 }
 

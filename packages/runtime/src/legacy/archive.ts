@@ -3,6 +3,8 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -27,6 +29,13 @@ export interface LegacyArchiveInput {
   sourceFingerprint: string;
   createdAt: string;
   entries: Array<{ relativePath: string; bytes: Uint8Array }>;
+  /**
+   * Digests the plan recorded for the corpus it was derived from, keyed by the
+   * path as the field map names it. When supplied, every archived stream is
+   * checked against it, so the archive is proven to hold the corpus the plan
+   * describes rather than merely asserted to.
+   */
+  expectedDigests?: ReadonlyMap<string, string>;
 }
 
 export class LegacyArchiveError extends Error {
@@ -47,16 +56,23 @@ export class LegacyArchiveError extends Error {
  * mapping stays deterministic for a given root list.
  */
 export function legacyRootLabels(roots: readonly string[]): string[] {
-  const seen = new Map<string, number>();
+  const emitted = new Set<string>();
   const labels: string[] = [];
   for (const [index, root] of roots.entries()) {
     const normalized = root.replaceAll("\\", "/").replace(/\/+$/, "");
     const segment = normalized.split("/").filter(Boolean).pop() ?? "root";
     const sanitized = segment.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 64);
     const base = sanitized.length === 0 ? "root" : sanitized;
-    const previous = seen.get(base);
-    const label = previous === undefined ? base : `${base}-${index}`;
-    seen.set(base, (previous ?? 0) + 1);
+    // Two roots with different basenames can still sanitise to the same label
+    // ("data-2" and "data/2"), so uniqueness is checked against the labels
+    // actually emitted rather than against the base names.
+    let label = base;
+    let suffix = index;
+    while (emitted.has(label)) {
+      label = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    emitted.add(label);
     labels.push(label);
   }
   return labels;
@@ -136,6 +152,12 @@ export function writeLegacyArchive(
     }
     mkdirSync(dirname(destination), { recursive: true });
     const digest = sha256Hex(entry.bytes);
+    const expected = input.expectedDigests?.get(entry.relativePath);
+    if (expected !== undefined && expected !== digest) {
+      throw new LegacyArchiveError(
+        `archived bytes do not match the digest this plan recorded for ${entry.relativePath}`,
+      );
+    }
     if (existsSync(destination)) {
       // The archive is write-once by design, so its entries are made
       // read-only. A re-import of the same corpus therefore leaves the
@@ -150,7 +172,25 @@ export function writeLegacyArchive(
         );
       }
     } else {
-      writeFileSync(destination, entry.bytes);
+      // A crash between write and rename must not leave a short file that the
+      // next attempt refuses as "different content", so the bytes land in a
+      // temporary name and are moved into place in one step.
+      const staging = `${destination}.tmp-${sha256Hex(entry.relativePath).slice(0, 12)}`;
+      writeFileSync(staging, entry.bytes);
+      try {
+        renameSync(staging, destination);
+      } catch (error) {
+        try {
+          unlinkSync(staging);
+        } catch {
+          // The staging file is reported by the error below either way.
+        }
+        throw new LegacyArchiveError(
+          `could not place archive entry ${entry.relativePath}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
       try {
         chmodSync(destination, 0o444);
       } catch {
@@ -173,9 +213,12 @@ export function writeLegacyArchive(
     sourceFingerprint: input.sourceFingerprint,
     entries,
   };
+  const manifestPath = join(archiveRoot, "manifest.json");
+  const stagedManifest = `${manifestPath}.tmp`;
   writeFileSync(
-    join(archiveRoot, "manifest.json"),
+    stagedManifest,
     `${JSON.stringify(JSON.parse(stableStringify(manifest as never)) as unknown, null, 2)}\n`,
   );
+  renameSync(stagedManifest, manifestPath);
   return manifest;
 }

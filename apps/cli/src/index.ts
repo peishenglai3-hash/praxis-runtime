@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -22,6 +28,7 @@ import {
 import { restoreDatabaseFile, SqliteEventStore } from "@praxis/store";
 
 import {
+  assertKnownFlags,
   booleanFlag,
   optionalFlag,
   parseArgs,
@@ -89,6 +96,7 @@ function resolveEnvironment(
       env["PRAXIS_LEGACY_ARCHIVE"] ??
       join(dataDir, "legacy-archive"),
   );
+  assertOutsideWorkingTree(legacyArchiveRoot, "legacy archive root");
 
   const actor = {
     type: config.actor?.type ?? ("human" as const),
@@ -177,6 +185,29 @@ function openRoot(
       lock.release();
     }
     throw error;
+  }
+}
+
+/**
+ * The archive holds the owner's first-generation corpus. It must not be
+ * written into a working tree, where an ordinary `git add -A` would stage it,
+ * so the location is refused rather than warned about.
+ */
+function assertOutsideWorkingTree(target: string, label: string): void {
+  const resolved = resolve(target);
+  const drive = /^[A-Za-z]:[\\/]/.test(resolved);
+  const parts = resolved.split(/[\\/]+/).filter(Boolean);
+  const rest = drive ? parts.slice(1) : parts.slice(1);
+  let current = drive ? `${parts[0]}\\` : "/";
+  for (const part of rest) {
+    current = join(current, part);
+    if (existsSync(join(current, ".git"))) {
+      throw new CliError(
+        "CONFIG_ERROR",
+        `${label} is inside the Git working tree at ${current}`,
+        { target, workingTree: current },
+      );
+    }
   }
 }
 
@@ -312,8 +343,8 @@ function commandDoctor(
       status: "pass" as const,
       message:
         environment.config.path === null
-          ? "no configuration file; defaults are in effect"
-          : "configuration file schema and fields are valid",
+          ? "no configuration file; defaults were used"
+          : "configuration was resolved and validated before this report",
       details: {
         path: environment.config.path,
         hash: environment.config.hash,
@@ -895,6 +926,12 @@ function commandLegacy(
         : { privacyRules: environment.config.config.legacyPrivacyRules }),
     });
 
+    if (booleanFlag(parsed, "dry-run") && booleanFlag(parsed, "confirm")) {
+      throw new CliError(
+        "USAGE_ERROR",
+        "legacy import accepts either --dry-run or --confirm, not both",
+      );
+    }
     if (booleanFlag(parsed, "dry-run")) {
       return {
         data: { schemaVersion: "1", dryRun: true, plan },
@@ -939,6 +976,11 @@ function commandLegacy(
         `events appended     ${application.appendedEvents}`,
         `last seq            ${application.lastSeq}`,
         `archive             ${environment.legacyArchiveRoot}`,
+        ...(application.planDiffersFromRecorded
+          ? [
+              "note                this corpus is already in the ledger under a different plan; nothing was written",
+            ]
+          : []),
       ],
     };
   } finally {
@@ -1112,6 +1154,9 @@ function commandBackup(
           "history.export",
           "backup restore",
         );
+        // The safety copy is unique per restore: a fixed name would block the
+        // next restore if one were ever left behind.
+        const restoreStamp = Date.now();
         const canonical = destination === environment.databasePath;
         const maintenanceLock = canonical
           ? root.handoffForMaintenance()
@@ -1125,7 +1170,9 @@ function commandBackup(
               ? {}
               : { expectedSha256: managed.backupSha256 }),
             ...(canonical
-              ? { safetyBackupPath: `${destination}.restore-safety.db` }
+              ? {
+                  safetyBackupPath: `${destination}.restore-safety-${restoreStamp}.db`,
+                }
               : {}),
           });
         } catch (error) {
@@ -1138,6 +1185,8 @@ function commandBackup(
           }
           throw error;
         }
+        const safetyPath = `${destination}.restore-safety-${restoreStamp}.db`;
+        const safety = existsSync(safetyPath) ? safetyPath : undefined;
         const reopened = openRoot(environment, "embedded", {
           databasePath: destination,
           ...(maintenanceLock === undefined
@@ -1149,10 +1198,53 @@ function commandBackup(
           const projectionRebuild = reopened.root.rebuildCoreProjections();
           const doctor = reopened.root.doctor();
           if (doctor.status === "fail") {
+            // The restored database failed the gate, so the safety copy goes
+            // back before the lock is released. Leaving the failed restore in
+            // place would make recovery a manual repair.
+            const failing = doctor.checks
+              .filter((check) => check.status === "fail")
+              .map((check) => check.name);
+            const rollbackLock = reopened.root.handoffForMaintenance();
+            if (safety === undefined) {
+              throw new CliError(
+                "STORAGE_ERROR",
+                "the restored database failed the post-restore doctor gate and no safety copy exists",
+                { failingChecks: failing },
+              );
+            }
+            restoreDatabaseFile({
+              sourcePath: safety,
+              destinationPath: destination,
+              safetyBackupPath: `${destination}.rolled-back-${Date.now()}.db`,
+            });
+            const recovered = openRoot(environment, "embedded", {
+              databasePath: destination,
+              existingLock: rollbackLock,
+              acquire: false,
+            });
+            try {
+              recovered.root.rebuildCoreProjections();
+            } finally {
+              recovered.root.close();
+            }
+            // The failing check names are carried out with the error: an
+            // operator told only that the gate failed has to reproduce the
+            // whole restore to find out why.
             throw new CliError(
               "STORAGE_ERROR",
-              "the restored database failed the post-restore doctor gate",
+              "the restored database failed the post-restore doctor gate; the safety copy was put back",
+              { failingChecks: failing },
             );
+          }
+          if (safety !== undefined) {
+            // The gate passed, so the safety copy has served its purpose and
+            // must not block the next restore.
+            try {
+              unlinkSync(safety);
+            } catch {
+              // A copy that cannot be removed is visible to the managed-backup
+              // integrity check rather than hidden here.
+            }
           }
           return {
             data: {
@@ -1269,6 +1361,7 @@ export function run(
     }
     const parsed = parseArgs(argv);
     json = parsed.json;
+    assertKnownFlags(parsed);
     if (parsed.help) {
       const outcome = {
         data: { schemaVersion: "1", usage: usageText() },

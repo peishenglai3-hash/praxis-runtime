@@ -35,6 +35,105 @@ export const subcommandsByCommand: Record<string, readonly string[]> = {
 /** Commands that take no subcommand. */
 export const bareCommands = ["init", "doctor", "rebuild", "export"] as const;
 
+/** Flags every command accepts. */
+export const globalFlags = [
+  "json",
+  "help",
+  "config",
+  "data-dir",
+  "database",
+  "actor",
+  "writer",
+] as const;
+
+/**
+ * The flags each command accepts. A flag outside its command's set is a usage
+ * error rather than something to ignore: on a command that deletes backups or
+ * writes to the ledger, a misspelled flag is far more likely to be a mistake
+ * with consequences than an intentional extension.
+ */
+export const flagsByCommand: Record<string, readonly string[]> = {
+  init: [],
+  doctor: [],
+  rebuild: [],
+  export: ["type", "limit", "out"],
+  "projection rebuild": [],
+  "event append": [
+    "type",
+    "payload",
+    "occurred-at",
+    "event-version",
+    "id",
+    "session",
+    "trace",
+    "operation",
+    "source-kind",
+    "source-ref",
+    "artifact-hash",
+  ],
+  "event list": ["type", "session", "limit"],
+  "state show": ["projection"],
+  "context plan": [
+    "candidates",
+    "mode",
+    "max-items",
+    "max-tokens",
+    "model-hint",
+    "task-id",
+    "project-id",
+    "record",
+  ],
+  "residual list": ["limit"],
+  "reflection run": [
+    "residual",
+    "evidence",
+    "max-depth",
+    "max-hypotheses",
+    "max-tool-calls",
+    "max-elapsed-ms",
+  ],
+  "asset list": [],
+  "asset inspect": [],
+  "asset contest": ["reason", "at"],
+  "asset disable": ["reason", "at"],
+  "asset restore": ["reason", "at"],
+  "asset fork": ["reason", "at", "new-id"],
+  "asset activate": ["reason", "at", "review", "human-confirmed"],
+  "history explain": [],
+  "legacy import": ["dry-run", "confirm", "plan-hash", "archive"],
+  "legacy runs": [],
+  "legacy anomalies": [],
+  "privacy purge": [
+    "session",
+    "dry-run",
+    "confirm",
+    "plan-hash",
+    "preserve-managed-backups",
+    "finalize-pending",
+  ],
+  "backup create": [],
+  "backup list": [],
+  "backup restore": ["destination"],
+  "lock inspect": [],
+  "lock clear-stale": ["token"],
+};
+
+export function assertKnownFlags(parsed: ParsedCommand): void {
+  const allowed = new Set<string>([
+    ...globalFlags,
+    ...(flagsByCommand[parsed.path.join(" ")] ?? []),
+  ]);
+  const unknown = [...parsed.flags.keys()].filter((name) => !allowed.has(name));
+  if (unknown.length === 0) return;
+  throw new CliError(
+    "USAGE_ERROR",
+    `${parsed.path.join(" ")} does not accept ${unknown
+      .map((name) => `--${name}`)
+      .join(", ")}`,
+    { accepted: [...allowed].sort() },
+  );
+}
+
 export interface ParsedCommand {
   /** The full command path, for example `["asset", "inspect"]`. */
   path: string[];
@@ -142,12 +241,17 @@ export function requireFlag(parsed: ParsedCommand, name: string): string {
   return value;
 }
 
+/**
+ * An empty value is treated as "not supplied". `--archive=` otherwise reaches
+ * `resolve("")`, which is the process working directory — a path the operator
+ * did not name and would not expect to be written to.
+ */
 export function optionalFlag(
   parsed: ParsedCommand,
   name: string,
 ): string | undefined {
   const value = parsed.flags.get(name);
-  return typeof value === "string" ? value : undefined;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 export function booleanFlag(parsed: ParsedCommand, name: string): boolean {

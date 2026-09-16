@@ -382,6 +382,88 @@ describe("legacy scanner anomaly detection", () => {
   });
 });
 
+describe("declared instants must carry their own zone", () => {
+  const indexOf = (timestamp: string) =>
+    JSON.stringify({
+      signals: [
+        {
+          id: "sig_20260601_001",
+          type: "preference",
+          category: "a",
+          value: "v",
+          timestamp,
+        },
+      ],
+      patterns: [],
+    });
+
+  it("accepts a declaration that names its own instant", () => {
+    const result = scanLegacySources(
+      ["/legacy"],
+      virtualFileSystem({
+        "/legacy": [
+          file(".signals_index.json", indexOf("2026-06-01T09:00:00.000Z")),
+        ],
+      }),
+      { now: fixedNow },
+    );
+    expect(result.signals).toHaveLength(1);
+    expect(result.signals[0]?.occurredAt).toBe("2026-06-01T09:00:00.000Z");
+  });
+
+  it("re-spells a zoned instant without claiming a loss", () => {
+    const result = scanLegacySources(
+      ["/legacy"],
+      virtualFileSystem({
+        "/legacy": [
+          file(".signals_index.json", indexOf("2026-06-01T17:00:00+08:00")),
+        ],
+      }),
+      { now: fixedNow },
+    );
+    expect(result.signals[0]?.occurredAt).toBe("2026-06-01T09:00:00.000Z");
+    // The same instant, re-spelled, is not something the source lost, so the
+    // re-spelling is not reported as a loss class.
+    expect(result.signals[0]?.declaredTimestamp).toBe(
+      "2026-06-01T17:00:00+08:00",
+    );
+    expect(
+      result.inventory.anomalies.some((item) =>
+        (item.declaredValue ?? "").includes("non-canonical-timestamp"),
+      ),
+    ).toBe(false);
+    expect(
+      result.inventory.anomalies.some(
+        (item) =>
+          item.class === "parse_error" &&
+          item.declaredValue === "excluded-entries",
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses an instant that only the reading host could resolve", () => {
+    // Without a zone designator, Date.parse resolves against the machine's
+    // own zone, so the same bytes would name different instants elsewhere.
+    const result = scanLegacySources(
+      ["/legacy"],
+      virtualFileSystem({
+        "/legacy": [
+          file(".signals_index.json", indexOf("2026-06-01T09:00:00")),
+        ],
+      }),
+      { now: fixedNow },
+    );
+    expect(result.signals).toHaveLength(0);
+    expect(
+      result.inventory.anomalies.some(
+        (item) =>
+          item.class === "parse_error" &&
+          item.declaredValue === "excluded-entries",
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("legacy migration plan", () => {
   it("is deterministic for one corpus and changes with the corpus", () => {
     const files = {

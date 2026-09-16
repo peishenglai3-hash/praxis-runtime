@@ -352,10 +352,16 @@ export interface LegacyImportRecordInput {
 
 export interface LegacyImportRecordResult {
   run: LegacyMigrationReport;
-  /** `false` when an identical run was already recorded. */
+  /** `false` when this corpus was already imported. */
   inserted: boolean;
   appendedEvents: number;
   lastSeq: number;
+  /**
+   * `true` when the corpus is already in the ledger under a different plan —
+   * a changed privacy rule set, for example. Nothing is written, and the
+   * caller is told so rather than being handed a silent success.
+   */
+  planDiffersFromRecorded: boolean;
 }
 
 export interface LegacyImportRunRecord {
@@ -2035,27 +2041,22 @@ export class SqliteEventStore
 
     try {
       this.#database.exec("BEGIN IMMEDIATE");
+      // Idempotency is keyed on the corpus, not on the plan. The Bible
+      // requires that the same source fingerprint re-imports idempotently, and
+      // keying on the plan as well would make a corrected rule set collide
+      // with the records the earlier run already wrote instead of being
+      // recognised as the same corpus.
       const existing = this.readLegacyRunInTransaction(
         report.sourceFingerprint,
-        report.planHash,
       );
       if (existing !== null) {
-        if (
-          stableStringify(existing.counts as unknown as JsonValue) !==
-          stableStringify(report.counts as unknown as JsonValue)
-        ) {
-          throw new StoreError(
-            "EVENT_ID_CONFLICT",
-            "a recorded legacy import run with this plan hash has different counts",
-            { runId: existing.runId },
-          );
-        }
         this.#database.exec("COMMIT");
         return {
           run: { ...report, runId: existing.runId, status: "already-imported" },
           inserted: false,
           appendedEvents: 0,
           lastSeq: existing.lastSeq,
+          planDiffersFromRecorded: existing.planHash !== report.planHash,
         };
       }
 
@@ -2142,6 +2143,7 @@ export class SqliteEventStore
         inserted: true,
         appendedEvents: results.filter((result) => result.inserted).length,
         lastSeq,
+        planDiffersFromRecorded: false,
       };
     } catch (error) {
       try {
@@ -2254,9 +2256,27 @@ export class SqliteEventStore
       )
       .all() as Array<Record<string, unknown>>;
 
+    // Material the operator deleted through an authorised purge is not
+    // missing, and a check that cannot tell the two apart ends up blaming the
+    // import for the operator's own exercise of their deletion right.
+    const purgedScopes = new Set(
+      (
+        this.#database
+          .prepare(
+            `SELECT scope_value FROM purge_receipts WHERE scope_value LIKE 'legacy:%'`,
+          )
+          .all() as Array<Record<string, unknown>>
+      ).map((entry) => String(entry["scope_value"])),
+    );
+
     for (const row of runs) {
       const runId = String(row["run_id"]);
       const fingerprint = String(row["source_fingerprint"]);
+      if (purgedScopes.has(`legacy:${fingerprint.slice(0, 16)}`)) {
+        // A receipt covers this corpus. The remaining records are what the
+        // operator chose to keep, so a count comparison has nothing to say.
+        continue;
+      }
       let counts: Record<string, unknown> = {};
       try {
         counts = JSON.parse(String(row["counts_json"])) as Record<
@@ -2329,24 +2349,19 @@ export class SqliteEventStore
 
   private readLegacyRunInTransaction(
     sourceFingerprint: string,
-    planHash: string,
-  ): { runId: string; counts: unknown; lastSeq: number } | null {
+  ): { runId: string; planHash: string; lastSeq: number } | null {
     const row = this.#database
       .prepare(
-        `SELECT run_id, counts_json, last_seq FROM legacy_import_runs
-         WHERE source_fingerprint = ? AND plan_hash = ?`,
+        `SELECT run_id, plan_hash, last_seq FROM legacy_import_runs
+         WHERE source_fingerprint = ?
+         ORDER BY completed_at ASC, run_id ASC
+         LIMIT 1`,
       )
-      .get(sourceFingerprint, planHash) as Record<string, unknown> | undefined;
+      .get(sourceFingerprint) as Record<string, unknown> | undefined;
     if (row === undefined) return null;
-    let counts: unknown = {};
-    try {
-      counts = JSON.parse(String(row["counts_json"])) as unknown;
-    } catch {
-      counts = {};
-    }
     return {
       runId: String(row["run_id"]),
-      counts,
+      planHash: String(row["plan_hash"]),
       lastSeq: Number(row["last_seq"] ?? 0),
     };
   }

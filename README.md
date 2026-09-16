@@ -168,6 +168,43 @@ bounded capability boundary:
   with formal Alpha/merge `GO` after exact Node `22.13.0` Ubuntu/Windows CI
   evidence.
 
+Phase 5 / EPIC-008 and EPIC-009 is implemented and locally verified as a
+bounded implementation slice. This is not a production-readiness claim:
+
+- the Legacy field map in [`docs/migration/LEGACY-FIELD-MAP.md`](./docs/migration/LEGACY-FIELD-MAP.md)
+  was derived from a read-only reading of the public first-generation source,
+  because `legacy/` was empty and an invented mapping would have produced an
+  importer that cannot import anything real;
+- the scanner is read-only and reports what the bytes say. It detects nine
+  anomaly classes, three of which the Bible's table does not name: a UTF-8
+  byte-order mark, a CRLF frontmatter anchor that the first generation's own
+  readers cannot match, and an explicitly unmapped path. It normalises no
+  source file and infers no missing value;
+- an imported signal is `declared`, an imported pattern or graph edge is
+  `inferred` with confidence capped at 0.5, and the writer is a confined
+  `IMPORTER` role with no asset scope, so no imported record can reach
+  `validated` or `active` through the import path;
+- a run, its source inventory, its anomalies and its events commit in one
+  transaction, idempotent by `(source_fingerprint, plan_hash)`; the archive is
+  written outside the repository, made read-only and idempotent by digest;
+- the repository fixture is synthetic and byte-exact, and `.gitattributes`
+  marks it `-text` so Git cannot normalise the encoding facts the importer is
+  required to detect. No first-generation record value enters this repository;
+- the command line has the Bible's exit-code taxonomy, a stable error document
+  carrying `code`, `message`, `details`, `traceId` and `suggestedAction`, and a
+  `--json` mode where stdout holds exactly one versioned machine document while
+  every diagnostic goes to stderr;
+- `praxis.config.json` is versioned, strict and secret-free; `doctor` gained a
+  config check, a legacy-import integrity check and the migration version;
+- `pnpm verify` passes 139/139 tests across 18 files plus the Phase 1-5
+  scenarios, including a four-process concurrent import and a real-process
+  command-line scenario in which doctor has to locate two deliberately injected
+  faults.
+
+One gap is named rather than closed: Bible section 13.2's context-ranking
+weights, reflection budgets and timing-residual thresholds remain package
+defaults. See [`docs/PHASE-5-GATE.md`](./docs/PHASE-5-GATE.md).
+
 The repository is synchronized to the private GitHub handoff target, and the
 exact remote CI gate is recorded above. `VACUUM INTO` remains the backup path
 for the pinned Node baseline; `node:sqlite` is experimental in Node `22.13.0`

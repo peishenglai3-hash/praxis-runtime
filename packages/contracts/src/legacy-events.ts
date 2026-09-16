@@ -22,6 +22,11 @@ import {
  *   - `legacy.anomaly`             `direct`   (an observation about the source)
  *   - `legacy.import.completed`    `direct`   (a record of the run itself)
  *
+ * `materialClassification` marks the *act*, not the material described, and
+ * therefore agrees with the envelope's provenance origin on every type: an
+ * anomaly is something this runtime observed, not something the source
+ * declared, even though it is an observation about declared material.
+ *
  * An imported record keeps the digest of the corpus it came from. That digest
  * participates in the event identity, so re-importing the same corpus is
  * idempotent while a different corpus can never collide with an earlier run.
@@ -104,7 +109,7 @@ const legacyGraphEdgeImportedPayload = z
 
 const legacyAnomalyPayload = z
   .object({
-    materialClassification: z.literal("declared"),
+    materialClassification: z.literal("direct"),
     sourceFingerprint: sha256,
     anomalyId: nonEmptyString,
     anomalyClass: legacyAnomalyClassSchema,
@@ -117,7 +122,7 @@ const legacyAnomalyPayload = z
 
 const legacyImportCompletedPayload = z
   .object({
-    materialClassification: z.literal("declared"),
+    materialClassification: z.literal("direct"),
     sourceFingerprint: sha256,
     root: nonEmptyString,
     planHash: sha256,
