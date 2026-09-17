@@ -42,6 +42,7 @@ import {
 } from "./args.js";
 import { configAuditFields, loadConfig, type LoadedConfig } from "./config.js";
 import { classifyError, CliError, exitCodes, newTraceId } from "./errors.js";
+import { ancestorDirectories } from "./paths.js";
 import {
   processSink,
   renderFailure,
@@ -200,20 +201,17 @@ function openRoot(
  * The archive holds the owner's first-generation corpus. It must not be
  * written into a working tree, where an ordinary `git add -A` would stage it,
  * so the location is refused rather than warned about.
+ *
+ * The walk itself lives in `paths.ts` because it is the part that has to be
+ * right on every platform. This function only supplies the filesystem.
  */
 function assertOutsideWorkingTree(target: string, label: string): void {
-  const resolved = resolve(target);
-  const drive = /^[A-Za-z]:[\\/]/.test(resolved);
-  const parts = resolved.split(/[\\/]+/).filter(Boolean);
-  const rest = drive ? parts.slice(1) : parts.slice(1);
-  let current = drive ? `${parts[0]}\\` : "/";
-  for (const part of rest) {
-    current = join(current, part);
-    if (existsSync(join(current, ".git"))) {
+  for (const directory of ancestorDirectories(target)) {
+    if (existsSync(join(directory, ".git"))) {
       throw new CliError(
         "CONFIG_ERROR",
-        `${label} is inside the Git working tree at ${current}`,
-        { target, workingTree: current },
+        `${label} is inside the Git working tree at ${directory}`,
+        { target, workingTree: directory },
       );
     }
   }
