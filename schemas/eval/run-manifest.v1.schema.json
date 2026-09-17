@@ -1,0 +1,415 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/eval/run-manifest.v1.schema.json",
+  "title": "Praxis evaluation run manifest v1",
+  "description": "The record of one Phase 6V evaluation run. PROPOSED, not authorised for implementation: nothing reads or writes this schema yet, and no runtime contract was changed to accommodate it. It is a specification for the harness that Phase 6V would need, written so the owner can review the shape before any code depends on it. An evaluation run is not an event in the Praxis ledger; it is the envelope a reader needs in order to decide whether a ledger's contents are evidence for anything.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "scenarioId",
+    "corpusType",
+    "runtimeCommit",
+    "ladder",
+    "concurrency",
+    "subject",
+    "field",
+    "expectation",
+    "verifier",
+    "startedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+
+    "runId": { "type": "string", "minLength": 1 },
+    "scenarioId": { "type": "string", "minLength": 1 },
+    "ladder": { "enum": ["6V-0", "6V-1", "6V-2", "6V-3", "6V-4", "6V-5"] },
+
+    "corpusType": {
+      "description": "Which evidence class this run belongs to. The four classes are frozen and are not interchangeable: a synthetic counterexample must never be read as history, and a prospective run must never be re-labelled after its outcome is known.",
+      "enum": ["corpus-i", "corpus-e", "corpus-p", "corpus-c"]
+    },
+
+    "runtimeCommit": {
+      "description": "The exact commit the run executed against. A short hash is not enough to re-run against.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "runtimeDirty": {
+      "description": "True when the working tree had uncommitted changes. A dirty run is not reproducible and must say so rather than being discarded silently.",
+      "type": "boolean",
+      "default": false
+    },
+
+    "concurrency": {
+      "description": "The frozen concurrency level. C0 is the sequential baseline every other level is compared against.",
+      "enum": ["C0", "C1", "C2", "C3", "C4"]
+    },
+
+    "subject": {
+      "description": "What actually produced the observations. Recorded so that a later reader can tell whether two runs are comparable, and so that a cross-scaffold comparison has both sides named.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "provider", "model"],
+      "properties": {
+        "kind": {
+          "enum": ["model", "tool", "human", "mixed", "none"]
+        },
+        "provider": {
+          "description": "Opaque adapter-declared label. Recorded, never branched on.",
+          "type": "string",
+          "minLength": 1
+        },
+        "model": { "type": "string", "minLength": 1 },
+        "modelVersion": {
+          "description": "The provider's own version string where one exists. A model name without a version is not a reproducible subject.",
+          "type": "string"
+        },
+        "scaffold": {
+          "description": "The harness around the model: tool loop, prompt template, retry policy. Two runs of the same model under different scaffolds are not the same run.",
+          "type": "string"
+        },
+        "adapterId": { "type": "string", "minLength": 1 },
+        "capabilityMode": {
+          "description": "The capability set actually used, after negotiation. Copied from ModelRunMetadata so that a degraded run is legible in the manifest without opening the ledger.",
+          "$ref": "#/$defs/jsonObject"
+        },
+        "counterfactual": {
+          "description": "True when the subject was driven from a recorded replay rather than a live call. A counterfactual run is not history and must not be read as it.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+
+    "field": {
+      "description": "The FieldContext the run was placed in, using the runtime's own five axes plus the derived plurality count. A scenario that cannot be described here is not one this runtime can reason about, and must not be run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "externalVerification",
+        "consequence",
+        "reversibility",
+        "feedbackLatency",
+        "actors"
+      ],
+      "properties": {
+        "taskType": { "type": "string" },
+        "externalVerification": { "enum": ["strong", "medium", "weak"] },
+        "consequence": { "enum": ["low", "medium", "high"] },
+        "reversibility": { "enum": ["easy", "partial", "hard"] },
+        "feedbackLatency": { "enum": ["short", "medium", "long"] },
+        "actors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/actorRef" }
+        },
+        "socialPlurality": {
+          "description": "DERIVED, not declared: computed from actors.length so that it cannot contradict the actor list. Recorded here because the selection axes name it and the FieldContext contract does not carry it. Bands: single-actor = 1, few = 2-4, many = 5+.",
+          "enum": ["single-actor", "few", "many"]
+        },
+        "explicitRules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonObject" }
+        },
+        "placementRationale": {
+          "description": "Why this scenario sits at this rung. Required, because the owner's frozen prohibition is that a scenario is placed by its position on the axes and not by how informal it feels.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+
+    "expectation": {
+      "description": "Frozen BEFORE the run. A record whose expectation was written after its outcome is not prospective evidence and must be labelled corpus-i or discarded, not repaired.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frozenAt", "registered"],
+      "properties": {
+        "frozenAt": { "type": "string", "format": "date-time" },
+        "registered": {
+          "description": "The expectation ids registered in the ledger before the first subject call. Empty is a legitimate value and means the run is exploratory; it is not a licence to infer one afterwards.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "expectedOutcome": { "type": "string" },
+        "expectedResiduals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "outcome",
+                  "timing",
+                  "rule",
+                  "representation",
+                  "relation",
+                  "retrospective"
+                ]
+              },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "expectedReflection": {
+          "enum": ["stop", "continue", "escalate", "none"]
+        }
+      }
+    },
+
+    "verifier": {
+      "description": "Who or what is allowed to say the run succeeded. Reality beats internal consensus in strong-verification cases, so a run whose only verifier is the subject is weak-field by construction and must be placed as such.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "test-runner",
+            "compiler",
+            "filesystem",
+            "external-api",
+            "human",
+            "model",
+            "none"
+          ]
+        },
+        "reference": { "type": "string" },
+        "independent": {
+          "description": "True only when the verifier was authored by someone other than the author of the artefact it judges.",
+          "type": "boolean",
+          "default": false
+        },
+        "criterion": { "$ref": "#/$defs/jsonObject" }
+      }
+    },
+
+    "initialState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ledgerHeadSeq": { "type": "integer", "minimum": 0 },
+        "projectionVersions": { "$ref": "#/$defs/jsonObject" },
+        "seed": {
+          "description": "The seed for any randomised element. Absent means the run had none, which must then be true.",
+          "type": "string"
+        }
+      }
+    },
+
+    "activeAssetsBefore": {
+      "description": "The assets already active when the run started. Without this a promotion cannot be attributed to this run rather than to an earlier one.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["assetId", "revision", "status"],
+        "properties": {
+          "assetId": { "type": "string", "minLength": 1 },
+          "revision": { "type": "integer", "minimum": 1 },
+          "status": {
+            "enum": [
+              "draft",
+              "candidate",
+              "validated",
+              "active",
+              "challenged",
+              "deprecated"
+            ]
+          }
+        }
+      }
+    },
+
+    "contextPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "planId": { "type": "string" },
+        "mode": { "enum": ["reuse", "reindex", "refresh"] },
+        "stateSeq": { "type": "integer", "minimum": 0 },
+        "exposedEventIds": { "type": "array", "items": { "type": "string" } },
+        "budget": { "$ref": "#/$defs/jsonObject" },
+        "tokensEstimated": { "type": "integer", "minimum": 0 },
+        "tokensMeasured": {
+          "description": "Present only when the provider reported real usage. An estimate recorded as a measurement is the specific error this field exists to prevent.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "counts": {
+      "description": "Denominators for the rate metrics. Recorded as counts rather than as percentages so a later reader can recompute the rates and can tell a 1-of-0 from a 0-of-0.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subjectCalls": { "type": "integer", "minimum": 0 },
+        "toolCalls": { "type": "integer", "minimum": 0 },
+        "expectationsRegistered": { "type": "integer", "minimum": 0 },
+        "expectationsResolved": { "type": "integer", "minimum": 0 },
+        "residualsDetected": { "type": "integer", "minimum": 0 },
+        "residualsByKind": { "$ref": "#/$defs/jsonObject" },
+        "reflectionsProposed": { "type": "integer", "minimum": 0 },
+        "reflectionsByDecision": { "$ref": "#/$defs/jsonObject" },
+        "candidateAssetsProposed": { "type": "integer", "minimum": 0 },
+        "assetsPromoted": { "type": "integer", "minimum": 0 },
+        "humanInterventions": { "type": "integer", "minimum": 0 },
+        "concurrencyAnomalies": { "type": "integer", "minimum": 0 },
+        "adapterErrorsByKind": { "$ref": "#/$defs/jsonObject" }
+      }
+    },
+
+    "cost": {
+      "description": "Provider-reported where available, estimated where not, and the two are never merged into one number.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inputTokens": { "type": "integer", "minimum": 0 },
+        "outputTokens": { "type": "integer", "minimum": 0 },
+        "currency": { "type": "string" },
+        "amountReported": { "type": "number", "minimum": 0 },
+        "amountEstimated": { "type": "number", "minimum": 0 },
+        "humanMinutes": {
+          "description": "Operator time attributable to this run: correction, review and intervention, not setup.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wallClockMs": { "type": "integer", "minimum": 0 },
+        "subjectMs": { "type": "integer", "minimum": 0 },
+        "harnessOverheadMs": { "type": "integer", "minimum": 0 },
+        "reflectionMs": { "type": "integer", "minimum": 0 },
+        "note": { "type": "string" }
+      }
+    },
+
+    "finalOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "enum": ["success", "failure", "partial", "abandoned", "unknown"]
+        },
+        "verifiedBy": { "type": "string" },
+        "verifiedAt": { "type": "string", "format": "date-time" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/jsonObject" }
+        },
+        "disagreement": {
+          "description": "Present when the external verifier and the system or operator assessment differed. L2's exit condition requires at least one of these, so its absence across a whole rung is itself a finding.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "systemAssessment": { "type": "string" },
+            "verifierAssessment": { "type": "string" },
+            "recordedAsResidual": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
+    "humanInterventions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "at"],
+        "properties": {
+          "kind": {
+            "enum": [
+              "correction",
+              "approval",
+              "refusal",
+              "contest",
+              "disable",
+              "restore",
+              "fork",
+              "purge",
+              "none"
+            ]
+          },
+          "at": { "type": "string", "format": "date-time" },
+          "note": { "type": "string" },
+          "ledgerEventId": { "type": "string" }
+        }
+      }
+    },
+
+    "reproducibility": {
+      "description": "What a second party would need in order to re-run this. An evaluation result that cannot be re-run is an anecdote with a schema.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "replayable": { "type": "boolean", "default": false },
+        "replayInput": {
+          "description": "Path to the recorded transcript the run can be driven from, where one exists.",
+          "type": "string"
+        },
+        "nondeterminism": {
+          "description": "Named sources of variation that a re-run cannot control: sampling, provider-side changes, wall-clock-dependent behaviour. Naming them is what makes a cross-scaffold comparison interpretable.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+
+    "corpusProvenance": {
+      "description": "Required for corpus-i and corpus-e, where the material came from somewhere else. A dataset whose licence is unknown cannot be committed to a public MIT repository, and an internal item whose redaction state is unknown cannot be shared.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceLocation": { "type": "string" },
+        "sourceLicence": {
+          "description": "SPDX identifier, or UNVERIFIED. UNVERIFIED is a legitimate and common value; it is not permission.",
+          "type": "string",
+          "minLength": 1
+        },
+        "privacyStatus": {
+          "enum": ["public", "internal", "personal", "redacted", "unknown"]
+        },
+        "redactionRequired": { "type": "boolean", "default": false },
+        "provenanceQuality": {
+          "enum": ["primary", "derived", "reconstructed", "unverified"]
+        },
+        "inRepository": {
+          "description": "False for anything the owner supplies that must not enter a public repository.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+
+    "startedAt": { "type": "string", "format": "date-time" },
+    "endedAt": { "type": "string", "format": "date-time" },
+    "notes": { "type": "string" }
+  },
+
+  "$defs": {
+    "jsonObject": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "actorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "enum": ["human", "model", "agent", "tool", "system"] },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
