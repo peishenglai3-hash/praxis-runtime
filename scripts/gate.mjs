@@ -21,7 +21,10 @@
  *      `status: null` for a command that never ran, and `null` is the value
  *      most likely to be read as "no problem". A stage's *output* is never
  *      consulted: a command that prints a reassuring sentence and exits
- *      non-zero has failed.
+ *      non-zero has failed. A `HARNESS` stage promotes the whole *run* to
+ *      `HARNESS` and stops, because "the gate could not run this" is a
+ *      statement about the gate rather than about the code — otherwise a
+ *      missing pnpm reads as eleven failing stages.
  *   3. **The semantic result is a file, not a status line.** The JSON written
  *      under `test-results/` is what CI and a human both consume. A caller who
  *      pipes this runner's output into `tail` can still mask the *exit code*,
@@ -290,12 +293,38 @@ export function runGate(options = {}) {
     if (result.status !== "PASS" && options.keepGoing !== true) break;
   }
 
+  const notRun = selected.slice(results.length).map((stage) => stage.id);
+
+  /**
+   * A stage reporting `HARNESS` is categorically different from one reporting
+   * `FAIL`: the code did not fail, the gate could not run it. That is a
+   * statement about the runner, so it is reported at the level of the run.
+   *
+   * Both platforms reach this the same way now. They did not before: on POSIX
+   * the resolver returns `pnpm` unconditionally and the *spawn* fails, so a
+   * missing pnpm read as eleven failing stages, while on Windows the resolver
+   * declines and the run refused immediately. A test that asserted one shape
+   * passed on Windows and failed on Linux — the same defect as BP-061 and
+   * BP-063, arriving in the code written to catch them.
+   */
+  const unrunnable = results.find((entry) => entry.status === "HARNESS");
+  if (unrunnable !== undefined) {
+    const detail = `stage ${unrunnable.id} could not be run: ${String(unrunnable.detail)}`;
+    error(`\n${detail}`);
+    return finish("HARNESS", {
+      complete: false,
+      stages: results,
+      notRun,
+      detail,
+    });
+  }
+
   const failed = results.filter((result) => result.status !== "PASS");
   const complete = results.length === selected.length;
   const document = finish(!complete || failed.length > 0 ? "FAIL" : "PASS", {
     complete,
     stages: results,
-    notRun: selected.slice(results.length).map((stage) => stage.id),
+    notRun,
   });
 
   log("");

@@ -210,7 +210,14 @@ describe("the gate runner reads exit codes, not output", () => {
     );
 
     expect(document.result).toBe("HARNESS");
-    expect(document.stages).toEqual([]);
+    // The *shape* differs by platform, and asserting one shape is how this test
+    // first passed on Windows and failed on Linux. Windows declines to resolve
+    // pnpm and runs nothing; POSIX resolves it, fails the spawn, and stops
+    // after one stage. What has to hold on both is the property: nothing was
+    // reported as a pass, and the run says why.
+    expect(document.stages.every((stage) => stage.status !== "PASS")).toBe(
+      true,
+    );
     expect(document.detail).toContain("pnpm");
     expect(exitCode).not.toBe(0);
   });
