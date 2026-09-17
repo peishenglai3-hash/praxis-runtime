@@ -141,11 +141,27 @@ For one frozen scenario, run under subject A and subject B, compare:
 | `cost.*`                         | recorded                                                         | Nothing — recorded property                                          |
 | `counts.humanInterventions`      | recorded                                                         | A large gap means the weaker subject is being carried                |
 
-**The one thing that must be equal**, because it is the actual gate condition:
-the **core schema and ledger semantics**. Across both subjects, the set of
-emitted event types, the projection versions, and the shape of every payload
-must be identical. A difference there is not a portability finding; it is a
-contract violation and it stops the experiment.
+**Two claims, reported separately.** The owner's decision of 2026-09-17 named
+them so that neither can stand in for the other in a report:
+
+- **Engineering portability** is issue 095's original condition: the same core
+  fixture under Dummy and under a provider adapter does not change core schema
+  or ledger semantics. **The one thing that must be equal**, because it is the
+  actual gate condition: across both subjects, the set of emitted event types,
+  the projection versions, and the shape of every payload must be identical. A
+  difference there is not a portability finding; it is a contract violation and
+  it stops the experiment. Replacing the two subjects' names does not change
+  this claim, and this is what closes
+  `RFC MISMATCH: SCAFFOLD_PORTABILITY_PENDING`.
+- **Behavioral portability** is the brief's stronger condition: the table above
+  — every behavioural field compared, every difference explained, nothing
+  required to match. It is a **metric this experiment reports**, not a
+  redefinition of issue 095. A run that satisfies it does not thereby close the
+  `PENDING` entry, and a run that fails it may still close it.
+
+Reporting one number labelled "portability" would merge a contract violation
+with a behavioural difference, which are the two things this division exists to
+keep apart.
 
 ### 4.3 Subjects
 

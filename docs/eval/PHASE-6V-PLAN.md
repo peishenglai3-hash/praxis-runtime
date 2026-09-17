@@ -399,10 +399,11 @@ Requirements, recorded in `reproducibility` of the manifest:
 
 ## 6. The unplaced rung — Golden Fixture 01
 
-**This is the one structural problem this preparation found in the owner's
-brief, and it is raised rather than fixed.**
+**Resolved by the owner on 2026-09-17; see
+[`RFC-0001.md`](../RFC/RFC-0001.md) for the registered decision.** This section
+is kept as the record of what was found, not deleted once it was settled.
 
-Two ladders now exist:
+Two ladders existed:
 
 - [`PHASE-6-FIELD-VALIDATION-PLAN.md`](../PHASE-6-FIELD-VALIDATION-PLAN.md),
   written at the end of Phase 6A, ordered
@@ -423,14 +424,17 @@ If the brief's order is followed literally, the fixture is either dropped, or
 run at a point where the instrumentation is unproven, or slotted somewhere
 arbitrary — and all three are worse than the deliberate placement.
 
-**Recommendation:** take the brief's order as the refinement of the existing
-ladder, and place Golden Fixture 01 **between 6V-2X and 6V-3**, which is where
-the existing plan's rationale puts it once 6V-1 and 6V-2 have run.
+**Owner decision.** The brief's section 26 is read as a refinement of the
+existing ladder, and Golden Fixture 01 is placed **after 6V-2X** as the Phase 6
+final behavioural gate. It does not block 6V-0, 6V-1 or 6V-2; it does block
+final Phase 6 PASS. The rung therefore appears in the execution order in §8 as
+the last thing before the gate report, and nowhere else.
 
-**Why this is raised instead of applied.** The owner froze the order in
+**Why this was raised instead of applied.** The owner had frozen the order in
 section 26, and `INV-10` forbids silently compensating a structural mismatch —
-including one introduced by the owner's own brief. Recorded for the owner to
-decide, with both readings available.
+including one introduced by the owner's own brief. Raising it cost one
+decision; applying it silently would have cost the record of why the fixture
+sits where it does.
 
 Also carried: the existing plan's §3 "What invalidates the pilot" applies to
 Phase 6V unchanged. It is not restated here.
