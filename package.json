@@ -40,7 +40,8 @@
     "test:regression": "vitest run tests/regression",
     "smoke:cli": "pnpm phase1:concurrency && pnpm phase1:crash && pnpm phase1:throughput && pnpm phase2:scenario && pnpm phase3:scenario && pnpm phase4:scenario && pnpm phase5:scenario && pnpm phase5:cli",
     "smoke:daemon": "pnpm phase35:scenario && node scripts/daemon-smoke.mjs",
-    "verify": "pnpm verify:runtime && pnpm verify:deps && pnpm verify:lint && pnpm verify:typecheck && pnpm test:unit && pnpm test:integration && pnpm test:replay && pnpm test:regression && pnpm build && pnpm smoke:cli && pnpm smoke:daemon",
+    "verify": "node scripts/gate.mjs",
+    "verify:chain": "pnpm verify:runtime && pnpm verify:deps && pnpm verify:lint && pnpm verify:typecheck && pnpm test:unit && pnpm test:integration && pnpm test:replay && pnpm test:regression && pnpm build && pnpm smoke:cli && pnpm smoke:daemon",
     "phase5:cli": "node scripts/phase5-cli.mjs"
   },
   "devDependencies": {
