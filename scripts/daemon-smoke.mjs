@@ -42,9 +42,35 @@ function run(entry, args, cwd) {
   });
 }
 
+/**
+ * The last line of `text` that is a JSON object.
+ *
+ * The daemon writes one machine document per run, but on a refusal it writes
+ * it to **stderr** — the same stream Node uses for `ExperimentalWarning`,
+ * which `node:sqlite` raises. Whether that warning is flushed before or after
+ * the document depends on the runtime: it lands after it on the pinned 22.13.0
+ * the gate runs on, and before it on the newer Node this was developed
+ * against. Reading the last line therefore parsed a warning trailer on CI and
+ * the document locally, and the failure looked like a malformed daemon report
+ * rather than a reader that assumed an order nobody promised. See BP-063.
+ *
+ * Scanning backwards for something that parses does not depend on that order.
+ */
 function lastJsonLine(text) {
-  const line = text.trim().split("\n").filter(Boolean).pop();
-  return line === undefined ? null : JSON.parse(line);
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line.startsWith("{")) continue;
+    try {
+      return JSON.parse(line);
+    } catch {
+      // Not the document. Keep looking backwards.
+    }
+  }
+  return null;
 }
 
 const directory = mkdtempSync(join(tmpdir(), "praxis-daemon-smoke-"));
