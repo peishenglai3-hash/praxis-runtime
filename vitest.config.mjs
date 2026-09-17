@@ -39,4 +39,23 @@ for (const root of roots) {
 
 export default defineConfig({
   resolve: { alias },
+  // Vitest's 5000ms default is a budget for pure tests. The integration layer
+  // is not pure: it opens real databases with `synchronous=FULL`, so every
+  // ledger commit fsyncs, and a legacy import writes many. That budget was set
+  // by nobody; it was the default, and it had never been spent on a cold
+  // runner because this suite had never run on CI at all.
+  //
+  // It now has been. On windows-latest seven integration tests timed out at
+  // 5000ms while the same tests passed on ubuntu-latest in the same run, and
+  // pass locally in 300-3000ms each. A cold 2-vCPU runner with a real-time
+  // scanner is several times slower than a warm development machine, which is
+  // the whole difference. No retry or sleep loop exists in the store or the
+  // runtime, so this is budget and not a hang.
+  //
+  // The timeout's job is to catch a hang, not to enforce a performance
+  // budget. 30s is deliberately generous for that job and deliberately not
+  // tuned: the real CI durations are not known yet, and picking a tight number
+  // before measuring it would be inventing precision. Tighten it once the
+  // first green run reports what these tests actually cost there. See BP-062.
+  testTimeout: 30_000,
 });
