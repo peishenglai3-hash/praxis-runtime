@@ -314,6 +314,19 @@ export interface RetryDecision {
   reason: string;
 }
 
+export interface RetryInput {
+  /**
+   * Only what the policy reads. Taking the class here would force every
+   * caller to hold the same class *identity*, which is exactly the coupling
+   * that breaks across a source/build boundary for no benefit — the policy
+   * never calls a method on this.
+   */
+  error: { kind: AdapterErrorKind; retryable: boolean };
+  sideEffect: AdapterSideEffect;
+  /** The caller has independently confirmed the external state. */
+  effectVerifiedAbsent?: boolean;
+}
+
 /**
  * Phase 6B, section 9: a timed-out call that may already have changed
  * something must not be retried blindly.
@@ -322,12 +335,7 @@ export interface RetryDecision {
  * wants to retry asks this function; the runtime asks it too, so the two
  * cannot disagree.
  */
-export function retryDecision(input: {
-  error: AdapterError;
-  sideEffect: AdapterSideEffect;
-  /** The caller has independently confirmed the external state. */
-  effectVerifiedAbsent?: boolean;
-}): RetryDecision {
+export function retryDecision(input: RetryInput): RetryDecision {
   const { error, sideEffect } = input;
 
   if (error.kind === "side_effect_uncertainty") {

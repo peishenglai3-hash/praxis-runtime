@@ -66,6 +66,16 @@ module.exports = {
       to: { path: "^packages/residual/" },
     },
     {
+      name: "adapters-cannot-reach-the-store-or-runtime",
+      severity: "error",
+      comment:
+        "Phase 6B / EPIC-010. An adapter that cannot import the store cannot write to it, and one that cannot import the runtime cannot promote through it. That is a stronger guarantee than any runtime check, and it is the one the EPIC-010 gate asks for. `adapters` is deliberately absent from `core-does-not-depend-on-provider-sdks`: it is where a provider SDK is allowed to live.",
+      from: { path: "^packages/adapters/" },
+      to: {
+        path: "^packages/(store|state|context|residual|reflection|assets|agents|runtime)/",
+      },
+    },
+    {
       name: "core-does-not-depend-on-provider-sdks",
       severity: "error",
       from: {

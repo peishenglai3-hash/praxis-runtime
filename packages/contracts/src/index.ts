@@ -242,5 +242,6 @@ export type {
   AdapterErrorInput,
   AdapterErrorKind,
   RetryDecision,
+  RetryInput,
   SanitisedDiagnostic,
 } from "./adapter-errors.js";
