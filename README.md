@@ -259,6 +259,20 @@ the existing CI evidence, or named the wrong gate for Golden Fixture 01
 `context` doctor scope is still uncovered, by owner decision. `pnpm verify`
 passes 205 tests across 23 files.
 
+**Phase 6A** followed, under an owner-frozen charter that reverses the Bible's
+delivery order: the asset and promotion mechanism (Bible `EPIC-007`, already
+implemented in Phase 4) is **hardened and re-verified** before the adapter
+boundary, rather than `EPIC-010` being taken first. That deviation is
+registered as `RFC MISMATCH: PHASE6_DELIVERY_ORDER` and `BP-057`, not applied
+quietly. Phase 6A added no capability — it re-derived EPIC-007's seven
+acceptance criteria, the epic gate and the risk-register mitigation from the
+tree, and found them conformant, with the asset catalog/projection agreement
+newly verified. See [`docs/PHASE-6-GATE.md`](./docs/PHASE-6-GATE.md) and
+[`docs/PHASE-6A-EPIC-007-CONFORMANCE.md`](./docs/PHASE-6A-EPIC-007-CONFORMANCE.md).
+**Code completion is not behavioural validation**: Phase 6A ends with a
+[field validation plan](./docs/PHASE-6-FIELD-VALIDATION-PLAN.md), not with a
+release. Alpha release remains `NO-GO`.
+
 The repository is synchronized to the GitHub handoff target, and the
 exact remote CI gate is recorded above. (It reads "private" in older phase
 entries below; the correction at the end of this file explains why that was

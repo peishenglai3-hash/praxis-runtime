@@ -28,6 +28,23 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 
 ## Current checkpoint
 
+- **Phase 6A is complete: EPIC-007 hardening.** Under an owner-frozen charter
+  that reverses Bible section 15's delivery order — the asset and promotion
+  mechanism first, the adapter boundary after — the seven EPIC-007 acceptance
+  criteria, the epic gate and the risk-register mitigation were re-derived from
+  the tree rather than inherited from the Phase 4 gate. **All conform. No
+  defect was found.** The phase added no capability; it closed one verification
+  gap (the asset catalog against the asset projection) and registered the
+  delivery-order deviation as `RFC MISMATCH: PHASE6_DELIVERY_ORDER` / `BP-057`
+  before building on it. Read
+  [`PHASE-6-GATE.md`](./PHASE-6-GATE.md) and
+  [`PHASE-6A-EPIC-007-CONFORMANCE.md`](./PHASE-6A-EPIC-007-CONFORMANCE.md).
+  **Phase 6A is code completion, not behavioural validation** — it ends with
+  [`PHASE-6-FIELD-VALIDATION-PLAN.md`](./PHASE-6-FIELD-VALIDATION-PLAN.md)
+  (`L1 → L2 → Golden Fixture 01 → L3 → L4`), not with a release. Phase 6B does
+  not start until the owner says so. Alpha release is `NO-GO`.
+- The Phase 5 public baseline is tagged `phase5-baseline-2026-09-17` at
+  `ca4d3d6`. Phase 6A is on `phase6/epic-007-hardening`, branched from it.
 - **Phase 5.5 / INC-001 recovery is complete, and the P5-OPEN baseline repair
   followed.** The incident was opened after it was established that Phase 5 had
   been implemented without the Bible being
