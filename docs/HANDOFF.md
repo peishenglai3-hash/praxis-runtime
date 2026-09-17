@@ -28,6 +28,17 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 
 ## Current checkpoint
 
+- **Phase 6B is complete: the EPIC-010 adapter boundary.** Provider-neutral
+  ports, a twelve-kind error taxonomy, fail-closed capability negotiation,
+  timeout/cancellation semantics, and side-effect classification — an
+  irreversible operation with an unknown outcome is `side_effect_uncertainty`,
+  not `timeout`, and is not retried until the external state is verified. The
+  boundary is enforced by the dependency graph: `packages/adapters` cannot
+  import the store or the runtime. A 15-case conformance suite ships inside
+  the package. Read [`PHASE-6B-GATE.md`](./PHASE-6B-GATE.md) and
+  [`ADR-0014`](./ADR/ADR-0014-phase6b-adapter-boundary.md). **No provider
+  adapter exists and the boundary is not wired into the runtime** — that is
+  Phase 6V, separately authorised. Alpha release stays `NO-GO`.
 - **Phase 6A is complete: EPIC-007 hardening.** Under an owner-frozen charter
   that reverses Bible section 15's delivery order — the asset and promotion
   mechanism first, the adapter boundary after — the seven EPIC-007 acceptance
@@ -61,7 +72,7 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 - Phase 5 / Bible `EPIC-008` and `EPIC-009` is implemented and locally verified
   within the declared local capability boundary: audited Legacy migration plus
   command-line, diagnostics and operational evidence. `pnpm verify` passes
-  205/205 tests across 23 files, plus the Phase 1-5 scenarios, including a
+  205/205 tests across 23 files at that checkpoint, plus the Phase 1-5 scenarios, including a
   four-process concurrent import and a real-process command-line scenario. No
   exact Node `22.13.0` runner evidence exists for this checkpoint yet, so it is
   a local slice rather than a closed phase gate. The phase is `PARTIAL`: issue

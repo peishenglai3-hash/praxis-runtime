@@ -4,16 +4,18 @@
 > ready for production use, for third-party integration, or for anyone to
 > depend on.
 >
-> **Phase 5 is complete. Phase 6 has not started.** What exists is the event
-> ledger, deterministic projections and replay, context planning, bounded
-> residual detection and reflection, reusable assets, the audited Legacy
-> migration path, and the command line with its diagnostics. What does not
-> exist is any provider adapter — `packages/adapters` is an empty stub, and
-> connecting a real model is Phase 6 work.
+> **Phases 5, 6A and 6B are complete; there is no Phase 6V and no release.**
+> What exists is the event ledger, deterministic projections and replay,
+> context planning, bounded residual detection and reflection, reusable
+> assets, the audited Legacy migration path, the command line with its
+> diagnostics, and a provider-neutral adapter boundary. What does **not**
+> exist is any provider adapter, and nothing calls the adapter boundary yet.
+> The runtime has never been run against a real model.
 >
 > The contracts, the database schema and the command-line surface can still
 > change without notice, and the verification gate has known gaps that are
 > recorded rather than papered over. Start with
+> [`docs/PHASE-6B-GATE.md`](./docs/PHASE-6B-GATE.md),
 > [`docs/PHASE-5-GATE.md`](./docs/PHASE-5-GATE.md) and
 > [`docs/incidents/INC-001-bible-conformance-audit.md`](./docs/incidents/INC-001-bible-conformance-audit.md)
 > before assuming anything here is finished.
@@ -76,7 +78,7 @@ packages/residual    bounded residual detection
 packages/reflection  bounded reflection proposals
 packages/assets      versioned reusable assets
 packages/agents      agent cursors and mailbox-facing ports
-packages/adapters    model/tool/clock/id/budget adapter ports
+packages/adapters    provider-neutral adapter ports, error taxonomy, reference adapters
 packages/runtime     the only domain composition/use-case boundary
 apps/cli             runtime-facing command-line application
 apps/daemon          runtime-facing daemon application
@@ -217,7 +219,7 @@ bounded implementation slice. This is not a production-readiness claim:
   every diagnostic goes to stderr;
 - `praxis.config.json` is versioned, strict and secret-free; `doctor` gained a
   config check, a legacy-import integrity check and the migration version;
-- `pnpm verify` passes 205/205 tests across 23 files plus the Phase 1-5
+- at that checkpoint `pnpm verify` passed 205/205 tests across 23 files plus the Phase 1-5
   scenarios, including a four-process concurrent import and a real-process
   command-line scenario in which doctor has to locate two deliberately injected
   faults.
@@ -256,8 +258,8 @@ the Correction Pack requires in `tests/replay/` were recorded, and the
 recovery's own gate was corrected where it had overstated a closure, understated
 the existing CI evidence, or named the wrong gate for Golden Fixture 01
 (`BP-052`–`BP-054`). Phase 5 remains `PARTIAL`: issue 081's `cursors` and
-`context` doctor scope is still uncovered, by owner decision. `pnpm verify`
-passes 205 tests across 23 files.
+`context` doctor scope is still uncovered, by owner decision. At that
+checkpoint `pnpm verify` passed 205 tests across 23 files.
 
 **Phase 6A** followed, under an owner-frozen charter that reverses the Bible's
 delivery order: the asset and promotion mechanism (Bible `EPIC-007`, already
@@ -272,6 +274,27 @@ newly verified. See [`docs/PHASE-6-GATE.md`](./docs/PHASE-6-GATE.md) and
 **Code completion is not behavioural validation**: Phase 6A ends with a
 [field validation plan](./docs/PHASE-6-FIELD-VALIDATION-PLAN.md), not with a
 release. Alpha release remains `NO-GO`.
+
+**Phase 6B** then implemented the Bible's `EPIC-010` adapter boundary. The
+purpose is not to connect many providers; it is to make external models and
+tools substitutable behind one runtime contract without gaining authority over
+the event store, residual judgement, reflection, promotion, or policy.
+`packages/adapters` went from an empty stub to provider-neutral ports, a
+twelve-kind error taxonomy, fail-closed capability negotiation, timeout and
+cancellation semantics, and side-effect classification where an irreversible
+operation with an unknown outcome is reported as uncertainty rather than a
+timeout — and is not retried until someone checks the world. The boundary is
+enforced by the dependency graph: `packages/adapters` cannot import the store
+or the runtime, so it cannot write to one or promote through the other. A
+conformance suite of fifteen cases ships inside the package so a future
+provider adapter can be tested against the same standard. See
+[`docs/PHASE-6B-GATE.md`](./docs/PHASE-6B-GATE.md) and
+[`docs/ADR/ADR-0014-phase6b-adapter-boundary.md`](./docs/ADR/ADR-0014-phase6b-adapter-boundary.md).
+**No provider adapter exists**, and the boundary is not yet wired into the
+runtime — that is Phase 6V, separately authorised. `pnpm verify` currently
+passes **267 tests across 25 files** (58 unit / 187 integration / 15 replay /
+7 regression), with 18 adapter-conformance cases recorded as not applicable
+rather than counted as passing.
 
 The repository is synchronized to the GitHub handoff target, and the
 exact remote CI gate is recorded above. (It reads "private" in older phase

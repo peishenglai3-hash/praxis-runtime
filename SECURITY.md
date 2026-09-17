@@ -4,15 +4,13 @@
 
 **Do not open a public issue for a security problem.**
 
-The intended channel is GitHub's private vulnerability reporting
-(**Security → Report a vulnerability** on this repository). **As of
-2026-09-17 that feature is not enabled on this repository**, so the button does
-not exist yet — see "Repository settings the owner should change" below. If it
-is available by the time you read this, use it.
+The channel is GitHub's private vulnerability reporting
+(**Security → Report a vulnerability** on this repository). It was enabled on
+2026-09-17 and is the preferred route.
 
-If it is not available, open a minimal public issue that says only that you
-have a security report and asks for a private channel. Do not include the
-details, the payload, or the steps to reproduce in that issue.
+If it is unavailable, open a minimal public issue that says only that you have
+a security report and asks for a private channel. Do not include the details,
+the payload, or the steps to reproduce in that issue.
 
 Include what you can: what you did, what happened, what you expected, the
 version or commit, and the smallest reproduction you have. A partial report is
@@ -24,21 +22,35 @@ acknowledged and handled as time allows, and the fix will be recorded in
 [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md) with the
 rest of the project's failure history.
 
-## Repository settings the owner should change
+## Repository security controls
 
-Recorded here because a security policy that describes controls which are not
-switched on is worse than one that admits they are off. All three of these are
-free on a public repository and were **disabled** when this file was written:
+Inspected and changed on 2026-09-17, during Phase 6B, under the owner's
+authorisation to execute the minimum changes where admin capability existed and
+nothing required a plan migration or incurred billing. All of these are free on
+a public repository.
 
-| Setting                             | State    | Why it matters                                                                                               |
-| ----------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| Secret scanning                     | disabled | The repository is public and its history is immutable. Scanning is how a future accidental commit is caught. |
-| Secret scanning **push protection** | disabled | The highest-value control of the three: it blocks the commit rather than reporting it afterwards.            |
-| Private vulnerability reporting     | disabled | Without it this file's first instruction cannot be followed.                                                 |
+| Setting                             | State       | Why it matters                                                                                                              |
+| ----------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Secret scanning                     | **enabled** | The repository is public and its history is immutable. Scanning is how a future accidental commit is caught.                |
+| Secret scanning **push protection** | **enabled** | The highest-value control: it blocks the commit rather than reporting it afterwards.                                        |
+| Private vulnerability reporting     | **enabled** | Without it this file's first instruction cannot be followed.                                                                |
+| Dependabot alerts                   | **enabled** |                                                                                                                             |
+| Dependabot **security updates**     | disabled    | Available, deliberately off: it opens pull requests automatically, which is a workflow change rather than a visibility one. |
+| Non-provider secret patterns        | disabled    | Available; not enabled.                                                                                                     |
+| Secret-scanning validity checks     | disabled    | Available; not enabled.                                                                                                     |
 
-The 2026-09-17 full-history audit of all 518 text blobs found no credential, so
-none of this is a live exposure today. It is the difference between "nothing
-leaked" and "nothing can leak quietly".
+A full-history audit of all 518 text blobs across every ref was run on
+2026-09-17 and found no credential of any kind. That is the difference between
+"nothing leaked" and "nothing can leak quietly" — the second is what these
+controls buy.
+
+**One hazard was removed before push protection was enabled.** The Phase 6B
+conformance suite needs credential-shaped values to prove that redaction works,
+and its first draft wrote them as literals — which is exactly what push
+protection blocks, meaning the test written to prove secrets do not leak would
+have blocked the push that carried it. The values are now assembled from
+fragments at runtime, so the test stays realistic and the repository stays
+pushable.
 
 ## What the security boundary actually is
 
