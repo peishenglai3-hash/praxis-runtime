@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-17
 **Authority:** owner's Phase 6 finalization brief §L.
-**Reached by:** `docs/phase6v-prep` at `26ed05e`, on top of `origin/main` (`15f6e2f`).
+**Reached by:** `docs/phase6v-prep` at `6b7dcdc`, on top of `origin/main` (`15f6e2f`).
 **Alpha release:** `NO-GO`. Nothing here is Alpha readiness, and this document
 must not be quoted as it.
 
@@ -29,12 +29,13 @@ place.
 
 `pnpm verify` is now `scripts/gate.mjs`, which runs eleven stages with
 `shell: false` and writes a machine-readable result. Both CI jobs passed at
-Node **22.13.0** with `dirty: false` on commit `aa4068a21d3b`:
+Node **22.13.0** with `dirty: false`, on the commit that contains this report
+and the 6V-0 work — `6b7dcdc33804`:
 
 | Platform | result | complete | notRun | matchesPin | wall clock |
 | -------- | ------ | -------- | ------ | ---------- | ---------- |
-| ubuntu   | PASS   | true     | `[]`   | true       | 87.1s      |
-| windows  | PASS   | true     | `[]`   | true       | 213.2s     |
+| ubuntu   | PASS   | true     | `[]`   | true       | 119s       |
+| windows  | PASS   | true     | `[]`   | true       | 243s       |
 
 Read from the uploaded artifacts, not from the CI status line. That distinction
 is not pedantry here — see BP-060.
