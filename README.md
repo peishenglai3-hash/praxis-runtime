@@ -259,8 +259,10 @@ the existing CI evidence, or named the wrong gate for Golden Fixture 01
 `context` doctor scope is still uncovered, by owner decision. `pnpm verify`
 passes 205 tests across 23 files.
 
-The repository is synchronized to the private GitHub handoff target, and the
-exact remote CI gate is recorded above. `VACUUM INTO` remains the backup path
+The repository is synchronized to the GitHub handoff target, and the
+exact remote CI gate is recorded above. (It reads "private" in older phase
+entries below; the correction at the end of this file explains why that was
+never true.) `VACUUM INTO` remains the backup path
 for the pinned Node baseline; `node:sqlite` is experimental in Node `22.13.0`
 even though the flag is no longer required.
 The asset invalidation record after physical purge is intentionally

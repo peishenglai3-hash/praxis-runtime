@@ -4,11 +4,15 @@
 
 **Do not open a public issue for a security problem.**
 
-Use GitHub's private vulnerability reporting on this repository
-(**Security → Report a vulnerability**). If that channel is not available,
-open a minimal public issue that says only that you have a security report and
-asks for a private channel — do not include the details, the payload, or the
-steps to reproduce in that issue.
+The intended channel is GitHub's private vulnerability reporting
+(**Security → Report a vulnerability** on this repository). **As of
+2026-09-17 that feature is not enabled on this repository**, so the button does
+not exist yet — see "Repository settings the owner should change" below. If it
+is available by the time you read this, use it.
+
+If it is not available, open a minimal public issue that says only that you
+have a security report and asks for a private channel. Do not include the
+details, the payload, or the steps to reproduce in that issue.
 
 Include what you can: what you did, what happened, what you expected, the
 version or commit, and the smallest reproduction you have. A partial report is
@@ -19,6 +23,22 @@ response-time commitment, no bounty, and no support contract. Reports will be
 acknowledged and handled as time allows, and the fix will be recorded in
 [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md) with the
 rest of the project's failure history.
+
+## Repository settings the owner should change
+
+Recorded here because a security policy that describes controls which are not
+switched on is worse than one that admits they are off. All three of these are
+free on a public repository and were **disabled** when this file was written:
+
+| Setting                             | State    | Why it matters                                                                                               |
+| ----------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| Secret scanning                     | disabled | The repository is public and its history is immutable. Scanning is how a future accidental commit is caught. |
+| Secret scanning **push protection** | disabled | The highest-value control of the three: it blocks the commit rather than reporting it afterwards.            |
+| Private vulnerability reporting     | disabled | Without it this file's first instruction cannot be followed.                                                 |
+
+The 2026-09-17 full-history audit of all 518 text blobs found no credential, so
+none of this is a live exposure today. It is the difference between "nothing
+leaked" and "nothing can leak quietly".
 
 ## What the security boundary actually is
 

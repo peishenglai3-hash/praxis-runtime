@@ -190,7 +190,8 @@ The remaining Bible delivery slices are:
 - **Release closure:** final gate reconciliation, controlled visibility/publication
   decision, and release documentation. The exact Node `22.13.0` CI evidence
   and Phase 4 Alpha gate are already closed; the MIT license is present, but
-  public release is not implied by this private handoff.
+  public release is not implied by this handoff. (It reads "private" in the
+  line above and in older gates; see the visibility correction at the top.)
 
 No external model should label the project “complete” merely because Phase 4
 code exists or local Node 24 verification passes.
