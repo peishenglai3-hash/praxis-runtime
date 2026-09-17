@@ -42,6 +42,7 @@
     "smoke:daemon": "pnpm phase35:scenario && node scripts/daemon-smoke.mjs",
     "verify": "node scripts/gate.mjs",
     "verify:chain": "pnpm verify:runtime && pnpm verify:deps && pnpm verify:lint && pnpm verify:typecheck && pnpm test:unit && pnpm test:integration && pnpm test:replay && pnpm test:regression && pnpm build && pnpm smoke:cli && pnpm smoke:daemon",
+    "validate:6v0": "vitest run tests/validation/phase6v0.test.ts",
     "phase5:cli": "node scripts/phase5-cli.mjs"
   },
   "devDependencies": {
