@@ -2,8 +2,9 @@
 
 **Date:** 2026-09-18
 **Authority:** owner's Phase 6V brief §10 (`断点与 RFC Mismatch 整顿`).
-**Input:** [`_INVENTORY-RAW.md`](_INVENTORY-RAW.md), a line-referenced extraction of
-all 64 entries in [`../断点记录.md`](../%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md).
+**Input:** [`_INVENTORY-RAW.md`](_INVENTORY-RAW.md), a historical line-referenced
+extraction of 64 entries, reconciled against the current 67-entry
+[`../断点记录.md`](../%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md).
 **Companion documents:** [`DEBT-RECONCILIATION.md`](DEBT-RECONCILIATION.md),
 [`RFC-MISMATCH-RECONCILIATION.md`](RFC-MISMATCH-RECONCILIATION.md).
 
@@ -36,23 +37,32 @@ Two consequences, both deliberate:
 
 ## 1. Summary
 
-| Family    | Name                                   | Members                      | Severity of the mechanism                               |
-| --------- | -------------------------------------- | ---------------------------- | ------------------------------------------------------- |
-| **VF-01** | Verification False Green               | 15, plus 3 found in Phase 6V | Critical — the defect is invisible by construction      |
-| **PF-01** | Platform Portability                   | 11                           | High                                                    |
-| **MF-01** | Material Fidelity                      | 7                            | High — silent data loss on a write that reports success |
-| **BF-01** | Boundary and Capability                | 6                            | High                                                    |
-| **TF-01** | Temporal and Ordering                  | 5                            | Medium                                                  |
-| **CF-01** | Context and Projection                 | 6                            | Medium                                                  |
-| **RB-01** | Review Baseline                        | 4                            | Medium — process, not code                              |
-| **—**     | Not failures (status and gate records) | 10                           | —                                                       |
+| Family    | Name                                   | Members                                          | Severity of the mechanism                               |
+| --------- | -------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
+| **VF-01** | Verification False Green               | 16 recorded breakpoints, plus 3 harness findings | Critical — the defect is invisible by construction      |
+| **PF-01** | Platform Portability                   | 11                                               | High                                                    |
+| **MF-01** | Material Fidelity                      | 7                                                | High — silent data loss on a write that reports success |
+| **BF-01** | Boundary and Capability                | 6                                                | High                                                    |
+| **TF-01** | Temporal and Ordering                  | 5                                                | Medium                                                  |
+| **CF-01** | Context and Projection                 | 6                                                | Medium                                                  |
+| **RB-01** | Review Baseline                        | 4                                                | Medium — process, not code                              |
+| **—**     | Not failures (status and gate records) | 10                                               | —                                                       |
 
-The column does not sum to 64 and does not partition the space. On this
-document's own memberships it covers **57 of the 65 breakpoints**, with 50–51
+The column does not sum to 67 and does not partition the space. On this
+document's own memberships it covers **60 of the 67 breakpoints**, with 51–52
 memberships in total; seven entries are in no family at all, listed in §11. The
 first draft of this section claimed the column "sums to more than 64", which
 holds on no reading — caught by the cross-check in §11 and corrected here rather
 than in a footnote.
+
+## Re-entry update — 2026-09-18
+
+The family counts above are the reconciled registry view. Two pre-reentry
+descriptions elsewhere in the Phase 6V documents are now historical: the
+evaluator can call the asset lifecycle and the current ContextPlanner claim is
+explicitly limited to ranking supplied signals. The machine-checkable registry
+state, including BP-064/BP-065/BP-066 closure and BP-049 remaining active, is in
+[`DEBT-REGISTRY-AUDIT.md`](DEBT-REGISTRY-AUDIT.md).
 
 ---
 
@@ -92,6 +102,7 @@ on purpose.
 | **BP-063** | daemon-smoke assumed the machine document was the last line of its stream; on the pinned runtime a warning trailer follows it                                                                                                          |
 | **BP-064** | `assert-cycle-detected.mjs` resolves dependency-cruiser against `process.cwd()`; it passes only because `runStage` happens to set `cwd: root`                                                                                          |
 | **BP-065** | `assert-runtime-pins.mjs` parses `engines.node`'s upper bound with a three-component regex, so `<23` yields `undefined` and **the runtime check can never fail** — it printed `PASS` on Node 24.15.0, outside the pinned range, exit 0 |
+| **BP-066** | the evaluator converted an independent verifier's `null` (“not adjudicated”) into `actual.status = "failed"`, manufacturing an outcome residual from absent evidence                                                                   |
 
 **Found during Phase 6V, same mechanism.** Three defects in the new evaluation
 harness, listed here rather than filed separately because their value is as

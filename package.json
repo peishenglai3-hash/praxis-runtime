@@ -31,6 +31,7 @@
     "phase5:scenario": "node scripts/phase5-legacy.mjs",
     "fixture:legacy": "node scripts/generate-legacy-fixture.mjs",
     "verify:runtime": "node scripts/assert-runtime-pins.mjs",
+    "audit:registries": "node scripts/audit-registries.mjs",
     "verify:deps": "node scripts/assert-workspace-deps.mjs",
     "verify:lint": "pnpm format:check && pnpm lint && pnpm boundaries && pnpm boundaries:fixture && pnpm boundaries:negative-fixture",
     "verify:typecheck": "pnpm typecheck && pnpm phase3:schemas && pnpm phase5:schemas",
