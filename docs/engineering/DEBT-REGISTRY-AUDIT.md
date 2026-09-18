@@ -6,7 +6,7 @@
 
 ## Result
 
-**PASS — `registry audit PASS (breakpoints=68, RFC labels=24)`**
+**PASS — `registry audit PASS (breakpoints=69, RFC labels=24)`**
 
 The check is also executed by `tests/regression/registry-audit.test.mjs`. It fails closed when any of the following occurs:
 
@@ -18,16 +18,16 @@ The check is also executed by `tests/regression/registry-audit.test.mjs`. It fai
 
 ## Current breakpoint state
 
-The current registry contains 68 unique IDs. The reconciled state is:
+The current registry contains 69 unique IDs. The reconciled state is:
 
-| Status              |  Count | Notes                                                                        |
-| ------------------- | -----: | ---------------------------------------------------------------------------- |
-| `CLOSED`            |     65 | Includes BP-049, BP-064, BP-065, BP-066, and BP-067 after this round's fixes |
-| `ACTIVE`            |      0 | —                                                                            |
-| `EVIDENCE-REQUIRED` |      1 | BP-037                                                                       |
-| `DEFERRED`          |      1 | BP-042                                                                       |
-| `WONTFIX`           |      1 | BP-056                                                                       |
-| **Total**           | **68** | Machine-checked                                                              |
+| Status              |  Count | Notes                                                                                |
+| ------------------- | -----: | ------------------------------------------------------------------------------------ |
+| `CLOSED`            |     66 | Includes BP-049, BP-064, BP-065, BP-066, BP-067, and BP-068 after this round's fixes |
+| `ACTIVE`            |      0 | —                                                                                    |
+| `EVIDENCE-REQUIRED` |      1 | BP-037                                                                               |
+| `DEFERRED`          |      1 | BP-042                                                                               |
+| `WONTFIX`           |      1 | BP-056                                                                               |
+| **Total**           | **69** | Machine-checked                                                                      |
 
 BP-064 has a repair in place for both layers of the foreign-cwd failure: the
 checker anchors its child process at the repository root and passes relative
@@ -41,6 +41,8 @@ unknown-verifier regression proving that `null` remains unadjudicated rather
 than becoming a failure/residual/candidate. BP-067 is closed with a bounded
 WAL initialization retry, a fail-closed regression, and exact Node 22.13.0
 Ubuntu/Windows artifacts from run `35353350996`.
+BP-068 is closed by removing the stale literal breakpoint total from the
+regression test; the test now checks the machine-derived row invariants.
 
 ## Current RFC registry state
 

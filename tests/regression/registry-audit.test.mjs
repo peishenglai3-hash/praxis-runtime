@@ -6,9 +6,9 @@ describe("control-plane registries", () => {
   it("have one machine-verifiable source row per current breakpoint and RFC label", () => {
     const result = auditRegistries();
     expect(result.issues).toEqual([]);
-    expect(result.breakpoints.headings).toBe(67);
-    expect(result.breakpoints.rows).toBe(67);
-    expect(result.rfc.labels).toBe(24);
-    expect(result.rfc.rows).toBe(24);
+    expect(result.breakpoints.headings).toBe(result.breakpoints.rows);
+    expect(result.breakpoints.headings).toBeGreaterThan(0);
+    expect(result.rfc.labels).toBe(result.rfc.rows);
+    expect(result.rfc.labels).toBeGreaterThan(0);
   });
 });

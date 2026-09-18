@@ -3,7 +3,7 @@
 **Date:** 2026-09-18
 **Authority:** owner's Phase 6V brief §10 (`断点与 RFC Mismatch 整顿`).
 **Input:** [`_INVENTORY-RAW.md`](_INVENTORY-RAW.md), a historical line-referenced
-extraction of 64 entries, reconciled against the current 68-entry
+extraction of 64 entries, reconciled against the current 69-entry
 [`../断点记录.md`](../%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md).
 **Companion documents:** [`DEBT-RECONCILIATION.md`](DEBT-RECONCILIATION.md),
 [`RFC-MISMATCH-RECONCILIATION.md`](RFC-MISMATCH-RECONCILIATION.md).
@@ -39,7 +39,7 @@ Two consequences, both deliberate:
 
 | Family    | Name                                   | Members                                          | Severity of the mechanism                               |
 | --------- | -------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
-| **VF-01** | Verification False Green               | 16 recorded breakpoints, plus 3 harness findings | Critical — the defect is invisible by construction      |
+| **VF-01** | Verification False Green               | 17 recorded breakpoints, plus 3 harness findings | Critical — the defect is invisible by construction      |
 | **PF-01** | Platform Portability                   | 12                                               | High                                                    |
 | **MF-01** | Material Fidelity                      | 7                                                | High — silent data loss on a write that reports success |
 | **BF-01** | Boundary and Capability                | 6                                                | High                                                    |
@@ -48,8 +48,8 @@ Two consequences, both deliberate:
 | **RB-01** | Review Baseline                        | 4                                                | Medium — process, not code                              |
 | **—**     | Not failures (status and gate records) | 10                                               | —                                                       |
 
-The column does not sum to 68 and does not partition the space. On this
-document's own memberships it covers **61 of the 68 breakpoints**, with 53–54
+The column does not sum to 69 and does not partition the space. On this
+document's own memberships it covers **62 of the 69 breakpoints**, with 54–55
 memberships in total; seven entries are in no family at all, listed in §11. The
 first draft of this section claimed the column "sums to more than 64", which
 holds on no reading — caught by the cross-check in §11 and corrected here rather
@@ -61,7 +61,7 @@ The family counts above are the reconciled registry view. Two pre-reentry
 descriptions elsewhere in the Phase 6V documents are now historical: the
 evaluator can call the asset lifecycle and the current ContextPlanner claim is
 explicitly limited to ranking supplied signals. The machine-checkable registry
-state, including BP-049/BP-064/BP-065/BP-066/BP-067 closure, is in
+state, including BP-049/BP-064/BP-065/BP-066/BP-067/BP-068 closure, is in
 [`DEBT-REGISTRY-AUDIT.md`](DEBT-REGISTRY-AUDIT.md).
 
 ---
@@ -103,6 +103,7 @@ on purpose.
 | **BP-064** | `assert-cycle-detected.mjs` resolves dependency-cruiser against `process.cwd()`; it passes only because `runStage` happens to set `cwd: root`                                                                                          |
 | **BP-065** | `assert-runtime-pins.mjs` parses `engines.node`'s upper bound with a three-component regex, so `<23` yields `undefined` and **the runtime check can never fail** — it printed `PASS` on Node 24.15.0, outside the pinned range, exit 0 |
 | **BP-066** | the evaluator converted an independent verifier's `null` (“not adjudicated”) into `actual.status = "failed"`, manufacturing an outcome residual from absent evidence                                                                   |
+| **BP-068** | the registry regression asserted the historical literal total `67` after the live breakpoint record had reached `68`, so CI caught the control-plane test itself lagging behind its source of truth                                    |
 
 **Found during Phase 6V, same mechanism.** Three defects in the new evaluation
 harness, listed here rather than filed separately because their value is as

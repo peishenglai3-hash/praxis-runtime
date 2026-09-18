@@ -11,6 +11,7 @@ Closed in this iteration:
 - projection-lag negative control;
 - CLI mismatch registry entry.
 - BP-067 exact-Node Windows WAL initialization contention.
+- BP-068 registry regression count drift.
 
 Remaining blockers:
 

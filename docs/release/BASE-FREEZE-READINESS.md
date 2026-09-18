@@ -15,6 +15,8 @@
 - BP-066: an unknown external verifier result remains unadjudicated; it is no longer converted into a failure/residual/candidate.
 - BP-067: exact Node 22.13.0 Windows WAL-initialization contention is repaired
   with a bounded, fail-closed retry and regression evidence.
+- BP-068: the registry regression no longer hard-codes a stale breakpoint total;
+  the control-plane invariant test is derived from the audit result.
 - Breakpoint/RFC registry consistency: machine-audited.
 - CLI surface mismatch: rebuild/report paths and positional privacy-purge scope
   are implemented; the legacy `--session` form is retained as an alias and
