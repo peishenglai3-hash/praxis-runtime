@@ -78,6 +78,58 @@ function isSha256(value: string): boolean {
   return /^[a-f0-9]{64}$/i.test(value);
 }
 
+/**
+ * `PRAGMA journal_mode = WAL` changes a file-level SQLite setting. On
+ * Windows, a second process can receive SQLITE_BUSY during that transition
+ * even though the connection's busy timeout is already configured. Keep this
+ * compatibility retry local to the transition: ordinary SQL errors must still
+ * fail immediately, and a permanently locked database must not be hidden.
+ *
+ * The constructor `timeout` option is deliberately not used here. It was not
+ * available in the canonical Node 22.13.0 runtime; this bounded retry keeps
+ * the implementation on the Bible's runtime/API surface.
+ */
+const SQLITE_WAL_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800, 1_200];
+
+function isSqliteBusyError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as {
+    code?: unknown;
+    errcode?: unknown;
+    message?: unknown;
+  };
+  const message =
+    typeof candidate.message === "string" ? candidate.message : "";
+  return (
+    candidate.code === "ERR_SQLITE_ERROR" &&
+    (candidate.errcode === 5 ||
+      candidate.errcode === 6 ||
+      /database(?: table)? is locked/i.test(message))
+  );
+}
+
+function sleepSynchronously(milliseconds: number): void {
+  const signal = new Int32Array(
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+  );
+  Atomics.wait(signal, 0, 0, milliseconds);
+}
+
+/** @internal — exercised by the regression suite, not exported by the package barrel. */
+export function retrySqliteBusy<T>(operation: () => T): T {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return operation();
+    } catch (error) {
+      const retryDelay = SQLITE_WAL_RETRY_DELAYS_MS[attempt];
+      if (!isSqliteBusyError(error) || retryDelay === undefined) {
+        throw error;
+      }
+      sleepSynchronously(retryDelay);
+    }
+  }
+}
+
 function isPathWithinRoot(path: string, root: string): boolean {
   const relativePath = relative(root, path);
   return (
@@ -3493,7 +3545,9 @@ export class SqliteEventStore
 
   private configureConnection(): void {
     this.#database.exec("PRAGMA busy_timeout = 5000");
-    this.#database.exec("PRAGMA journal_mode = WAL");
+    retrySqliteBusy(() => {
+      this.#database.exec("PRAGMA journal_mode = WAL");
+    });
     this.#database.exec("PRAGMA foreign_keys = ON");
     this.#database.exec("PRAGMA synchronous = FULL");
   }
