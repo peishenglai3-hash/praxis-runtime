@@ -5,6 +5,15 @@
 **Phase 6V:** **INCOMPLETE.** The empirical rungs §6 requires have not run.
 **Alpha release:** `NO-GO`, unchanged, and nothing here is evidence towards it.
 
+## Re-entry addendum — 2026-09-18
+
+The empirical conclusions above remain unchanged: V1, V2, V2X, and real-model
+task execution have not run. During Codex re-entry, the evaluator was repaired
+to exercise the reusable-asset lifecycle in synthetic tests. That closes a
+harness-readiness defect; it does not turn the old scripted runs into field
+evidence or authorize Alpha. See `docs/eval/EMPIRICAL-READINESS.md` and
+`docs/eval/SCENARIO-BUG-SWEEP.md` for current status.
+
 ---
 
 ## 0. The report in one paragraph

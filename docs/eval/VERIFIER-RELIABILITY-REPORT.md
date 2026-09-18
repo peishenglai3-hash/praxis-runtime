@@ -8,6 +8,18 @@ Every claim below is a claim about the _measurement apparatus_, not about the
 runtime. The runtime's own verification is a separate matter and is not
 re-examined here.
 
+## Re-entry addendum — 2026-09-18
+
+This report contains the pre-reentry fault-injection inventory. BP-064 and
+BP-065 have now been repaired and regression-tested. BP-066 additionally
+closed a verifier-boundary defect: an independent `null` verdict is now kept
+unadjudicated rather than converted into a failure/residual. The current canonical
+runtime check rejects local Node 24.15.0, as it must; the historical “`pnpm
+verify` PASS, Node 24.15.0” line below is not current evidence and must not be
+used for freeze. A real wrong-runtime injection using a separately installed
+unsupported Node binary remains unrun; the parser/negative-control coverage is
+not being overstated as that experiment.
+
 ---
 
 ## 1. What the brief asked for, and what exists
@@ -16,23 +28,25 @@ re-examined here.
 by an existing suite, or explicitly not implemented. Nothing in this table is
 "partially done".
 
-| #   | Fault to inject                                 | State                     | Where                                                                                                                                                     |
-| --- | ----------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | 错误 Node 版本                                  | **Not implemented**       | see §4                                                                                                                                                    |
-| 2   | 错误 PATH                                       | Covered                   | `gate-runner.test.ts` — `envWithoutPath()` strips every case variant of `PATH` and `npm_execpath`; a stage whose binary is missing fails                  |
-| 3   | Windows `Path` / `PATH` case difference         | Covered                   | same file — the helper filters case-insensitively, which is the fix for a test that had silently acquired two `PATH`s                                     |
-| 4   | 错误 config 位置                                | **Implemented, Phase 6V** | `fault-injection.test.ts` — a fixture with `testTimeout` at the top level is run and must fail; the trap is now permanent                                 |
-| 5   | stale projection                                | Partial                   | `inc-001-regressions.test.ts` covers stale and backwards cursors; a _lagging_ projection (cursor valid but behind) is not injected                        |
-| 6   | stale cursor                                    | Covered                   | `inc-001-regressions.test.ts` — cursor past ledger head, cursor moving backwards, cursor advancing                                                        |
-| 7   | 错误 content hash                               | **Implemented, Phase 6V** | `fault-injection.test.ts` — payload tampered behind the API, `getById` must throw, with an untampered control beside it                                   |
-| 8   | malformed fixture                               | **Implemented, Phase 6V** | `fault-injection.test.ts` — six malformations, each refused at load                                                                                       |
-| 9   | 错误 provider capability                        | Covered                   | 6V-0 `6V0-04`, plus the adapter conformance suite; `negotiateCapabilities` refuses fail-closed                                                            |
-| 10  | unsupported OS assumption                       | **Implemented, Phase 6V** | `fault-injection.test.ts` — the POSIX ancestor walk asserted from Windows, **with the defective algorithm reproduced beside it** and required to disagree |
-| 11  | timeout actually ignored                        | **Implemented, Phase 6V** | same case as #4: the fixture proves the option is inert when mis-placed                                                                                   |
-| 12  | deliberately failing format / type / test stage | Covered                   | `gate-runner.test.ts` — real Prettier over a genuinely unformatted file; a stage that prints the reassuring line and exits 1                              |
-| 13  | pipeline exit-code substitution                 | Covered                   | `gate-runner.test.ts`, the BP-060 shape itself                                                                                                            |
+| #   | Fault to inject                                 | State                        | Where                                                                                                                                                     |
+| --- | ----------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 错误 Node 版本                                  | **Partial / parser control** | `runtime-pins.test.mjs` proves Node 24.15.0 is rejected by canonical verification; a separate unsupported binary gate run remains unimplemented (see §4)  |
+| 2   | 错误 PATH                                       | Covered                      | `gate-runner.test.ts` — `envWithoutPath()` strips every case variant of `PATH` and `npm_execpath`; a stage whose binary is missing fails                  |
+| 3   | Windows `Path` / `PATH` case difference         | Covered                      | same file — the helper filters case-insensitively, which is the fix for a test that had silently acquired two `PATH`s                                     |
+| 4   | 错误 config 位置                                | **Implemented, Phase 6V**    | `fault-injection.test.ts` — a fixture with `testTimeout` at the top level is run and must fail; the trap is now permanent                                 |
+| 5   | stale projection                                | Partial                      | `inc-001-regressions.test.ts` covers stale and backwards cursors; a _lagging_ projection (cursor valid but behind) is not injected                        |
+| 6   | stale cursor                                    | Covered                      | `inc-001-regressions.test.ts` — cursor past ledger head, cursor moving backwards, cursor advancing                                                        |
+| 7   | 错误 content hash                               | **Implemented, Phase 6V**    | `fault-injection.test.ts` — payload tampered behind the API, `getById` must throw, with an untampered control beside it                                   |
+| 8   | malformed fixture                               | **Implemented, Phase 6V**    | `fault-injection.test.ts` — six malformations, each refused at load                                                                                       |
+| 9   | 错误 provider capability                        | Covered                      | 6V-0 `6V0-04`, plus the adapter conformance suite; `negotiateCapabilities` refuses fail-closed                                                            |
+| 10  | unsupported OS assumption                       | **Implemented, Phase 6V**    | `fault-injection.test.ts` — the POSIX ancestor walk asserted from Windows, **with the defective algorithm reproduced beside it** and required to disagree |
+| 11  | timeout actually ignored                        | **Implemented, Phase 6V**    | same case as #4: the fixture proves the option is inert when mis-placed                                                                                   |
+| 12  | deliberately failing format / type / test stage | Covered                      | `gate-runner.test.ts` — real Prettier over a genuinely unformatted file; a stage that prints the reassuring line and exits 1                              |
+| 13  | pipeline exit-code substitution                 | Covered                      | `gate-runner.test.ts`, the BP-060 shape itself                                                                                                            |
 
-**9 of 13 covered, 3 implemented in this phase, 1 not implemented.**
+**The original 9-of-13 accounting is a pre-reentry snapshot.** Current status
+is 9 covered, 3 implemented in the original phase, and 1 partial parser-level
+control; the separately installed wrong-runtime execution remains open.
 
 **Two further defects were found after this table was written**, by the
 compatibility probe, and both are `VF-01`:

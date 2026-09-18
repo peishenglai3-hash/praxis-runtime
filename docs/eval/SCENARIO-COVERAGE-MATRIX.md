@@ -45,6 +45,23 @@ used a **scripted** subject and therefore measure the harness, not the runtime;
 the third is development-runtime evidence that its own results document refuses
 to promote.
 
+### Re-entry update — 2026-09-18
+
+The table entries below were written before the Round 1 asset wiring. They are
+retained as a dated audit snapshot, but the current evaluator facts are:
+
+- `FULL PRAXIS` now has a tested candidate → validation → explicit human
+  confirmation → active → later reuse/ignore/challenge path;
+- `REFLECTION` and `FULL PRAXIS` are behaviorally distinct in the harness;
+- the ten-episode synthetic manifest is loadable;
+- this still is **not** a V1/V2/V2X field result, and no real historical corpus
+  has been ingested.
+
+Use [`SCENARIO-BUG-SWEEP.md`](SCENARIO-BUG-SWEEP.md) and
+[`EMPIRICAL-READINESS.md`](EMPIRICAL-READINESS.md) for the current Round 1
+status. They do not upgrade any field or provider cell below without a real
+manifest.
+
 **No run has yet used a real model to do a real task with Praxis state behind
 it.** That sentence is the honest summary of Phase 6V's empirical state, and
 every cell below should be read in its light.

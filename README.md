@@ -4,13 +4,14 @@
 > ready for production use, for third-party integration, or for anyone to
 > depend on.
 >
-> **Phases 5, 6A and 6B are complete; there is no Phase 6V and no release.**
-> What exists is the event ledger, deterministic projections and replay,
-> context planning, bounded residual detection and reflection, reusable
-> assets, the audited Legacy migration path, the command line with its
-> diagnostics, and a provider-neutral adapter boundary. What does **not**
-> exist is any provider adapter, and nothing calls the adapter boundary yet.
-> The runtime has never been run against a real model.
+> **Phases 5, 6A and 6B are complete; Phase 6V is prepared but not empirically
+> complete, and there is no release.** What exists is the event ledger,
+> deterministic projections and replay, bounded context planning, residual
+> detection and reflection, reusable assets, the audited Legacy migration path,
+> the command line with diagnostics, and a provider-neutral adapter boundary.
+> The current evaluator can exercise the reusable-asset lifecycle in synthetic
+> fixtures, but the runtime has not completed a current-branch V1/V2/V2X real
+> task run.
 >
 > The contracts, the database schema and the command-line surface can still
 > change without notice, and the verification gate has known gaps that are
@@ -19,6 +20,12 @@
 > [`docs/PHASE-5-GATE.md`](./docs/PHASE-5-GATE.md) and
 > [`docs/incidents/INC-001-bible-conformance-audit.md`](./docs/incidents/INC-001-bible-conformance-audit.md)
 > before assuming anything here is finished.
+
+> **Re-entry status (2026-09-18):** Codex has taken back the project on
+> `codex/reentry-round1`. BP-064 and BP-065 are fixed and tested; Base Freeze is
+> still `NO-GO`; Release Engineering has not started. See
+> [`docs/release/BASE-FREEZE-READINESS.md`](./docs/release/BASE-FREEZE-READINESS.md)
+> and [`docs/eval/EMPIRICAL-READINESS.md`](./docs/eval/EMPIRICAL-READINESS.md).
 
 `Praxis Runtime` 是一个从零开始的、local-first 的 TypeScript 长期人机协作运行时。它把交互历史作为可追溯材料保存下来，在不覆盖原始记录的前提下重建派生状态、选择当前上下文、识别有边界的残差，并把经过验证的协作经验转化为可检查、可撤销、可 Fork 的 Rule、Skill 或 Workflow。
 
@@ -95,6 +102,13 @@ The dependency direction is enforced in [`.dependency-cruiser.cjs`](./.dependenc
 The store intentionally exposes only the EventReader/EventWriter surface and safe migration metadata; its raw SQLite handle is private. Test-only crash injection uses an internal migration entry point and is not part of the public package export.
 
 ## Current status
+
+The phase bullets below preserve historical gate evidence. They do not override
+the current canonical runtime rule: the project requires Node `22.13.0` (range
+`>=22.13.0 <23`), and a Node `24.15.0` local run must fail the canonical
+runtime stage rather than being reported as a green release check. Current
+re-entry evidence is collected in
+[`docs/engineering/BIBLE-REALITY-CONFORMANCE.md`](./docs/engineering/BIBLE-REALITY-CONFORMANCE.md).
 
 The EPIC-001 implementation slice is complete: reproducible workspace scaffolding, strict TypeScript, package project references, CI configuration, dependency guardrails, deterministic clock/ID/config ports, ADR/RFC baseline, and negative boundary fixtures are present.
 

@@ -6,6 +6,17 @@
 [`../../evals/src/runner.ts`](../../evals/src/runner.ts).
 **Status:** **arms built and self-tested; no ablation has been run.**
 
+## Re-entry update — 2026-09-18
+
+The historical status above remains correct for empirical ablation: no V1/V2/V2X
+measurement has run. The evaluator wiring has since been repaired so that the
+synthetic `FULL PRAXIS` arm can actually drive candidate creation, validation,
+explicit human confirmation, activation, later reuse, ignore, and challenge.
+The earlier “`promoteAsset` is never called” and “`contestAsset` is never
+called” statements describe the pre-repair tree and must not be read as current
+claims. Current mechanism evidence is in `evals/test/assets.test.ts` and
+`docs/eval/SCENARIO-BUG-SWEEP.md`; it is harness evidence, not a field result.
+
 ---
 
 ## 0. The claim this document exists to make falsifiable

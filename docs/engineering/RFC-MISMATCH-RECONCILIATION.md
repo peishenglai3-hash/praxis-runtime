@@ -12,6 +12,28 @@ One entry per registered mismatch, carrying the five fields the owner's brief §
 
 `RELEASE IMPACT` names what the entry's subject still gates, as of 2026-09-18. The categories are the ones `docs/release/PRE-RELEASE-GAP-MAP.md:36-95` uses under the owner's Phase 6V brief §20 — `Blocks Phase 6 Final`, `Blocks Pre-Release Compatibility Audit`, `Blocks Release Engineering`, `Blocks Alpha`, `Future Improvement` — and where that document classifies the same item, this one follows it rather than assigning its own: `FIELD_CONTEXT_SOCIAL_PLURALITY` is `Future Improvement` there (`:95`) and `ADAPTER_EXECUTION_CONTEXT_VS_10_2` is a blocker for a §14 item, which the same document places among Release Engineering's work (`:116`, `:129-131`). Where a gate is stated only in the RFC, the gate document or an ADR, it is cited. Where no document names a gate and the assignment is this document's reading, the cell is marked `(read)`. `None` means the entry gates nothing: it is settled, or it is a document-level matter with no gate attached. `Future Improvement` is a known cost carried forward with no gate — the sense of `docs/PHASE-6-GATE.md:78-81`, "Open items carried forward… None blocks Phase 6B from a Bible-conformance standpoint".
 
+## Re-entry addendum — 2026-09-18
+
+The registry remains a historical record; this addendum prevents the control
+plane from remaining stale after the re-entry changes:
+
+- `LEGACY_PATTERN_TO_CANDIDATE_ASSET` is **RESOLVED**, using the author's
+  frozen Option B: importer authority stays confined and the explicit human-run
+  `legacy convert` path proposes a candidate. It is not an unresolved choice.
+- `CLI_SURFACE_GAPS_VS_13` remains **NEEDS-EVIDENCE**. Rebuild projection
+  routing and legacy report output paths now exist and have tests. The remaining
+  compatibility question is the privacy-purge positional scope, so this row is
+  not silently closed.
+- `GOLDEN_FIXTURE_01_ABSENT` remains **BLOCKING / WAITING_FOR_AUTHOR_SOURCE**;
+  the bounded source map is `docs/eval/GF01-SOURCE-MAP.md`.
+- BP-049 remains **ACTIVE** because no authoritative author decision was found
+  in this round. The machine audit validates this state rather than inferring a
+  decision.
+
+The repository's original mismatch prose is preserved below as historical
+evidence; current control-plane interpretation is stated here and in the
+corresponding RFC addendum.
+
 ## What this document is not
 
 It is not a re-audit of the runtime against the Bible. It is not an amendment to `RFC-0001.md`: no registry entry was closed, re-spelled, or edited. It is not a gate, and it closes nothing. Where the documents say an item is open, it is reported open even where the entry could be read as settled — and where a status could not be settled from the documents, the row is `NEEDS-EVIDENCE` with the evidence that would settle it named, not upgraded so the table reads better.

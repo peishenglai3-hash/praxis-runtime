@@ -26,6 +26,14 @@ a development runtime, (b) an oracle self-test that measures the harness, and
 doing its job on a real task.** Where a verdict rests on reading code rather
 than on a result, it says so.
 
+## Re-entry update — 2026-09-18
+
+The “real task” limitation remains. The evaluator has since gained synthetic
+end-to-end asset lifecycle tests, so the pre-reentry statement that the
+harness never calls `promoteAsset` is historical rather than current. This
+changes readiness evidence, not the architecture verdict: no real-model or
+field run has shown that an active asset improves a later task.
+
 ---
 
 ## 1. Temporal Ledger — `KEEP`
