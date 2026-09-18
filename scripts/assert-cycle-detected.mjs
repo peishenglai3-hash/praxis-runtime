@@ -1,9 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { log } from "node:console";
 import { execPath, stderr, stdout } from "node:process";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const dependencyCruiser = resolve(
+  repositoryRoot,
   "node_modules/dependency-cruiser/bin/dependency-cruise.mjs",
 );
 const result = spawnSync(
@@ -11,8 +15,8 @@ const result = spawnSync(
   [
     dependencyCruiser,
     "--config",
-    ".dependency-cruiser.cjs",
-    "tests/fixtures/dependency-cycle",
+    resolve(repositoryRoot, ".dependency-cruiser.cjs"),
+    resolve(repositoryRoot, "tests/fixtures/dependency-cycle"),
   ],
   { encoding: "utf8" },
 );

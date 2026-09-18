@@ -27,6 +27,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const gateScript = join(repoRoot, "scripts", "gate.mjs");
+const cycleScript = join(repoRoot, "scripts", "assert-cycle-detected.mjs");
 const prettierBin = join(
   repoRoot,
   "node_modules",
@@ -230,6 +231,23 @@ describe("the gate runner reads exit codes, not output", () => {
     expect(document.notRun).toEqual([]);
     expect(document.stages).toHaveLength(realStageIds().ids.length);
     expect(exitCode).toBe(0);
+  });
+});
+
+describe("dependency-boundary fixtures are independent of the caller cwd", () => {
+  it("rejects the intentional cycle when launched outside the repository", () => {
+    const result = spawnSync(process.execPath, [cycleScript], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+      shell: false,
+    });
+
+    expect(result.status, `${result.stdout ?? ""}${result.stderr ?? ""}`).toBe(
+      0,
+    );
+    expect(`${result.stdout ?? ""}${result.stderr ?? ""}`).toContain(
+      "Intentional dependency cycle rejected as expected",
+    );
   });
 });
 
