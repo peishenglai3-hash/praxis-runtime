@@ -286,7 +286,7 @@ regression. The concurrency work so far is C0–C2; C3 and C4 remain out of this
 round by §19 and are not implied to be solved by the verify-order change.
 
 **Validation evidence.** BP-013's 6 × 4-process repetition; the BP-067
-Node 22.13.0 Ubuntu/Windows artifact pair in run `35353350996`; and
+Node 22.13.0 Ubuntu/Windows artifact pair in run `35355177455`; and
 `smoke:cli`'s phase1-concurrency plus Phase 5 legacy stages.
 
 **Release implication.** The former BP-049 release block is closed. C3/C4

@@ -48,4 +48,4 @@ This is **harness-level end-to-end evidence**, not proof that an asset improves 
 
 - **Implemented and tested:** append-first ledger, projections/rebuild, bounded context selection, expectation/replay contracts, residual/reflection path, core asset lifecycle, unknown-verifier handling, adapters, CLI/daemon smoke, backup/restore fixtures, privacy purge fixtures, and registry integrity checks.
 - **Implemented but only partially evidenced:** real external verification, cross-agent cursor behavior, lagging-valid projection detection, full doctor §13.1 coverage, FieldContext validity, and provider portability.
-- **Not evidenced:** real V1/V2/V2X, historical GF01 replay, and public/release engineering. Exact Node 22.13.0 current-code execution is evidenced by GitHub Actions run `35353350996` on Ubuntu and Windows; this does not provide field evidence.
+- **Not evidenced:** real V1/V2/V2X, historical GF01 replay, and public/release engineering. Exact Node 22.13.0 current-HEAD execution is evidenced by GitHub Actions run `35355177455` on Ubuntu and Windows; this does not provide field evidence.

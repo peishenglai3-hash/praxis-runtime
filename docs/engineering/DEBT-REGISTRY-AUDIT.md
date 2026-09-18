@@ -42,7 +42,8 @@ than becoming a failure/residual/candidate. BP-067 is closed with a bounded
 WAL initialization retry, a fail-closed regression, and exact Node 22.13.0
 Ubuntu/Windows artifacts from run `35353350996`.
 BP-068 is closed by removing the stale literal breakpoint total from the
-regression test; the test now checks the machine-derived row invariants.
+regression test; the test now checks the machine-derived row invariants, and
+run `35355177455` passes the complete canonical gate on Ubuntu and Windows.
 
 ## Current RFC registry state
 

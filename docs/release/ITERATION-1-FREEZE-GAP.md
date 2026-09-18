@@ -27,9 +27,9 @@ Remaining blockers:
    pre-release correctness review item.
 
 Canonical runtime evidence is now closed for this iteration: GitHub Actions run
-`35353350996` passed on Ubuntu and Windows with exact Node `22.13.0`; both gate
+`35355177455` passed on Ubuntu and Windows with exact Node `22.13.0`; both gate
 artifacts report all 11 stages complete, `exitCode: 0`, and `notRun: []` for
-current HEAD `8c34c43`. Run `35351380261` remains the BP-067 discovery evidence
+final current HEAD `45e2300`. Run `35351380261` remains the BP-067 discovery evidence
 because Windows failed at `smoke:cli` during concurrent WAL initialization;
 run `35352720528` records the first retry's integration/Vitest latency failure.
 Run `35350733719` remains the independent BP-064 closure evidence.

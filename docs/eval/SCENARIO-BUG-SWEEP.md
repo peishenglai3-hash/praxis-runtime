@@ -32,9 +32,9 @@ The current re-entry run produced:
 - `pnpm typecheck`: **passed**.
 - `pnpm audit:registries`: **passed**.
 
-The current code commit `8c34c43` also passed the canonical `pnpm verify`
+The final current-HEAD commit `45e2300` also passed the canonical `pnpm verify`
 pipeline on exact Node `22.13.0` Ubuntu and Windows runners in GitHub Actions
-run `35353350996`; both artifacts report all 11 stages complete and
+run `35355177455`; both artifacts report all 11 stages complete and
 `notRun: []`. The local counts above remain development evidence only.
 
 The new machine-load test confirms that the ten-episode Round 1 manifest is valid, synthetic, unique, and contains explicit asset expectations. The manifest is a readiness fixture; it is not a substitute for V1/V2/V2X real-model execution.

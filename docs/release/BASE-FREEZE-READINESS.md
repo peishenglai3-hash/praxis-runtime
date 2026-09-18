@@ -42,7 +42,7 @@
 
 ## Freeze rule
 
-Do not change this document to GO until the high blockers are closed with repository-linked evidence and the owner reviews the remaining author-controlled entries. The current Node 22.13.0 CI evidence is sufficient for the runtime gate: run `35353350996` has PASS artifacts for Ubuntu and Windows with all 11 stages complete. It does not substitute for the empirical and source-material blockers above. Node 24 local output remains development evidence only.
+Do not change this document to GO until the high blockers are closed with repository-linked evidence and the owner reviews the remaining author-controlled entries. The current Node 22.13.0 CI evidence is sufficient for the runtime gate: run `35355177455` has PASS artifacts for Ubuntu and Windows with all 11 stages complete on final current HEAD `45e2300`. It does not substitute for the empirical and source-material blockers above. Node 24 local output remains development evidence only.
 
 ## Reversible baseline
 

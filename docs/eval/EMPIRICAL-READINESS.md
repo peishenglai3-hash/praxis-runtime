@@ -25,8 +25,8 @@ The four minimum comparison arms are now behaviorally distinct in the evaluator.
 - Registry audit: **PASS**.
 - Asset lifecycle: candidate → validated → explicit human confirmation → active → later reuse/ignore/challenge **PASS in harness fixtures**.
 
-The canonical gate was also executed on the current code commit `8c34c43` in
-GitHub Actions run `35353350996`, on exact Node `22.13.0` Ubuntu and Windows
+The canonical gate was also executed on the final current-HEAD commit `45e2300`
+in GitHub Actions run `35355177455`, on exact Node `22.13.0` Ubuntu and Windows
 runners. Both machine-readable artifacts report `PASS`, `complete: true`, all
 11 stages with `exitCode: 0`, and `notRun: []`. This closes the pinned-runtime
 gate; it does not turn the local Node 24 development counts above into
@@ -36,13 +36,13 @@ These are readiness and mechanism tests. They are not V1/V2/V2X measurements and
 
 ## Runtime path
 
-| Environment                   | State                                                                                                | Meaning                                            |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| Local Windows                 | Node `24.15.0`; canonical `pnpm verify` is rejected by the runtime pin check                         | **Known negative control**, not a supported result |
-| Local Windows Node `22.13.0`  | Not installed/found                                                                                  | **Pending**                                        |
-| GitHub Actions Ubuntu/Windows | Workflow pins Node `22.13.0`; run `35353350996` passed current code commit `8c34c43` on both runners | **PASS for the pinned runtime gate**               |
-| Provider-backed V1/V2/V2X     | No current run in this round                                                                         | **Not executed**                                   |
-| Historical GF01               | Source chain not established and archive licence/consent unverified                                  | **Waiting for author source**                      |
+| Environment                   | State                                                                                                      | Meaning                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Local Windows                 | Node `24.15.0`; canonical `pnpm verify` is rejected by the runtime pin check                               | **Known negative control**, not a supported result |
+| Local Windows Node `22.13.0`  | Not installed/found                                                                                        | **Pending**                                        |
+| GitHub Actions Ubuntu/Windows | Workflow pins Node `22.13.0`; run `35355177455` passed final current-HEAD commit `45e2300` on both runners | **PASS for the pinned runtime gate**               |
+| Provider-backed V1/V2/V2X     | No current run in this round                                                                               | **Not executed**                                   |
+| Historical GF01               | Source chain not established and archive licence/consent unverified                                        | **Waiting for author source**                      |
 
 ## Conditions for the next empirical round
 
