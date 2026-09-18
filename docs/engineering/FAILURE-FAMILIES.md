@@ -3,7 +3,7 @@
 **Date:** 2026-09-18
 **Authority:** owner's Phase 6V brief §10 (`断点与 RFC Mismatch 整顿`).
 **Input:** [`_INVENTORY-RAW.md`](_INVENTORY-RAW.md), a historical line-referenced
-extraction of 64 entries, reconciled against the current 67-entry
+extraction of 64 entries, reconciled against the current 68-entry
 [`../断点记录.md`](../%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md).
 **Companion documents:** [`DEBT-RECONCILIATION.md`](DEBT-RECONCILIATION.md),
 [`RFC-MISMATCH-RECONCILIATION.md`](RFC-MISMATCH-RECONCILIATION.md).
@@ -40,16 +40,16 @@ Two consequences, both deliberate:
 | Family    | Name                                   | Members                                          | Severity of the mechanism                               |
 | --------- | -------------------------------------- | ------------------------------------------------ | ------------------------------------------------------- |
 | **VF-01** | Verification False Green               | 16 recorded breakpoints, plus 3 harness findings | Critical — the defect is invisible by construction      |
-| **PF-01** | Platform Portability                   | 11                                               | High                                                    |
+| **PF-01** | Platform Portability                   | 12                                               | High                                                    |
 | **MF-01** | Material Fidelity                      | 7                                                | High — silent data loss on a write that reports success |
 | **BF-01** | Boundary and Capability                | 6                                                | High                                                    |
-| **TF-01** | Temporal and Ordering                  | 5                                                | Medium                                                  |
+| **TF-01** | Temporal and Ordering                  | 6                                                | Medium                                                  |
 | **CF-01** | Context and Projection                 | 6                                                | Medium                                                  |
 | **RB-01** | Review Baseline                        | 4                                                | Medium — process, not code                              |
 | **—**     | Not failures (status and gate records) | 10                                               | —                                                       |
 
-The column does not sum to 67 and does not partition the space. On this
-document's own memberships it covers **60 of the 67 breakpoints**, with 51–52
+The column does not sum to 68 and does not partition the space. On this
+document's own memberships it covers **61 of the 68 breakpoints**, with 53–54
 memberships in total; seven entries are in no family at all, listed in §11. The
 first draft of this section claimed the column "sums to more than 64", which
 holds on no reading — caught by the cross-check in §11 and corrected here rather
@@ -61,7 +61,7 @@ The family counts above are the reconciled registry view. Two pre-reentry
 descriptions elsewhere in the Phase 6V documents are now historical: the
 evaluator can call the asset lifecycle and the current ContextPlanner claim is
 explicitly limited to ranking supplied signals. The machine-checkable registry
-state, including BP-049/BP-064/BP-065/BP-066 closure, is in
+state, including BP-049/BP-064/BP-065/BP-066/BP-067 closure, is in
 [`DEBT-REGISTRY-AUDIT.md`](DEBT-REGISTRY-AUDIT.md).
 
 ---
@@ -165,7 +165,7 @@ sidecar handles), BP-007 (`tsConfig.fileName` resolved against the wrong cwd),
 BP-016 and BP-024 (pinned-runtime archive unobtainable), BP-031 (`purge:<uuid>`
 uses a colon, illegal in Windows paths), BP-040 (CRLF normalisation), BP-044
 (NUL bytes), **BP-061** (POSIX path walk), **BP-063** (stream order), **BP-064** (cwd-relative
-tool resolution).
+tool resolution), **BP-067** (Node 22 Windows WAL initialization).
 
 **Current mitigation.** CI matrix on Ubuntu and Windows at the pinned runtime;
 `.gitattributes` for line endings; `paths.ts` with an injectable `PlatformPath`
@@ -272,7 +272,8 @@ wait, and the code assumes the world did not change during the wait.
 **Members.** BP-004 (migration snapshot read outside the write transaction),
 BP-013 (`journal_mode = WAL` before the busy timeout), BP-014 (test-time
 resolution to a stale `contracts/dist`), BP-026 (`actor.id` conflict semantics),
-BP-049 (concurrent builds writing the same `dist`).
+BP-049 (concurrent builds writing the same `dist`), BP-067 (Node 22 Windows
+WAL-initialization race).
 
 **Current mitigation.** Compare-and-swap on cursor advance; busy timeout moved
 ahead of the first waiting PRAGMA; Vitest source aliases; the writer-ownership
@@ -283,8 +284,9 @@ canonical verification path by the author's eleven-stage decision and its
 regression. The concurrency work so far is C0–C2; C3 and C4 remain out of this
 round by §19 and are not implied to be solved by the verify-order change.
 
-**Validation evidence.** BP-013's 6 × 4-process repetition; `smoke:cli`'s
-phase1-concurrency stage.
+**Validation evidence.** BP-013's 6 × 4-process repetition; the BP-067
+Node 22.13.0 Ubuntu/Windows artifact pair in run `35353350996`; and
+`smoke:cli`'s phase1-concurrency plus Phase 5 legacy stages.
 
 **Release implication.** The former BP-049 release block is closed. C3/C4
 multi-process behaviour remains out of scope and must not be reported as

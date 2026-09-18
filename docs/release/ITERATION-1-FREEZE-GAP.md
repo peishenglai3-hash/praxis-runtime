@@ -10,6 +10,7 @@ Closed in this iteration:
 - positional privacy-purge scope compatibility;
 - projection-lag negative control;
 - CLI mismatch registry entry.
+- BP-067 exact-Node Windows WAL initialization contention.
 
 Remaining blockers:
 
@@ -25,10 +26,12 @@ Remaining blockers:
    pre-release correctness review item.
 
 Canonical runtime evidence is now closed for this iteration: GitHub Actions run
-`35350733719` passed on Ubuntu and Windows with exact Node `22.13.0`; both gate
-artifacts report all 11 stages complete and `notRun: []`. The preceding run
-`35350161225` is retained as the BP-064 discovery evidence because Windows
-failed at `test:regression` before the repository-relative path repair.
+`35353350996` passed on Ubuntu and Windows with exact Node `22.13.0`; both gate
+artifacts report all 11 stages complete, `exitCode: 0`, and `notRun: []` for
+current HEAD `8c34c43`. Run `35351380261` remains the BP-067 discovery evidence
+because Windows failed at `smoke:cli` during concurrent WAL initialization;
+run `35352720528` records the first retry's integration/Vitest latency failure.
+Run `35350733719` remains the independent BP-064 closure evidence.
 
 No private historical data, raw dialogue, credentials, or Hugging Face dataset
 was added to the repository.

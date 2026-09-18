@@ -18,29 +18,36 @@ The four minimum comparison arms are now behaviorally distinct in the evaluator.
 
 - Scenario manifest load: **PASS** for 10 synthetic Round 1 episodes.
 - Eval suite: **60/60 PASS**, including the unknown-verifier negative control.
-- Integration suite: **200 PASS, 18 existing skips**.
+- Integration suite: **201 PASS, 18 existing skips** in the latest local development run.
 - Replay suite: **15/15 PASS**.
-- Regression suite: **32/32 PASS**.
+- Regression suite: **99 tests PASS across 14 files** in the latest local development run.
 - Typecheck: **PASS**.
 - Registry audit: **PASS**.
 - Asset lifecycle: candidate → validated → explicit human confirmation → active → later reuse/ignore/challenge **PASS in harness fixtures**.
+
+The canonical gate was also executed on the current code commit `8c34c43` in
+GitHub Actions run `35353350996`, on exact Node `22.13.0` Ubuntu and Windows
+runners. Both machine-readable artifacts report `PASS`, `complete: true`, all
+11 stages with `exitCode: 0`, and `notRun: []`. This closes the pinned-runtime
+gate; it does not turn the local Node 24 development counts above into
+canonical release evidence.
 
 These are readiness and mechanism tests. They are not V1/V2/V2X measurements and do not establish that Praxis improves a real task.
 
 ## Runtime path
 
-| Environment                   | State                                                                         | Meaning                                                |
-| ----------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ |
-| Local Windows                 | Node `24.15.0`; canonical `pnpm verify` is rejected by the runtime pin check  | **Known negative control**, not a supported result     |
-| Local Windows Node `22.13.0`  | Not installed/found                                                           | **Pending**                                            |
-| GitHub Actions Ubuntu/Windows | Workflow pins Node `22.13.0`; historical evidence exists on an earlier commit | **Configured; current re-entry HEAD evidence pending** |
-| Provider-backed V1/V2/V2X     | No current run in this round                                                  | **Not executed**                                       |
-| Historical GF01               | Source chain not established and archive licence/consent unverified           | **Waiting for author source**                          |
+| Environment                   | State                                                                                                | Meaning                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Local Windows                 | Node `24.15.0`; canonical `pnpm verify` is rejected by the runtime pin check                         | **Known negative control**, not a supported result |
+| Local Windows Node `22.13.0`  | Not installed/found                                                                                  | **Pending**                                        |
+| GitHub Actions Ubuntu/Windows | Workflow pins Node `22.13.0`; run `35353350996` passed current code commit `8c34c43` on both runners | **PASS for the pinned runtime gate**               |
+| Provider-backed V1/V2/V2X     | No current run in this round                                                                         | **Not executed**                                   |
+| Historical GF01               | Source chain not established and archive licence/consent unverified                                  | **Waiting for author source**                      |
 
 ## Conditions for the next empirical round
 
-1. Execute `pnpm verify` on the current branch under exact Node `22.13.0` on Ubuntu and Windows.
-2. Preserve machine-readable manifests and commit SHA for every arm.
+1. Preserve the current machine-readable Node 22 gate artifacts and commit SHA as the canonical runtime baseline.
+2. Preserve machine-readable manifests and commit SHA for every empirical arm.
 3. Run the four minimum arms against the same scenario version and independent verifier.
 4. Keep synthetic harness results separate from real-provider and historical-corpus results.
 5. Do not upload GF01 or the historical corpus without provenance, consent, licence, and re-identification review.

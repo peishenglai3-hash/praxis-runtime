@@ -26,17 +26,22 @@ Each scenario is recorded as initial state → expectation → action → observ
 The current re-entry run produced:
 
 - `pnpm test:evals`: **60/60 tests passed** across 7 files, including the unknown-verifier negative control.
-- `pnpm test:integration`: **200 passed, 18 skipped by existing conditions**.
+- `pnpm test:integration`: **201 passed, 18 skipped by existing conditions** in the latest local development run.
 - `pnpm test:replay`: **15/15 passed**.
-- `pnpm test:regression`: **32/32 passed**.
+- `pnpm test:regression`: **99 tests passed across 14 files** in the latest local development run.
 - `pnpm typecheck`: **passed**.
 - `pnpm audit:registries`: **passed**.
+
+The current code commit `8c34c43` also passed the canonical `pnpm verify`
+pipeline on exact Node `22.13.0` Ubuntu and Windows runners in GitHub Actions
+run `35353350996`; both artifacts report all 11 stages complete and
+`notRun: []`. The local counts above remain development evidence only.
 
 The new machine-load test confirms that the ten-episode Round 1 manifest is valid, synthetic, unique, and contains explicit asset expectations. The manifest is a readiness fixture; it is not a substitute for V1/V2/V2X real-model execution.
 
 ## Remaining scenario risks
 
 1. No scenario above is evidence from a real provider or the historical corpus.
-2. Node 22.13.0 has not run this current branch locally; the canonical Node 24 run correctly refuses before full verification.
+2. Local Node 24 output correctly refuses canonical verification and is not a substitute for the pinned CI evidence.
 3. A valid-but-lagging projection and a full independent real-world verifier still need dedicated empirical runs.
 4. GF01 remains waiting for a bounded author-approved historical source chain.
