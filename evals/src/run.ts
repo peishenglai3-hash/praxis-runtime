@@ -15,7 +15,12 @@ import {
   type MetricSet,
 } from "./metrics.js";
 import { MECHANISMS_NOT_YET_WIRED } from "./arms.js";
-import { createArmRuntime, type HumanControl, type Subject } from "./runner.js";
+import {
+  createArmRuntime,
+  HoldoutAccessError,
+  type HumanControl,
+  type Subject,
+} from "./runner.js";
 import type {
   ArmId,
   Episode,
@@ -47,11 +52,19 @@ export interface RunOptions {
   readonly verifier?: (
     episode: Episode,
     output: string,
+    holdout?: HoldoutEntry,
   ) => Promise<boolean | null>;
+  /** Evaluator-only material. Never passed to the subject. */
+  readonly holdout?: ReadonlyMap<string, HoldoutEntry>;
   /** Explicit human decision hook; absent means no promotion or challenge. */
   readonly humanControl?: HumanControl;
   /** Injected so a test can pin the git facts. Defaults to reading the repo. */
   readonly gitFacts?: GitFacts;
+}
+
+export interface HoldoutEntry {
+  readonly reference: string;
+  readonly value: unknown;
 }
 
 export interface RunResult {
@@ -63,6 +76,9 @@ export interface RunResult {
   readonly manifestPath: string;
   /** Episodes whose mechanism threw. Non-empty means the arm did not fully run. */
   readonly armErrors: readonly string[];
+  /** Whether the evaluator-only holdout boundary was maintained. */
+  readonly holdoutIsolation: "PASS" | "FAIL" | "NOT_APPLICABLE";
+  readonly holdoutLeakageCount: number;
 }
 
 /**
@@ -127,6 +143,7 @@ export async function runScenario(options: RunOptions): Promise<RunResult> {
   const identity = subject.identity();
   const records: EpisodeRecord[] = [];
   const armErrors: string[] = [];
+  let holdoutLeakageCount = 0;
   const startedAt = new Date().toISOString();
 
   try {
@@ -149,13 +166,25 @@ export async function runScenario(options: RunOptions): Promise<RunResult> {
       let outputTokens: number | null = null;
 
       try {
-        const produced = await subject.generate(context.prompt);
+        const produced = await subject.generate(context.prompt, {
+          episodeId: episode.episodeId,
+          holdout: {
+            read: () => {
+              throw new HoldoutAccessError(episode.episodeId);
+            },
+          },
+        });
         output = produced.text;
         inputTokens = produced.inputTokens;
         outputTokens = produced.outputTokens;
-        succeeded = await verify(episode, output);
+        succeeded = await verify(
+          episode,
+          output,
+          options.holdout?.get(episode.episodeId),
+        );
       } catch (error) {
         verdictError = error instanceof Error ? error.message : String(error);
+        if (error instanceof HoldoutAccessError) holdoutLeakageCount += 1;
         armErrors.push(`${episode.episodeId}: ${verdictError}`);
       }
 
@@ -208,6 +237,12 @@ export async function runScenario(options: RunOptions): Promise<RunResult> {
   const metrics = computeMetrics(records);
   const endedAt = new Date().toISOString();
   const runId = `${scenario.scenarioId}@${scenario.scenarioVersion}--${arm}`;
+  const holdoutIsolation =
+    holdoutLeakageCount > 0
+      ? "FAIL"
+      : options.holdout === undefined
+        ? "NOT_APPLICABLE"
+        : "PASS";
 
   const provenance = corpusProvenanceOf(scenario);
   const manifest = buildManifest({
@@ -218,6 +253,8 @@ export async function runScenario(options: RunOptions): Promise<RunResult> {
     corpusType: scenario.corpusType as CorpusType,
     runtimeCommit: facts.commit,
     runtimeDirty: facts.dirty,
+    holdoutIsolation,
+    holdoutLeakageCount,
     concurrency: scenario.concurrency as Concurrency,
     subject: {
       kind: "model",
@@ -311,6 +348,8 @@ export async function runScenario(options: RunOptions): Promise<RunResult> {
     metrics,
     manifestPath,
     armErrors,
+    holdoutIsolation,
+    holdoutLeakageCount,
   };
 }
 

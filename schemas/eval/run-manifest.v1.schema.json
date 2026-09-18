@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://praxis-runtime.local/schemas/eval/run-manifest.v1.schema.json",
   "title": "Praxis evaluation run manifest v1",
-  "description": "The record of one Phase 6V evaluation run. PROPOSED, not authorised for implementation: nothing reads or writes this schema yet, and no runtime contract was changed to accommodate it. It is a specification for the harness that Phase 6V would need, written so the owner can review the shape before any code depends on it. An evaluation run is not an event in the Praxis ledger; it is the envelope a reader needs in order to decide whether a ledger's contents are evidence for anything.",
+  "description": "The record of one Phase 6V evaluation run. This is an evaluation envelope, not an event in the Praxis ledger. It records enough provenance and control-plane state for a reader to decide whether a run is evidence for anything; it does not authorize the subject to read evaluator-only future holdout material.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -40,6 +40,15 @@
       "description": "True when the working tree had uncommitted changes. A dirty run is not reproducible and must say so rather than being discarded silently.",
       "type": "boolean",
       "default": false
+    },
+
+    "holdoutIsolation": {
+      "description": "PASS when evaluator-only future material was supplied and the subject never accessed it; FAIL when the subject attempted a read; NOT_APPLICABLE when the run had no holdout.",
+      "enum": ["PASS", "FAIL", "NOT_APPLICABLE"]
+    },
+    "holdoutLeakageCount": {
+      "type": "integer",
+      "minimum": 0
     },
 
     "concurrency": {

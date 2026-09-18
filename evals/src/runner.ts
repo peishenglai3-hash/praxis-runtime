@@ -65,9 +65,31 @@ export interface SubjectOutput {
   readonly outputTokens: number | null;
 }
 
+/**
+ * The only holdout surface a subject receives. It deliberately carries no
+ * value or reference: an attempted read is an evaluation failure, not a
+ * request that the harness may satisfy.
+ */
+export interface SubjectEpisodeContext {
+  readonly episodeId: string;
+  readonly holdout: {
+    read(): never;
+  };
+}
+
+export class HoldoutAccessError extends Error {
+  constructor(episodeId: string) {
+    super(`subject attempted to read the future holdout for ${episodeId}`);
+    this.name = "HoldoutAccessError";
+  }
+}
+
 export interface Subject {
   identity(): SubjectIdentity;
-  generate(prompt: string): Promise<SubjectOutput>;
+  generate(
+    prompt: string,
+    context?: SubjectEpisodeContext,
+  ): Promise<SubjectOutput>;
 }
 
 export interface EpisodeContext {
