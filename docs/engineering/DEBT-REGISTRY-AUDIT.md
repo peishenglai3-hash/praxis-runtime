@@ -32,7 +32,8 @@ The current registry contains 67 unique IDs. The reconciled state is:
 BP-064 has a repair in place for both layers of the foreign-cwd failure: the
 checker anchors its child process at the repository root and passes relative
 fixture/config paths after the Windows Node 22.13.0 CI exposed the drive-path
-edge case; the next canonical CI run is still required for final evidence.
+edge case. GitHub Actions run `35350733719` now passes on Ubuntu and Windows
+with all 11 stages complete, so the closure has canonical evidence.
 BP-065 is closed with a shared semantic range parser, a negative Node 24 test,
 and a positive Node 22 parser test; the positive test is not a substitute for
 running the full project on Node 22.13.0. BP-066 is closed with an
