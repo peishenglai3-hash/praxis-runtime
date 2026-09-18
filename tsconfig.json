@@ -18,6 +18,11 @@
     "baseUrl": ".",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts", "tests/**/*.ts"],
+  "include": [
+    "packages/**/*.ts",
+    "apps/**/*.ts",
+    "tests/**/*.ts",
+    "evals/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist", "coverage"]
 }

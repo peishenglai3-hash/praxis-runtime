@@ -1,0 +1,73 @@
+{
+  "scenarioId": "sc-abs-01-low-risk-abstention",
+  "scenarioVersion": "1.0.0",
+  "title": "Low-risk file tidying, where the correct behaviour is usually to stay quiet",
+  "corpusType": "corpus-c",
+  "ladder": "6V-1",
+  "concurrency": "C0",
+  "frozenAt": "2026-09-18T00:00:00.000Z",
+  "field": {
+    "taskType": "low-risk-file-tidying",
+    "externalVerification": "strong",
+    "consequence": "low",
+    "reversibility": "easy",
+    "feedbackLatency": "short",
+    "actors": [{ "type": "human", "id": "owner" }],
+    "placementRationale": "Low consequence because every action is a rename inside a scratch directory and every one is reversible; strong external verification because the filesystem itself decides whether the target names exist; short feedback because the check is a directory listing. It sits at 6V-1 because §6 V1 asks whether the runtime knows when not to intervene, and the field is the one where intervening wrongly is cheapest and therefore easiest to measure."
+  },
+  "verifier": {
+    "kind": "filesystem",
+    "reference": "the scenario's own scripted verifier: whether the expected names exist",
+    "independent": true,
+    "criterion": {
+      "note": "Independent because the oracle is authored with the scenario and the runtime never sees it. The runtime's own assessment of whether it succeeded is not consulted."
+    }
+  },
+  "notes": "This is a HARNESS SELF-TEST scenario, not a field result. It is corpus-c — synthetic — and it exists so that `evals/test/oracle.test.ts` can drive all four arms end to end with a scripted subject and known answers, which is the only way to know the harness measures what it claims. Three of the four episodes encode the expectation §6 V1 calls the negative sample: `shouldIntervene: false`. Replacing this with a real low-risk field scenario (owner material MR-05) is what 6V-1 proper requires; until that arrives, no metric computed from this file is evidence about anything except the harness.",
+  "episodes": [
+    {
+      "episodeId": "abs-01-rename-a",
+      "task": "Rename these three files to kebab-case: 'Launch Notes.md', 'Scene List.md', 'Asset Index.md'.",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": false,
+        "shouldIntervene": false,
+        "shouldProduceCandidate": false,
+        "rationale": "A routine rename with an unambiguous rule. Nothing was surprising, nothing contradicted an expectation, and there is no lesson here worth institutionalising. The correct runtime behaviour is to record the episode and say nothing: a residual on this episode is a false positive, and a candidate asset derived from it is noise that will later be retrieved as if it were knowledge."
+      }
+    },
+    {
+      "episodeId": "abs-01-rename-b",
+      "task": "Same rule, two more files: 'Draft Two.md', 'Old Plan.md'.",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": false,
+        "shouldIntervene": false,
+        "shouldProduceCandidate": false,
+        "rationale": "Identical in kind to the previous episode. Included specifically because repetition is what a reflection-happy runtime mistakes for a pattern: two successful renames of the same shape is the strongest possible temptation to promote a 'kebab-case renames' asset, and the oracle says the temptation is wrong. If an asset appears here, the promotion gate is measuring repetition rather than value."
+      }
+    },
+    {
+      "episodeId": "abs-01-list",
+      "task": "List what is in the directory now, sorted.",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": false,
+        "shouldIntervene": false,
+        "shouldProduceCandidate": false,
+        "rationale": "A read-only request that cannot fail in an interesting way. The correct behaviour is to answer and record nothing further. This is the episode that catches a context planner pulling history into a task that needs none — `unnecessaryContextRetrievalRate` is scored on exactly this shape."
+      }
+    },
+    {
+      "episodeId": "abs-01-conflict",
+      "task": "Rename 'Report Final.md' to 'report.md'. A file called 'report.md' already exists.",
+      "oracle": {
+        "taskOutcome": "fail",
+        "residualIsReal": true,
+        "shouldIntervene": true,
+        "shouldProduceCandidate": false,
+        "rationale": "The one episode where something genuinely went wrong, and so the denominator for `missedResidualRate`. The task as posed cannot be completed without destroying a file, so it fails; the runtime should notice. `shouldProduceCandidate` is still false, deliberately: a single collision is a fact about one directory, not yet a rule, and §6 V2 says a successful task does not oblige an asset. An arm that promotes here is being scored as a false promotion."
+      }
+    }
+  ]
+}
