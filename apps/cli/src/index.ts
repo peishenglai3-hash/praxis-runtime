@@ -1234,7 +1234,31 @@ function commandPrivacy(
         ],
       };
     }
-    const sessionId = requireFlag(parsed, "session");
+    const positionalSession = parsed.positionals[0];
+    if (parsed.positionals.length > 1) {
+      throw new CliError(
+        "USAGE_ERROR",
+        "privacy purge accepts at most one positional scope",
+      );
+    }
+    const flaggedSession = optionalFlag(parsed, "session");
+    if (
+      positionalSession !== undefined &&
+      flaggedSession !== undefined &&
+      positionalSession !== flaggedSession
+    ) {
+      throw new CliError(
+        "USAGE_ERROR",
+        "privacy purge positional scope conflicts with --session",
+      );
+    }
+    const sessionId = flaggedSession ?? positionalSession;
+    if (sessionId === undefined || sessionId.length === 0) {
+      throw new CliError(
+        "USAGE_ERROR",
+        "privacy purge requires <scope> or --session <id>",
+      );
+    }
     const dryRun = booleanFlag(parsed, "dry-run");
     const confirm = booleanFlag(parsed, "confirm");
     if (dryRun === confirm) {
@@ -1641,8 +1665,9 @@ export function usageText(): string {
     "  praxis legacy runs | praxis legacy anomalies <runId>",
     "  praxis legacy patterns [--limit <n>] | praxis legacy pattern <eventId>",
     "  praxis legacy convert <patternEventId> --asset-id <id> --reason <text>",
-    "  praxis privacy purge --session <id> --dry-run",
-    "  praxis privacy purge --session <id> --confirm --plan-hash <sha256>",
+    "  praxis privacy purge <session-id> --dry-run",
+    "  praxis privacy purge <session-id> --confirm --plan-hash <sha256>",
+    "  praxis privacy purge --session <id> --dry-run (compatibility alias)",
     "  praxis privacy purge --finalize-pending",
     "  praxis export [--type <t>] [--limit <n>] [--out <path>]",
     "  praxis backup create <path> | list | restore <id|path> [--destination <path>]",

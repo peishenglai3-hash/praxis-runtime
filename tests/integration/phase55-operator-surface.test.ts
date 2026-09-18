@@ -505,6 +505,37 @@ describe("P0 operator surface — context, reflection, purge", () => {
     );
     expect(confirmed.code).toBe(0);
   });
+
+  it("accepts the Bible's positional privacy scope and refuses a conflicting alias", () => {
+    const cwd = workdir();
+    invoke(["init"], cwd);
+    seedEvent(cwd, "purge-me-positional");
+
+    const preview = invoke(
+      ["privacy", "purge", "s1", "--dry-run", "--json"],
+      cwd,
+    );
+    expect(preview.code).toBe(0);
+    const plan = resultOf(preview) as unknown as {
+      plan: { planHash: string };
+    };
+    expect(plan.plan.planHash).toMatch(/^[a-f0-9]{64}$/);
+
+    const conflict = invoke(
+      [
+        "privacy",
+        "purge",
+        "s1",
+        "--session",
+        "other-session",
+        "--dry-run",
+        "--json",
+      ],
+      cwd,
+    );
+    expect(conflict.code).toBe(2);
+    expect(errorOf(conflict).code).toBe("USAGE_ERROR");
+  });
 });
 
 describe("P0 operator surface — asset lifecycle through the command line", () => {
