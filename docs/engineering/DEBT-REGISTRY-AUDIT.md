@@ -20,14 +20,14 @@ The check is also executed by `tests/regression/registry-audit.test.mjs`. It fai
 
 The current registry contains 67 unique IDs. The reconciled state is:
 
-| Status              |  Count | Notes                                                                                             |
-| ------------------- | -----: | ------------------------------------------------------------------------------------------------- |
-| `CLOSED`            |     63 | Includes BP-064, BP-065, and BP-066 after this round's fixes                                      |
-| `ACTIVE`            |      1 | BP-049 remains open because the historical decision is not present in the authoritative materials |
-| `EVIDENCE-REQUIRED` |      1 | BP-037                                                                                            |
-| `DEFERRED`          |      1 | BP-042                                                                                            |
-| `WONTFIX`           |      1 | BP-056                                                                                            |
-| **Total**           | **67** | Machine-checked                                                                                   |
+| Status              |  Count | Notes                                                                |
+| ------------------- | -----: | -------------------------------------------------------------------- |
+| `CLOSED`            |     64 | Includes BP-049, BP-064, BP-065, and BP-066 after this round's fixes |
+| `ACTIVE`            |      0 | —                                                                    |
+| `EVIDENCE-REQUIRED` |      1 | BP-037                                                               |
+| `DEFERRED`          |      1 | BP-042                                                               |
+| `WONTFIX`           |      1 | BP-056                                                               |
+| **Total**           | **67** | Machine-checked                                                      |
 
 BP-064 is closed with a repository-root resolution and a foreign-cwd regression. BP-065 is closed with a shared semantic range parser, a negative Node 24 test, and a positive Node 22 parser test; the positive test is not a substitute for running the full project on Node 22.13.0. BP-066 is closed with an unknown-verifier regression proving that `null` remains unadjudicated rather than becoming a failure/residual.
 
@@ -36,8 +36,8 @@ BP-064 is closed with a repository-root resolution and a foreign-cwd regression.
 The 24 RFC labels and 24 reconciliation rows are unique and aligned. The key re-entry outcomes are:
 
 - `LEGACY_PATTERN_TO_CANDIDATE_ASSET`: **RESOLVED**, author decision Option B is implemented by the explicit human-run conversion path.
-- `CLI_SURFACE_GAPS_VS_13`: **NEEDS-EVIDENCE**, because rebuild/report paths exist but the privacy-purge positional-scope question remains a real compatibility decision.
+- `CLI_SURFACE_GAPS_VS_13`: **RESOLVED** in the current tree: rebuild/report paths exist and privacy purge accepts the Bible's positional scope while retaining `--session` as a compatibility alias; conflicting forms are rejected by an integration regression.
 - `GOLDEN_FIXTURE_01_ABSENT`: **BLOCKING**, still waiting for bounded author-provided source material.
-- `BP-049` is not silently closed by this machine check; its decision remains an author-control item.
+- `BP-049` is **CLOSED** by the author's 2026-09-18 canonical-order decision, recorded in `docs/断点记录.md`, `docs/ADR/ADR-0007-runtime-ci-reproducibility.md`, and `docs/engineering/BP-049-CANONICAL-VERIFY.md`; the machine check verifies the reconciled table and counts.
 
 The checker validates registry structure. It does not decide author-owned semantics and cannot turn a stale or missing source decision into a PASS.

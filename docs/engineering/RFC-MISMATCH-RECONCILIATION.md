@@ -20,15 +20,19 @@ plane from remaining stale after the re-entry changes:
 - `LEGACY_PATTERN_TO_CANDIDATE_ASSET` is **RESOLVED**, using the author's
   frozen Option B: importer authority stays confined and the explicit human-run
   `legacy convert` path proposes a candidate. It is not an unresolved choice.
-- `CLI_SURFACE_GAPS_VS_13` remains **NEEDS-EVIDENCE**. Rebuild projection
-  routing and legacy report output paths now exist and have tests. The remaining
-  compatibility question is the privacy-purge positional scope, so this row is
-  not silently closed.
+- `CLI_SURFACE_GAPS_VS_13` is **RESOLVED in the current tree**. Rebuild
+  projection routing and legacy report output paths exist and have tests;
+  privacy purge accepts the Bible's positional scope and keeps `--session` as a
+  compatibility alias. Conflicting forms are rejected by an integration
+  regression. The historical mismatch wording remains below as evidence of
+  what was found.
 - `GOLDEN_FIXTURE_01_ABSENT` remains **BLOCKING / WAITING_FOR_AUTHOR_SOURCE**;
   the bounded source map is `docs/eval/GF01-SOURCE-MAP.md`.
-- BP-049 remains **ACTIVE** because no authoritative author decision was found
-  in this round. The machine audit validates this state rather than inferring a
-  decision.
+- BP-049 is **CLOSED** by the author's 2026-09-18 canonical-order decision.
+  The decision, implementation, and regression evidence are recorded in
+  `docs/ADR/ADR-0007-runtime-ci-reproducibility.md`,
+  `docs/engineering/BP-049-CANONICAL-VERIFY.md`, and the BP-049 closure
+  addendum in `docs/断点记录.md`.
 
 The repository's original mismatch prose is preserved below as historical
 evidence; current control-plane interpretation is stated here and in the
@@ -36,7 +40,7 @@ corresponding RFC addendum.
 
 ## What this document is not
 
-It is not a re-audit of the runtime against the Bible. It is not an amendment to `RFC-0001.md`: no registry entry was closed, re-spelled, or edited. It is not a gate, and it closes nothing. Where the documents say an item is open, it is reported open even where the entry could be read as settled — and where a status could not be settled from the documents, the row is `NEEDS-EVIDENCE` with the evidence that would settle it named, not upgraded so the table reads better.
+It is not a re-audit of the runtime against the Bible. The original registry prose is preserved; this current-state addendum and summary reconcile statuses after the iteration's repository changes. It is not a gate by itself. Where a status could not be settled from the documents, the row remains `NEEDS-EVIDENCE` with the evidence that would settle it named, not upgraded so the table reads better.
 
 ## Summary
 
@@ -53,7 +57,7 @@ It is not a re-audit of the runtime against the Bible. It is not an amendment to
 | `RFC MISMATCH: LEGACY_PATTERN_TO_CANDIDATE_ASSET`        | RESOLVED           | author      | None                                          |
 | `RFC MISMATCH: GOLDEN_FIXTURE_01_ABSENT`                 | BLOCKING           | author      | Blocks Alpha                                  |
 | `RFC MISMATCH: DOCTOR_COVERAGE_VS_13_1`                  | DEFERRED           | author      | Blocks Pre-Release Compatibility Audit (read) |
-| `RFC MISMATCH: CLI_SURFACE_GAPS_VS_13`                   | NEEDS-EVIDENCE     | author      | Future Improvement (read)                     |
+| `RFC MISMATCH: CLI_SURFACE_GAPS_VS_13`                   | RESOLVED           | author      | None                                          |
 | `RFC MISMATCH: TEST_LAYER_STRUCTURE`                     | RESOLVED           | engineering | None                                          |
 | `RFC MISMATCH: GOLDEN_FIXTURE_01_PHASE6_START`           | RESOLVED           | engineering | None                                          |
 | `RFC MISMATCH: EVENT_TAXONOMY_VS_5_4`                    | NEEDS-EVIDENCE     | author      | Blocks Pre-Release Compatibility Audit (read) |
@@ -67,7 +71,7 @@ It is not a re-audit of the runtime against the Bible. It is not an amendment to
 | `RFC MISMATCH: FIELD_CONTEXT_SOCIAL_PLURALITY`           | RESOLVED           | author      | Future Improvement                            |
 | `RFC MISMATCH: SCAFFOLD_PORTABILITY_METHOD_BROADENED`    | RESOLVED           | author      | None                                          |
 
-Counts: 11 RESOLVED, 5 ACCEPTED-DEVIATION, 4 NEEDS-EVIDENCE, 3 DEFERRED, 1 BLOCKING; by release impact, 14 `None`, 3 `Future Improvement`, 7 carrying a gate (1 `Blocks Alpha`, 3 `Blocks Pre-Release Compatibility Audit`, 2 `Blocks Phase 6 Final`, 1 `Blocks Release Engineering`). One entry (`GOLDEN_FIXTURE_01_ABSENT`) is BLOCKING and carries a gate; six of the non-BLOCKING rows do — three because a document states it (`SCAFFOLD_PORTABILITY_PENDING` and `GOLDEN_FIXTURE_01_UNPLACED_IN_6V_ORDER` at Phase 6 Final, `ADAPTER_EXECUTION_CONTEXT_VS_10_2` at Release Engineering) and three as this document's reading.
+Counts: 12 RESOLVED, 5 ACCEPTED-DEVIATION, 3 NEEDS-EVIDENCE, 3 DEFERRED, 1 BLOCKING; by release impact, 15 `None`, 2 `Future Improvement`, 7 carrying a gate (1 `Blocks Alpha`, 3 `Blocks Pre-Release Compatibility Audit`, 2 `Blocks Phase 6 Final`, 1 `Blocks Release Engineering`). One entry (`GOLDEN_FIXTURE_01_ABSENT`) is BLOCKING and carries a gate; six of the non-BLOCKING rows do — three because a document states it (`SCAFFOLD_PORTABILITY_PENDING` and `GOLDEN_FIXTURE_01_UNPLACED_IN_6V_ORDER` at Phase 6 Final, `ADAPTER_EXECUTION_CONTEXT_VS_10_2` at Release Engineering) and three as this document's reading.
 
 ---
 
@@ -191,13 +195,24 @@ The RFC also records that the gate's issue-081 row claimed `PASS` for a coverage
 
 ### `RFC MISMATCH: CLI_SURFACE_GAPS_VS_13`
 
-- **Status:** NEEDS-EVIDENCE
+- **Status:** RESOLVED in the current tree
 - **Owner:** author
-- **Decision:** Not decided, and the entry's text no longer describes the implementation: two of the three gaps it names are closed in the tree, and the third is not.
-- **Evidence:** `docs/RFC/RFC-0001.md:240-246`; `apps/cli/src/args.ts:58` (`rebuild: ["projection"]`) and `apps/cli/src/index.ts:549-558`, `:1633` (`praxis rebuild [--projection <name>] | praxis projection rebuild [--projection <name>]`); `apps/cli/src/args.ts:104` (`legacy import` accepts `report`) and `apps/cli/src/index.ts:944-963`, `:1127-1129`, `:1639-1640` (`writeLegacyReport`, `--report <path>`); `apps/cli/src/args.ts:110-117` (`privacy purge` flags: `session`, `dry-run`, `confirm`, `plan-hash`, `preserve-managed-backups`, `finalize-pending`, no positional scope).
-- **Release impact:** Future Improvement (read). No gate is named; the residual divergence is the `purge` argument shape.
+- **Decision:** The current v0.x surface accepts the Bible's positional
+  `privacy purge <scope>` form and retains `--session <id>` as a compatibility
+  alias. Rebuild projection routing and legacy report paths are present. A
+  positional/flag conflict is a usage error; no form is silently preferred.
+- **Evidence:** `apps/cli/src/args.ts:58` and `apps/cli/src/index.ts:549-558`,
+  `:1633` (projection rebuild); `apps/cli/src/args.ts:104` and
+  `apps/cli/src/index.ts:944-963`, `:1127-1129`, `:1639-1640` (legacy report);
+  `apps/cli/src/index.ts:1234-1265` and
+  `tests/integration/phase55-operator-surface.test.ts` (positional scope and
+  conflict regression); `docs/engineering/PHASE6-REMAINING-DEBT.md`.
+- **Release impact:** None for the current v0.x session scope. New privacy
+  scope kinds require a new decision.
 
-The RFC entry says the implementation "accepts no `--projection` on `rebuild` (there is no way to rebuild a single projection)", "takes `purge --session <id>` rather than a positional scope", and "writes the migration report to stdout and the run tables rather than to a report path". The first and third are no longer true at this tree; the second is. `docs/断点记录.md:1202` (BP-051) records the rebuild routing fix and its test coverage. What would settle the status: an amended entry stating what actually remains, plus an owner decision on whether taking a session id instead of Bible §13's positional `<scope>` is an accepted deviation.
+The original RFC entry's three-gap description remains historical evidence of
+the defect. The current implementation closes all three named gaps without
+changing the privacy command's destructive confirmation and plan-hash rules.
 
 ### `RFC MISMATCH: TEST_LAYER_STRUCTURE`
 
@@ -383,18 +398,17 @@ One label: `OPEN GAP: CONFIGURATION_SURFACE` (`:187-193`) — and it is the only
 
 ### Registry-adjacent open items that are not mismatches
 
-Not one of the nine areas, but the same gap in the record. `docs/RFC/RFC-0001.md:120-130` carries three Phase 5 escalations: `BP-047` (fixed with a regression test), `BP-048` (avoided, corrections in `ADR-0012` §5.1) and `BP-049`, which the RFC itself marks "Open: changing it changes what `pnpm verify` is." `BP-049` is the only open item in `RFC-0001.md` that is not in the mismatch registry and not spelled as one; it is also the only item in the file that is a build-and-packaging concern, which is the one shape the registry does not contain at all. It is not lost: `docs/release/PRE-RELEASE-GAP-MAP.md:62` carries it as the first `Blocks Release Engineering` finding, in the same status (`未修复，待决策`), alongside the dependency advisories (`:64`) and the absent packaging surface (`:65`). Where the registry has no Release-Engineering shape, the release gap map does.
+Not one of the nine areas, but the same gap in the record. `docs/RFC/RFC-0001.md:120-130` carries three Phase 5 escalations: `BP-047` (fixed with a regression test), `BP-048` (avoided, corrections in `ADR-0012` §5.1) and the historical `BP-049` open item. BP-049 is now closed by the author's canonical-order decision; the current evidence is `docs/engineering/BP-049-CANONICAL-VERIFY.md` and `docs/ADR/ADR-0007-runtime-ci-reproducibility.md`. The old open wording remains in the RFC as historical evidence, not as a current release blocker.
 
 ---
 
 ## Mismatches whose status the documents do not settle
 
-Four rows are NEEDS-EVIDENCE. What would settle each:
+Three rows are NEEDS-EVIDENCE. What would settle each:
 
 1. **`PHASE_LABEL_DRIFT_IN_RECOVERY_PROMPT`** (`docs/RFC/RFC-0001.md:144-155`). The handling is recorded and the prompt's own text is not. Evidence that would settle it: a one-line owner decision either amending the recovery prompt's §5.1 headings, or declaring the prompt frozen history so the drift is permanently recorded. Nothing in the tree can settle it.
 2. **`OPEN GAP: CONFIGURATION_SURFACE`** (`:187-193`). Evidence that would settle it: an owner decision to thread the three knobs, accepting the change to the verified Phase 3 and Phase 4 constructor boundaries (`docs/PHASE-5-GATE.md:268-270`), or to declare them permanently package defaults. A secondary question is whether the label is re-spelled `RFC MISMATCH:`, since invariant 10 (`:22`) covers it and the registry does not.
-3. **`CLI_SURFACE_GAPS_VS_13`** (`:240-246`). Two of the three gaps it names are closed in the tree (evidence above), so the entry no longer describes the implementation. Evidence that would settle it: an amended entry stating what remains — `privacy purge` taking `--session <id>` (`apps/cli/src/args.ts:110-117`) — plus an owner decision on whether that shape is an accepted deviation from Bible §13's positional `<scope>`.
-4. **`EVENT_TAXONOMY_VS_5_4`** (`:275-288`). The divergence is confirmed in the tree; registration is stated to be the required handling and renaming a separate decision (`docs/PHASE-5.5-RECOVERY-GATE.md:296-299`). Evidence that would settle it: an owner decision accepting the structural representation as a deviation, or a rename plan.
+3. **`EVENT_TAXONOMY_VS_5_4`** (`:275-288`). The divergence is confirmed in the tree; registration is stated to be the required handling and renaming a separate decision (`docs/PHASE-5.5-RECOVERY-GATE.md:296-299`). Evidence that would settle it: an owner decision accepting the structural representation as a deviation, or a rename plan.
 
 Two more rows are settled in substance but disputed between documents, which is a different failure from an unclear status and is listed here so it is not read as either:
 
@@ -410,12 +424,12 @@ No row was moved to RESOLVED because another row made the table look better. `RF
 ## What this document did not do
 
 - **It did not re-audit the runtime.** Six code checks were made, each cited: the CLI flag table and the rebuild/report/purge wiring (`apps/cli/src/args.ts`, `apps/cli/src/index.ts`), the doctor check list (`packages/runtime/src/index.ts:3618-3752`), the absence of nine event-type names, the absence of an `agent_cursors` table and the presence of the `agents`-projection reducer, the presence of the four test layers (`tests/`, `package.json`, `scripts/gate.mjs`), and the configuration schema's knobs (`schemas/praxis-config.v1.schema.json`). Every other statement about the implementation is the documents' statement, not a verified one.
-- **It did not modify anything.** `docs/RFC/RFC-0001.md`, `docs/断点记录.md` and every other file are as they were; this is the only file written. No registry entry was amended, re-spelled or closed.
+- **It did not rewrite historical mismatch prose.** The current-state addendum and summary were updated after the iteration's code and decision evidence landed; the original RFC entry text remains intact as historical evidence.
 - **It ran no git command**, so no state was changed and no history was read from the repository.
 - **It did not query GitHub, the CI service, or any artifact.** The visibility facts, the repository security-control state and the CI results are cited from `docs/断点记录.md:1304-1351`, `docs/PHASE-6B-GATE.md:239-272` and `docs/PHASE-6-FINAL-GATE.md:28-60` as written.
 - **It did not run `pnpm verify` or any test.** The test counts quoted (`unit 58 / integration 128 / replay 15 / regression 7`) come from `docs/PHASE-6-GATE.md:64-67`, not from a run performed here.
 - **It did not read the Bible, the Correction Pack, the INC-001 recovery prompt, or the owner's briefs.** Claims about what those documents say are taken from `RFC-0001.md` and the gate documents, which quote them.
-- **It did not close the four NEEDS-EVIDENCE rows**, and it did not re-derive the status of any row the inventory marked `OPEN` beyond what the RFC and the tree support; where this document disagrees with `_INVENTORY-RAW.md`'s mechanical status, the disagreement is argued in the entry.
-- **It did not define the release-impact vocabulary, and it did not invent one.** The categories are `docs/release/PRE-RELEASE-GAP-MAP.md:36-95`'s, used under the owner's Phase 6V brief §20, and that document's own classification of two of these labels was followed rather than re-derived (`:95` for `FIELD_CONTEXT_SOCIAL_PLURALITY`, `:116` for `ADAPTER_EXECUTION_CONTEXT_VS_10_2`). The remaining assignments are anchored in document statements cited per entry, or marked `(read)`. What this document did add: `Blocks Release Engineering` now has one registry row, and the reason the rest of that category is empty is that its items are breakpoints and gate gaps, not registry labels — `BP-049` (`docs/release/PRE-RELEASE-GAP-MAP.md:62`; `docs/RFC/RFC-0001.md:128-130`), the four dependabot advisories (`:64`; `docs/PHASE-6-FINAL-GATE.md:131`), and the absent packaging surface (`:65`).
+- **It did not close the three remaining NEEDS-EVIDENCE rows**, and it did not re-derive the status of any other row beyond what the RFC, current tree and cited decision evidence support; where this document disagrees with `_INVENTORY-RAW.md`'s mechanical status, the disagreement is argued in the entry.
+- **It did not define the release-impact vocabulary, and it did not invent one.** The categories are `docs/release/PRE-RELEASE-GAP-MAP.md:36-95`'s, used under the owner's Phase 6V brief §20, and that document's own classification of two of these labels was followed rather than re-derived (`:95` for `FIELD_CONTEXT_SOCIAL_PLURALITY`, `:116` for `ADAPTER_EXECUTION_CONTEXT_VS_10_2`). The remaining assignments are anchored in document statements cited per entry, or marked `(read)`. BP-049 is no longer counted as a current Release Engineering mismatch; the remaining Release Engineering work is tracked by the release gap map and the freeze-gap report.
 - **It did not read the sibling documents in full.** `docs/release/PRE-RELEASE-GAP-MAP.md` was read completely, because it defines the release-impact categories. `docs/engineering/ARCHITECTURE-SELF-REVIEW.md`, `docs/engineering/FAILURE-FAMILIES.md` and `docs/eval/` were searched for these labels only; where a claim of theirs is cited here, the cited line was read. Those documents were being written while this one was, and no attempt was made to reconcile them beyond the labels they share.
 - **It does not know whether the two ends of the registry will stay in step.** Six of the nine cross-checked areas are covered by labels and three by breakpoints, gate-gap tables or ADRs instead. Nothing in this document proposes changing that; it records where each item lives so the next reader does not have to look twice.

@@ -37,13 +37,13 @@ towards it and must not be quoted as such.
 
 ### Blocks Phase 6 Final
 
-| Finding                                                                              | Source                                                            |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| 6V-1, 6V-2, 6V-2X have not run                                                       | [`SCENARIO-COVERAGE-MATRIX.md`](SCENARIO-COVERAGE-MATRIX.md) §1   |
-| No ablation has been run; arms E and F do not differ from D                          | [`ABLATION-PLAN-AND-RESULTS.md`](ABLATION-PLAN-AND-RESULTS.md) §4 |
-| 6V-0 is development-runtime evidence (`node 24.15.0`, `runtimeDirty: true`)          | [`6V-0-RESULTS.md`](6V-0-RESULTS.md)                              |
-| Golden Fixture 01 — `WAITING_FOR_AUTHOR_SOURCE`                                      | [`CORPUS-I-REGISTER.md`](CORPUS-I-REGISTER.md) §8                 |
-| Asset promotion is not implemented in the harness, so `assetFeedback` is unexercised | [`ABLATION-PLAN-AND-RESULTS.md`](ABLATION-PLAN-AND-RESULTS.md) §4 |
+| Finding                                                                                                                                        | Source                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 6V-1, 6V-2, 6V-2X have not run                                                                                                                 | [`SCENARIO-COVERAGE-MATRIX.md`](SCENARIO-COVERAGE-MATRIX.md) §1    |
+| No ablation has been run; arms E and F do not differ from D                                                                                    | [`ABLATION-PLAN-AND-RESULTS.md`](ABLATION-PLAN-AND-RESULTS.md) §4  |
+| 6V-0 is development-runtime evidence (`node 24.15.0`, `runtimeDirty: true`)                                                                    | [`6V-0-RESULTS.md`](6V-0-RESULTS.md)                               |
+| Golden Fixture 01 — `WAITING_FOR_AUTHOR_SOURCE`                                                                                                | [`CORPUS-I-REGISTER.md`](CORPUS-I-REGISTER.md) §8                  |
+| Real Asset benefit is not yet measured; synthetic candidate→validation→human-confirmation→active lifecycle evidence is not real pilot evidence | [`../eval/REAL-ASSET-EVIDENCE.md`](../eval/REAL-ASSET-EVIDENCE.md) |
 
 ### Blocks Pre-Release Compatibility Audit
 
@@ -59,11 +59,15 @@ towards it and must not be quoted as such.
 
 | Finding                                                                                                                                                    | Source                                                                                             |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| **BP-049 is `未修复，待决策`** — concurrent builds writing one `dist/`                                                                                     | [`../engineering/DEBT-RECONCILIATION.md`](../engineering/DEBT-RECONCILIATION.md)                   |
 | `RB-01` has the weakest mitigation of any family: no test, no gate stage, no artifact that fails when the requirements baseline is wrong                   | [`../engineering/FAILURE-FAMILIES.md`](../engineering/FAILURE-FAMILIES.md)                         |
 | `npm audit`: 4 advisories (3 moderate, 1 low)                                                                                                              | gate report, Medium                                                                                |
 | No install/packaging surface exists — `private: true`, workspace-internal only                                                                             | `package.json`                                                                                     |
 | `run-manifest.v1.schema.json` is shared into the runtime's directory by path, not by dependency — the one place ADR-0015's direction could quietly reverse | [`../ADR/ADR-0015-evaluation-harness-boundary.md`](../ADR/ADR-0015-evaluation-harness-boundary.md) |
+
+BP-049 is no longer a current Release Engineering finding: the author's
+canonical eleven-stage order is implemented and regression-tested. Its
+historical open state remains in the older RFC and breakpoint prose; the
+current disposition is [`BP-049-CANONICAL-VERIFY.md`](../engineering/BP-049-CANONICAL-VERIFY.md).
 
 ### Blocks Alpha
 

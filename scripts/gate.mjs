@@ -2,7 +2,7 @@
 /**
  * The canonical gate runner.
  *
- * `pnpm verify` is a chain of twelve `&&`-joined stages. It reports one exit
+ * `pnpm verify` is a chain of eleven `&&`-joined stages. It reports one exit
  * code for all of them, it stops at the first failure, and it says nothing
  * about which stage failed. That shape caused BP-060: the chain was read
  * through a pipe, the pipe's exit code was read instead of the chain's, and a
@@ -24,7 +24,7 @@
  *      non-zero has failed. A `HARNESS` stage promotes the whole *run* to
  *      `HARNESS` and stops, because "the gate could not run this" is a
  *      statement about the gate rather than about the code — otherwise a
- *      missing pnpm reads as twelve failing stages.
+ *      missing pnpm reads as eleven failing stages.
  *   3. **The semantic result is a file, not a status line.** The JSON written
  *      under `test-results/` is what CI and a human both consume. A caller who
  *      pipes this runner's output into `tail` can still mask the *exit code*,
@@ -55,11 +55,11 @@ const scriptPath = fileURLToPath(import.meta.url);
 const defaultRoot = resolve(dirname(scriptPath), "..");
 
 /**
- * The twelve stages, in the order INC-001 section 10 froze, with the
- * evaluation harness self-tests appended in Phase 6V. The appended stage
- * runs no model and reads no credential: it validates the measurement
- * apparatus (`evals/test`), which is what the owner's brief section 3 asks
- * for under "Test the test". A stage that needed a provider key would make
+ * The eleven stages, in the canonical order frozen by BP-049. The regression
+ * stage also runs the evaluation harness self-tests (`evals/test`); those tests
+ * use no model and read no credential. Keeping them inside the regression
+ * stage preserves the exact owner-approved order without dropping the
+ * measurement-apparatus checks. A stage that needed a provider key would make
  * this gate non-deterministic, and the boundary suite asserts the chain
  * contains no such script. The order is
  * load-bearing: the test layers must run before `build`, and the artifact
@@ -73,10 +73,9 @@ export const stages = [
   { id: "test:unit", label: "unit layer" },
   { id: "test:integration", label: "integration layer" },
   { id: "test:replay", label: "replay layer" },
-  { id: "test:regression", label: "regression layer" },
   {
-    id: "test:evals",
-    label: "evaluation harness self-tests (no model, no network)",
+    id: "test:regression",
+    label: "regression and evaluation-harness self-tests",
   },
   { id: "build", label: "workspace build" },
   { id: "smoke:cli", label: "command-line smoke, against the build" },

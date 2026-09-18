@@ -61,7 +61,7 @@ The family counts above are the reconciled registry view. Two pre-reentry
 descriptions elsewhere in the Phase 6V documents are now historical: the
 evaluator can call the asset lifecycle and the current ContextPlanner claim is
 explicitly limited to ranking supplied signals. The machine-checkable registry
-state, including BP-064/BP-065/BP-066 closure and BP-049 remaining active, is in
+state, including BP-049/BP-064/BP-065/BP-066 closure, is in
 [`DEBT-REGISTRY-AUDIT.md`](DEBT-REGISTRY-AUDIT.md).
 
 ---
@@ -278,14 +278,17 @@ BP-049 (concurrent builds writing the same `dist`).
 ahead of the first waiting PRAGMA; Vitest source aliases; the writer-ownership
 lock with the Phase 3.5 concurrent-writer scenario.
 
-**Remaining risk.** BP-049 is `未修复，待决策` — the decision is open. The
-concurrency work so far is C0–C2; C3 and C4 are out of this round by §19.
+**Remaining risk.** BP-049's source/dist ordering defect is closed for the
+canonical verification path by the author's eleven-stage decision and its
+regression. The concurrency work so far is C0–C2; C3 and C4 remain out of this
+round by §19 and are not implied to be solved by the verify-order change.
 
 **Validation evidence.** BP-013's 6 × 4-process repetition; `smoke:cli`'s
 phase1-concurrency stage.
 
-**Release implication.** `Blocks Release Engineering` — a user running two
-processes is a normal case, not an exotic one.
+**Release implication.** The former BP-049 release block is closed. C3/C4
+multi-process behaviour remains out of scope and must not be reported as
+verified by this closure.
 
 ---
 

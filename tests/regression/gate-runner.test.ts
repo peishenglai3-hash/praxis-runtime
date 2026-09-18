@@ -284,6 +284,28 @@ describe("the gate runner refuses a gate smaller than it claims", () => {
   });
 });
 
+describe("BP-049 canonical verification order", () => {
+  it("keeps the owner-approved eleven-stage order and embeds eval self-tests in regression", () => {
+    expect(realStageIds().ids).toEqual([
+      "verify:runtime",
+      "verify:deps",
+      "verify:lint",
+      "verify:typecheck",
+      "test:unit",
+      "test:integration",
+      "test:replay",
+      "test:regression",
+      "build",
+      "smoke:cli",
+      "smoke:daemon",
+    ]);
+    expect(realStageIds().verify).toContain(
+      "pnpm test:regression && pnpm build",
+    );
+    expect(realStageIds().verify).not.toContain("pnpm test:evals");
+  });
+});
+
 describe("a real failing format check", () => {
   it("fails when real prettier rejects a real file", () => {
     // `check.mjs` carries the absolute path to prettier as a JS literal, so a
