@@ -89,7 +89,7 @@ function isSha256(value: string): boolean {
  * available in the canonical Node 22.13.0 runtime; this bounded retry keeps
  * the implementation on the Bible's runtime/API surface.
  */
-const SQLITE_WAL_RETRY_DELAYS_MS = [25, 50, 100, 200, 400, 800, 1_200];
+const SQLITE_WAL_RETRY_DELAYS_MS = [10, 25, 50, 100, 200, 400, 800];
 
 function isSqliteBusyError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
