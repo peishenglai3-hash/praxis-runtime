@@ -51,6 +51,8 @@ export interface EpisodeRecord {
   readonly assetPromoted: boolean;
   /** A previously-promoted rule was contested during this episode. */
   readonly challengeRaised: boolean;
+  /** The earlier episode whose candidate was activated here, if any. */
+  readonly assetPromotionSourceEpisodeId?: string;
   readonly contextItemsExposed: number;
   readonly humanIntervened: boolean;
   readonly latencyMs: number;
@@ -159,8 +161,16 @@ export function computeMetrics(
 
   const candidates = records.filter((r) => r.candidateCreated);
   const promotions = records.filter((r) => r.assetPromoted);
+  const candidateLessons = new Set(
+    records
+      .filter((r) => r.oracle.shouldProduceCandidate)
+      .map((r) => r.episodeId),
+  );
   const wantedPromotions = promotions.filter(
-    (r) => r.oracle.shouldProduceCandidate,
+    (r) =>
+      r.oracle.shouldProduceCandidate ||
+      (r.assetPromotionSourceEpisodeId !== undefined &&
+        candidateLessons.has(r.assetPromotionSourceEpisodeId)),
   ).length;
 
   const abstentionOpportunities = records.filter(

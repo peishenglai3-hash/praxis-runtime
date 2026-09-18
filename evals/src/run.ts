@@ -15,7 +15,7 @@ import {
   type MetricSet,
 } from "./metrics.js";
 import { MECHANISMS_NOT_YET_WIRED } from "./arms.js";
-import { createArmRuntime, type Subject } from "./runner.js";
+import { createArmRuntime, type HumanControl, type Subject } from "./runner.js";
 import type {
   ArmId,
   Episode,
@@ -48,6 +48,8 @@ export interface RunOptions {
     episode: Episode,
     output: string,
   ) => Promise<boolean | null>;
+  /** Explicit human decision hook; absent means no promotion or challenge. */
+  readonly humanControl?: HumanControl;
   /** Injected so a test can pin the git facts. Defaults to reading the repo. */
   readonly gitFacts?: GitFacts;
 }
@@ -121,7 +123,7 @@ export async function runScenario(options: RunOptions): Promise<RunResult> {
   const facts = options.gitFacts ?? gitFacts();
   const verify = options.verifier ?? ((episode) => commandVerifier(episode));
 
-  const runtime = createArmRuntime(arm, scenario);
+  const runtime = createArmRuntime(arm, scenario, options.humanControl);
   const identity = subject.identity();
   const records: EpisodeRecord[] = [];
   const armErrors: string[] = [];
@@ -186,7 +188,13 @@ export async function runScenario(options: RunOptions): Promise<RunResult> {
         // the first version of this line read it from there and every arm
         // reported exposing nothing.
         contextItemsExposed: context.contextItemsExposed,
-        humanIntervened: false,
+        humanIntervened: observation.humanIntervened,
+        ...(observation.assetPromotionSourceEpisodeId === undefined
+          ? {}
+          : {
+              assetPromotionSourceEpisodeId:
+                observation.assetPromotionSourceEpisodeId,
+            }),
         latencyMs: Date.now() - episodeStarted,
         inputTokens,
         outputTokens,

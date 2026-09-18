@@ -234,14 +234,12 @@ export const MINIMUM_COMPARISON_ARMS: readonly ArmId[] = Object.freeze([
  * what was measured. It is not, yet.
  *
  * This list is surfaced in every manifest the harness writes, so no result can
- * be read without it. Removing an entry requires the code that exercises it,
- * not a decision that the entry is inconvenient.
+ * be read without it. The asset lifecycle is no longer listed here: Round 1
+ * wiring exercises it in `evals/test/assets.test.ts`. Removing an entry
+ * requires the code that exercises it, not a decision that the entry is
+ * inconvenient.
  */
 export const MECHANISMS_NOT_YET_WIRED: readonly string[] = Object.freeze([
-  "promoteAsset — candidates are proposed but never promoted, so `promotionPrecision` is unscored and `assetFeedback` is not exercised; an asset promoted in episode N therefore cannot affect episode N+1",
-  "the superseded-asset and empty-registry seeding for arms `full-no-asset` and `full-stale-asset`, which currently assemble the same runtime as `full`; those two arms must not be reported as run until this is implemented",
-  "challenge — no arm calls `contestAsset`, so `challengeRate` is always zero",
-  "human intervention — the harness never asks a human, so `humanInterventionRate` is always zero and `HumanCorrectionCost` is not measured at all",
   "scaffold variation — `scaffold` is recorded in the manifest but only one scaffold exists",
 ]);
 

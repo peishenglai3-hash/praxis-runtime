@@ -5,6 +5,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type {
+  AssetEpisodeEvidence,
+  AssetPromotionReview,
   EventEnvelope,
   WriterContext,
 } from "../../packages/contracts/src/index.js";
@@ -111,7 +113,18 @@ export interface EpisodeObservation {
   readonly candidateCreated: boolean;
   readonly assetPromoted: boolean;
   readonly challengeRaised: boolean;
+  readonly humanIntervened: boolean;
+  /** Episode whose lesson produced the candidate later activated in this episode. */
+  readonly assetPromotionSourceEpisodeId?: string;
 }
+
+export interface HumanControlRequest {
+  readonly action: "activate" | "challenge";
+  readonly assetId: string;
+  readonly episodeId: string;
+}
+
+export type HumanControl = (request: HumanControlRequest) => boolean;
 
 export interface ArmRuntime {
   readonly arm: ArmId;
@@ -133,6 +146,12 @@ const evaluationWriter: WriterContext = {
   policyVersion: 1,
 };
 
+const evaluationHumanWriter: WriterContext = {
+  ...evaluationWriter,
+  writerId: "eval:human",
+  kind: "human",
+};
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -141,6 +160,20 @@ function describe(error: unknown): string {
   return error instanceof Error
     ? `${error.name}: ${error.message}`
     : String(error);
+}
+
+function assetIdFromEvent(record: { payload: unknown }): string | undefined {
+  if (typeof record.payload !== "object" || record.payload === null) {
+    return undefined;
+  }
+  const payload = record.payload as {
+    assetId?: unknown;
+    id?: unknown;
+    asset?: { id?: unknown };
+  };
+  if (typeof payload.asset?.id === "string") return payload.asset.id;
+  if (typeof payload.assetId === "string") return payload.assetId;
+  return typeof payload.id === "string" ? payload.id : undefined;
 }
 
 /**
@@ -165,6 +198,7 @@ export class BaseArmRuntime implements ArmRuntime {
       candidateCreated: false,
       assetPromoted: false,
       challengeRaised: false,
+      humanIntervened: false,
     };
   }
 
@@ -181,6 +215,8 @@ interface RuntimeArmOptions {
   readonly scenario: Scenario;
   /** Which runtime class to assemble. Determines what the arm can actually do. */
   readonly level: "state" | "reflection" | "full";
+  readonly seededAssets: "none" | "empty-registry" | "superseded";
+  readonly humanControl?: HumanControl;
 }
 
 /**
@@ -207,11 +243,21 @@ export class PraxisArmRuntime implements ArmRuntime {
   readonly #directory: string;
   readonly #store: SqliteEventStore;
   readonly #runtime: Phase3Runtime | Phase4Runtime;
+  readonly #seededAssets: RuntimeArmOptions["seededAssets"];
+  readonly #humanControl: HumanControl | undefined;
+  readonly #sourceEventIds = new Map<string, string>();
+  readonly #assetEvidence: AssetEpisodeEvidence[] = [];
+  #candidateId: string | undefined;
+  #candidateSourceEpisodeId: string | undefined;
+  #assetValidated = false;
+  #assetPromoted = false;
   #episodeIndex = 0;
 
   constructor(options: RuntimeArmOptions) {
     this.#level = options.level;
     this.#scenario = options.scenario;
+    this.#seededAssets = options.seededAssets;
+    this.#humanControl = options.humanControl;
     this.arm = options.level;
     this.#directory = mkdtempSync(
       join(tmpdir(), `praxis-eval-${options.level}-`),
@@ -225,8 +271,12 @@ export class PraxisArmRuntime implements ArmRuntime {
       projections: this.#store,
       clock: { now: () => new Date() },
       ids: { next: () => randomUUID() },
-      actor: { type: "system" as const, id: "eval-harness" },
-      writer: evaluationWriter,
+      actor:
+        options.level === "full"
+          ? { type: "human" as const, id: "eval-human" }
+          : { type: "system" as const, id: "eval-harness" },
+      writer:
+        options.level === "full" ? evaluationHumanWriter : evaluationWriter,
     };
     this.#runtime =
       options.level === "full"
@@ -270,14 +320,70 @@ export class PraxisArmRuntime implements ArmRuntime {
       links: {},
     };
     this.#store.append(envelope, evaluationWriter);
+    this.#sourceEventIds.set(episode.episodeId, id);
     return id;
   }
 
   seed(scenario: Scenario): void {
-    // Arms E and F differ only in the state installed here. FULL and the
-    // runtime-backed arms seed nothing, which is what "no pre-existing asset"
-    // means; the distinction is recorded in the manifest's `activeAssetsBefore`.
-    if (scenario.episodes.length === 0) return;
+    if (this.#level !== "full" || this.#seededAssets !== "superseded") return;
+    const runtime = this.#runtime;
+    if (!(runtime instanceof Phase4Runtime) || scenario.episodes.length === 0) {
+      return;
+    }
+    const at = nowIso();
+    const seedEvents = ["a", "b"].map((suffix) => {
+      const id = `eval-seed-${scenario.scenarioId}-${suffix}`;
+      this.#store.append(
+        {
+          schemaVersion: "1",
+          eventVersion: "1",
+          id,
+          type: "interaction.observed",
+          occurredAt: at,
+          observedAt: at,
+          recordedAt: at,
+          actor: { type: "human", id: "seed-fixture" },
+          source: { kind: "eval-seed", ref: id },
+          payload: { task: "[seed] obsolete workflow evidence" },
+          provenance: { origin: "direct", confidence: 1 },
+          links: {},
+        },
+        evaluationWriter,
+      );
+      return id;
+    });
+    const assetId = `eval-stale-${scenario.scenarioId}`;
+    runtime.proposeAsset({
+      id: assetId,
+      kind: "workflow",
+      version: "1",
+      body: { instruction: "use the obsolete workflow" },
+      derivedFrom: seedEvents.map((eventId) => ({
+        eventId,
+        origin: "direct" as const,
+      })),
+      createdAt: at,
+    });
+    const seedReview: AssetPromotionReview = {
+      targetStatus: "validated",
+      episodes: seedEvents.map((eventId, index) => ({
+        episodeId: `seed-${index}`,
+        evidence: [{ eventId, origin: "direct" as const }],
+        exposureInfluenced: false,
+      })),
+      counterexamples: [],
+      validation: {
+        validatorId: "eval-seed-validator",
+        passed: true,
+        evidence: [{ eventId: seedEvents[0]!, origin: "direct" }],
+      },
+    };
+    runtime.promoteAsset(assetId, seedReview, at);
+    runtime.promoteAsset(
+      assetId,
+      { ...seedReview, targetStatus: "active", humanConfirmed: true },
+      at,
+    );
   }
 
   beforeEpisode(episode: Episode, index: number): EpisodeContext {
@@ -298,7 +404,7 @@ export class PraxisArmRuntime implements ArmRuntime {
         mode: "reindex",
         stateSeq: this.#store.getLastSeq(),
         budget: { maxItems: 8, maxTokens: 2_000 },
-        candidates: this.#ledgerCandidates(),
+        candidates: this.#ledgerCandidates(episode.assetExpectation),
       });
       const selected = plan.selected;
       contextItemsExposed = selected.length;
@@ -349,10 +455,12 @@ export class PraxisArmRuntime implements ArmRuntime {
    * booleans here, which is the strongest claim the harness can currently
    * evidence.
    */
-  #ledgerCandidates(): ContextSource[] {
+  #ledgerCandidates(
+    assetExpectation: Episode["assetExpectation"],
+  ): ContextSource[] {
     const records = this.#store.getSince(0);
     const latest = records.length === 0 ? 1 : records[records.length - 1]!.seq;
-    return records
+    const interactionCandidates = records
       .filter((record) => record.type === "interaction.observed")
       .map((record) => {
         const payload = record.payload as { task?: unknown } | null;
@@ -379,6 +487,38 @@ export class PraxisArmRuntime implements ArmRuntime {
         (candidate) =>
           candidate.text.length > 0 && !candidate.text.startsWith("[episode"),
       );
+
+    if (assetExpectation === "ignore") return interactionCandidates;
+
+    const activeAssetCandidates = this.#store
+      .listAssets()
+      .filter((asset) => asset.status === "active")
+      .flatMap((asset) => {
+        const source = [...records]
+          .reverse()
+          .find((record) => assetIdFromEvent(record) === asset.id);
+        if (source === undefined) return [];
+        this.#activeAssetEvents.add(source.id);
+        return [
+          {
+            id: `eval-active-asset-${asset.id}`,
+            sourceEventId: source.id,
+            seq: source.seq,
+            text: `[active asset ${asset.id}] ${JSON.stringify(asset.body)}`,
+            taskRelevance: assetExpectation === "help" ? 1 : 0,
+            projectRelevance: 1,
+            recency: Math.max(
+              0,
+              1 - (latest - source.seq) / Math.max(1, latest),
+            ),
+            explicitPriority: 0,
+            activeRuleRelevance: 1,
+            sourceOrigin: source.provenance.origin,
+          } satisfies ContextSource,
+        ];
+      });
+
+    return [...interactionCandidates, ...activeAssetCandidates];
   }
 
   /** Ledger event ids belonging to an active reusable asset, for `activeRuleRelevance`. */
@@ -392,6 +532,7 @@ export class PraxisArmRuntime implements ArmRuntime {
       candidateCreated: false,
       assetPromoted: false,
       challengeRaised: false,
+      humanIntervened: false,
     };
     if (this.#level === "state") return base;
 
@@ -421,6 +562,35 @@ export class PraxisArmRuntime implements ArmRuntime {
       createdAt: at,
       evidence: [{ eventId: evidenceId, origin: "direct" as const }],
     };
+
+    // An independent verifier returning `null` means that the environment did
+    // not adjudicate the episode. It is not a failed task. Register the
+    // expectation so the unresolved state remains in the ledger, but do not
+    // manufacture an observation, residual, reflection, or asset lesson from
+    // missing evidence. This is the evaluator-side counterpart of the
+    // metrics contract that keeps unadjudicated episodes out of success-rate
+    // denominators.
+    if (verdict.succeeded === null) {
+      try {
+        this.#runtime.recordExpectation(expectation);
+      } catch (error) {
+        return {
+          ...base,
+          mechanismError: describe(error),
+        };
+      }
+      if (this.#level !== "full") return base;
+      const challenge = this.#maybeChallengeAsset(episode, at);
+      return {
+        ...base,
+        challengeRaised: challenge.raised,
+        humanIntervened: challenge.humanIntervened,
+        ...(challenge.error === undefined
+          ? {}
+          : { mechanismError: challenge.error }),
+      };
+    }
+
     const observation = {
       id: `${expectationId}-observation`,
       traceId,
@@ -433,11 +603,9 @@ export class PraxisArmRuntime implements ArmRuntime {
     let residualKinds: string[] = [];
     let reflectionDecision: EpisodeObservation["reflectionDecision"] = "none";
     let candidateCreated = false;
-    // Never assigned: see `MECHANISMS_NOT_YET_WIRED`. `promoteAsset` is not
-    // called by this harness, so `promotionPrecision` is unscored on every run
-    // and the FULL arm does not yet exercise asset feedback. Recorded here
-    // rather than left for a reader to infer from a number that is always zero.
-    const assetPromoted = false;
+    let assetPromoted = false;
+    let challengeRaised = false;
+    let humanIntervened = false;
     let mechanismError: string | undefined;
 
     try {
@@ -506,6 +674,19 @@ export class PraxisArmRuntime implements ArmRuntime {
       mechanismError = describe(error);
     }
 
+    if (this.#level === "full") {
+      this.#recordAssetEvidence(episode);
+      const promotion = this.#maybePromoteAsset(episode, at);
+      assetPromoted = promotion.promoted;
+      humanIntervened ||= promotion.humanIntervened;
+      if (promotion.error !== undefined) mechanismError = promotion.error;
+
+      const challenge = this.#maybeChallengeAsset(episode, at);
+      challengeRaised = challenge.raised;
+      humanIntervened ||= challenge.humanIntervened;
+      if (challenge.error !== undefined) mechanismError = challenge.error;
+    }
+
     return {
       ...base,
       ...(mechanismError === undefined ? {} : { mechanismError }),
@@ -514,7 +695,152 @@ export class PraxisArmRuntime implements ArmRuntime {
       reflectionDecision,
       candidateCreated,
       assetPromoted,
-      challengeRaised: false,
+      challengeRaised,
+      humanIntervened,
+      ...(this.#candidateSourceEpisodeId === undefined
+        ? {}
+        : { assetPromotionSourceEpisodeId: this.#candidateSourceEpisodeId }),
+    };
+  }
+
+  #recordAssetEvidence(episode: Episode): void {
+    if (this.#candidateId === undefined || this.#assetPromoted) return;
+    const eventId = this.#sourceEventIds.get(episode.episodeId);
+    if (eventId === undefined) return;
+    if (
+      this.#assetEvidence.some((item) => item.episodeId === episode.episodeId)
+    ) {
+      return;
+    }
+    this.#assetEvidence.push({
+      episodeId: episode.episodeId,
+      evidence: [{ eventId, origin: "direct" }],
+      exposureInfluenced: false,
+    });
+  }
+
+  #maybePromoteAsset(
+    episode: Episode,
+    at: string,
+  ): { promoted: boolean; humanIntervened: boolean; error?: string } {
+    if (
+      this.#candidateId === undefined ||
+      this.#assetPromoted ||
+      this.#assetEvidence.length < 2
+    ) {
+      return { promoted: false, humanIntervened: false };
+    }
+    const runtime = this.#runtime;
+    if (!(runtime instanceof Phase4Runtime)) {
+      return {
+        promoted: false,
+        humanIntervened: false,
+        error: "asset activation requested on a non-Phase4 runtime",
+      };
+    }
+    const validationEvent = this.#assetEvidence[0]?.evidence[0]?.eventId;
+    if (validationEvent === undefined) {
+      return {
+        promoted: false,
+        humanIntervened: false,
+        error: "asset activation has no validation evidence",
+      };
+    }
+    const review: AssetPromotionReview = {
+      targetStatus: "validated",
+      episodes: this.#assetEvidence.map((item) => ({
+        episodeId: item.episodeId,
+        evidence: item.evidence,
+        exposureInfluenced: item.exposureInfluenced,
+      })),
+      counterexamples: [],
+      validation: {
+        validatorId: "eval-scenario-validator",
+        passed: true,
+        evidence: [{ eventId: validationEvent, origin: "direct" }],
+      },
+    };
+    try {
+      if (!this.#assetValidated) {
+        runtime.promoteAsset(this.#candidateId, review, at);
+        this.#assetValidated = true;
+      }
+    } catch (error) {
+      return {
+        promoted: false,
+        humanIntervened: false,
+        error: `validateAsset: ${describe(error)}`,
+      };
+    }
+
+    const confirmed = this.#humanControl?.({
+      action: "activate",
+      assetId: this.#candidateId,
+      episodeId: episode.episodeId,
+    });
+    if (confirmed !== true) {
+      return {
+        promoted: false,
+        humanIntervened: this.#humanControl !== undefined,
+      };
+    }
+
+    try {
+      const activated = runtime.promoteAsset(
+        this.#candidateId,
+        { ...review, targetStatus: "active", humanConfirmed: true },
+        at,
+      );
+      this.#assetPromoted = true;
+      this.#activeAssetEvents.add(activated.record.id);
+      return { promoted: true, humanIntervened: true };
+    } catch (error) {
+      return {
+        promoted: false,
+        humanIntervened: true,
+        error: `promoteAsset: ${describe(error)}`,
+      };
+    }
+  }
+
+  #maybeChallengeAsset(
+    episode: Episode,
+    at: string,
+  ): { raised: boolean; humanIntervened: boolean; error?: string } {
+    if (episode.assetExpectation !== "challenge") {
+      return { raised: false, humanIntervened: false };
+    }
+    const runtime = this.#runtime;
+    if (!(runtime instanceof Phase4Runtime)) {
+      return { raised: false, humanIntervened: false };
+    }
+    for (const asset of this.#store.listAssets()) {
+      if (asset.status !== "active") continue;
+      const confirmed = this.#humanControl?.({
+        action: "challenge",
+        assetId: asset.id,
+        episodeId: episode.episodeId,
+      });
+      if (confirmed !== true) continue;
+      try {
+        runtime.contestAsset(
+          asset.id,
+          "scenario supplied a counterexample to the active asset",
+          at,
+        );
+        this.#activeAssetEvents.delete(asset.id);
+        return { raised: true, humanIntervened: true };
+      } catch (error) {
+        return {
+          raised: false,
+          humanIntervened: true,
+          error: `contestAsset: ${describe(error)}`,
+        };
+      }
+    }
+    return {
+      raised: false,
+      humanIntervened: this.#humanControl !== undefined,
     };
   }
 
@@ -533,7 +859,7 @@ export class PraxisArmRuntime implements ArmRuntime {
     }
     try {
       runtime.proposeAsset({
-        id: `eval-candidate-${this.#episodeIndex}`,
+        id: `eval-candidate-${this.#scenario.scenarioId}`,
         kind: "pattern",
         version: "1",
         body: {
@@ -546,6 +872,9 @@ export class PraxisArmRuntime implements ArmRuntime {
         })),
         createdAt: at,
       });
+      this.#candidateId = `eval-candidate-${this.#scenario.scenarioId}`;
+      this.#candidateSourceEpisodeId =
+        this.#scenario.episodes[this.#episodeIndex]?.episodeId;
       return { created: true };
     } catch (error) {
       return { created: false, error: describe(error) };
@@ -558,18 +887,47 @@ export class PraxisArmRuntime implements ArmRuntime {
   }
 }
 
-export function createArmRuntime(arm: ArmId, scenario: Scenario): ArmRuntime {
+export function createArmRuntime(
+  arm: ArmId,
+  scenario: Scenario,
+  humanControl?: HumanControl,
+): ArmRuntime {
   switch (arm) {
     case "base":
       return new BaseArmRuntime();
     case "state":
-      return new PraxisArmRuntime({ scenario, level: "state" });
+      return new PraxisArmRuntime({
+        scenario,
+        level: "state",
+        seededAssets: "none",
+      });
     case "reflection":
-      return new PraxisArmRuntime({ scenario, level: "reflection" });
+      return new PraxisArmRuntime({
+        scenario,
+        level: "reflection",
+        seededAssets: "none",
+      });
     case "full":
+      return new PraxisArmRuntime({
+        scenario,
+        level: "full",
+        seededAssets: "none",
+        ...(humanControl === undefined ? {} : { humanControl }),
+      });
     case "full-no-asset":
+      return new PraxisArmRuntime({
+        scenario,
+        level: "full",
+        seededAssets: "empty-registry",
+        ...(humanControl === undefined ? {} : { humanControl }),
+      });
     case "full-stale-asset":
-      return new PraxisArmRuntime({ scenario, level: "full" });
+      return new PraxisArmRuntime({
+        scenario,
+        level: "full",
+        seededAssets: "superseded",
+        ...(humanControl === undefined ? {} : { humanControl }),
+      });
     default: {
       const never: never = arm;
       throw new Error(`no runtime is defined for arm "${String(never)}"`);

@@ -89,6 +89,8 @@ export {
   type EpisodeContext,
   type EpisodeObservation,
   type EpisodeVerdict,
+  type HumanControl,
+  type HumanControlRequest,
   type Subject,
   type SubjectIdentity,
   type SubjectOutput,

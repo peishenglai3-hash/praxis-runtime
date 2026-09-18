@@ -121,6 +121,8 @@ export interface Episode {
   readonly oracleCommands?: readonly (readonly string[])[];
   /** Text the episode is expected to recall from a *previous* episode, if any. */
   readonly recalls?: string;
+  /** Optional evaluation-side expectation for an already managed asset. */
+  readonly assetExpectation?: "none" | "help" | "ignore" | "challenge";
 }
 
 export interface Scenario {
@@ -250,6 +252,19 @@ export function parseScenario(source: string, raw: unknown): Scenario {
       const e = episodeRaw as Record<string, unknown>;
       const episodeId = requireString(e, "episodeId", problems, where);
       const task = requireString(e, "task", problems, where);
+      const assetExpectation =
+        typeof e["assetExpectation"] === "string" &&
+        ["none", "help", "ignore", "challenge"].includes(e["assetExpectation"])
+          ? (e["assetExpectation"] as Episode["assetExpectation"])
+          : undefined;
+      if (
+        e["assetExpectation"] !== undefined &&
+        assetExpectation === undefined
+      ) {
+        problems.push(
+          `${where}.assetExpectation must be one of none, help, ignore, challenge`,
+        );
+      }
       const oracleRaw = e["oracle"];
       if (typeof oracleRaw !== "object" || oracleRaw === null) {
         problems.push(
@@ -296,6 +311,7 @@ export function parseScenario(source: string, raw: unknown): Scenario {
           ? { oracleCommands: e["oracleCommands"] as string[][] }
           : {}),
         ...(typeof e["recalls"] === "string" ? { recalls: e["recalls"] } : {}),
+        ...(assetExpectation === undefined ? {} : { assetExpectation }),
       });
     });
   }
