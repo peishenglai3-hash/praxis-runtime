@@ -29,7 +29,15 @@ The current registry contains 67 unique IDs. The reconciled state is:
 | `WONTFIX`           |      1 | BP-056                                                               |
 | **Total**           | **67** | Machine-checked                                                      |
 
-BP-064 is closed with a repository-root resolution and a foreign-cwd regression. BP-065 is closed with a shared semantic range parser, a negative Node 24 test, and a positive Node 22 parser test; the positive test is not a substitute for running the full project on Node 22.13.0. BP-066 is closed with an unknown-verifier regression proving that `null` remains unadjudicated rather than becoming a failure/residual.
+BP-064 has a repair in place for both layers of the foreign-cwd failure: the
+checker anchors its child process at the repository root and passes relative
+fixture/config paths after the Windows Node 22.13.0 CI exposed the drive-path
+edge case; the next canonical CI run is still required for final evidence.
+BP-065 is closed with a shared semantic range parser, a negative Node 24 test,
+and a positive Node 22 parser test; the positive test is not a substitute for
+running the full project on Node 22.13.0. BP-066 is closed with an
+unknown-verifier regression proving that `null` remains unadjudicated rather
+than becoming a failure/residual/candidate.
 
 ## Current RFC registry state
 

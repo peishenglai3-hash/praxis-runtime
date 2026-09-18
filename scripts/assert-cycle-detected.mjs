@@ -15,10 +15,13 @@ const result = spawnSync(
   [
     dependencyCruiser,
     "--config",
-    resolve(repositoryRoot, ".dependency-cruiser.cjs"),
-    resolve(repositoryRoot, "tests/fixtures/dependency-cycle"),
+    ".dependency-cruiser.cjs",
+    "tests/fixtures/dependency-cycle",
   ],
-  { encoding: "utf8" },
+  // dependency-cruiser treats a Windows drive-qualified input as relative in
+  // the Node 22 Windows runner. Keep the child rooted at the repository and
+  // pass repository-relative paths; the outer script remains cwd-independent.
+  { cwd: repositoryRoot, encoding: "utf8" },
 );
 
 if (result.stdout) stdout.write(result.stdout);
