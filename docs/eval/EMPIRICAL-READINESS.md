@@ -2,8 +2,8 @@
 
 ## Final-freeze addendum — 2026-09-19
 
-The candidate branch's exact Node `22.13.0` CI run `35422401720` passed on
-Ubuntu and Windows at clean commit `9da7f28`, with all 11 stages complete.
+The candidate branch's exact Node `22.13.0` CI run `35422691407` passed on
+Ubuntu and Windows at clean commit `a55ee2d`, with all 11 stages complete.
 This closes the canonical runtime/verification prerequisite only. It does not
 change the status of V1, V2, V2X, real Asset benefit or GF01 below.
 
