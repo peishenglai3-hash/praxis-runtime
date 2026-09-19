@@ -5,14 +5,14 @@
 **Status vocabulary:** `SUPPORTED / TESTED`, `PARTIALLY TESTED`, `EXPERIMENTAL`, `NOT TESTED`, `UNSUPPORTED`, `UNKNOWN`
 
 This matrix records evidence, not aspiration. A local Node 24 result does not
-close the canonical Node 22 row. The final candidate requires a fresh CI run
-after the final commit; run `35356138756` is the last verified pinned baseline
-before this freeze round's documentation and test-fixture changes.
+close the canonical Node 22 row. The final candidate's exact-runtime evidence
+is GitHub Actions run `35422128031`, whose machine-readable artifacts point to
+commit `7dec4e1789ce`.
 
 | Surface                         | Status               | Evidence / boundary                                                                                                     |
 | ------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Windows x64 + Node 22.13.0      | `SUPPORTED / TESTED` | Exact `pnpm verify` passed in GitHub Actions run `35356138756`; final candidate re-run required.                        |
-| Ubuntu/Linux x64 + Node 22.13.0 | `SUPPORTED / TESTED` | Exact `pnpm verify` passed in GitHub Actions run `35356138756`; final candidate re-run required.                        |
+| Windows x64 + Node 22.13.0      | `SUPPORTED / TESTED` | Exact `pnpm verify` passed in GitHub Actions run `35422128031`; artifact commit and runtime match.                      |
+| Ubuntu/Linux x64 + Node 22.13.0 | `SUPPORTED / TESTED` | Exact `pnpm verify` passed in GitHub Actions run `35422128031`; artifact commit and runtime match.                      |
 | Node 22.13.0                    | `SUPPORTED / TESTED` | `.node-version`, `.nvmrc`, `package.json` and CI pin the version.                                                       |
 | Node 24.x                       | `UNSUPPORTED`        | Canonical runtime checker intentionally rejects `24.15.0`; incidental local tests are development evidence only.        |
 | Windows PowerShell              | `PARTIALLY TESTED`   | Commands are documented and Windows CI runs the gate; every interactive PowerShell quoting/path variant is not covered. |

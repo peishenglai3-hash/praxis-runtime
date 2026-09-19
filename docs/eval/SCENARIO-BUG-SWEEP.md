@@ -1,5 +1,12 @@
 # Round 1 Scenario Bug Sweep
 
+## Final-freeze addendum — 2026-09-19
+
+The current candidate's tracked-only install/operator smoke passed, and run
+`35422128031` passed the complete 11-stage Node `22.13.0` gate on Ubuntu and
+Windows at clean commit `7dec4e1`. The synthetic scenario classification below
+is unchanged; it is not real-provider or historical-corpus evidence.
+
 **Date:** 2026-09-18  
 **Manifest:** `evals/scenarios/reentry-round1-scenarios.json`  
 **Nature of evidence:** synthetic local fixtures and integration tests. No historical Honghu material was ingested and no real-model result is claimed.

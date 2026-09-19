@@ -54,6 +54,11 @@ BP-068 is closed by removing the stale literal breakpoint total from the
 regression test; the test now checks the machine-derived row invariants, and
 run `35355177455` passes the complete canonical gate on Ubuntu and Windows.
 
+The final-freeze candidate was rechecked separately: run `35422128031` passed
+the complete 11-stage gate on both Ubuntu and Windows at clean commit
+`7dec4e1789ce`. This is current candidate evidence; the older run above remains
+historical closure evidence for BP-068.
+
 ## Current RFC registry state
 
 The 24 RFC labels and 24 reconciliation rows are unique and aligned. The key re-entry outcomes are:
