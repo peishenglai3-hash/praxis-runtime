@@ -17,7 +17,7 @@ directory and still be installed from tracked files only.
 
 | Check                            | State                                             | Evidence                                                                                                                                 |
 | -------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Tracked-tree export              | `PASS`                                            | `git archive` of commit `2447004` extracted to a new temporary directory; no `.git`, `node_modules` or `.praxis` existed before install. |
+| Tracked-tree export              | `PASS`                                            | `git archive` of commit `53c57e4` extracted to a new temporary directory; no `.git`, `node_modules` or `.praxis` existed before install. |
 | Clean install                    | `PASS`                                            | `pnpm install --frozen-lockfile` succeeded from the tracked export.                                                                      |
 | Clean build and CLI/daemon smoke | `PASS`                                            | `pnpm build`, CLI help/init/doctor, daemon `--once` and `pnpm test:evals` (63/63) succeeded from the export.                             |
 | Exact Node 22 CI                 | `PASS on prior baseline; pending candidate rerun` | Run `35356138756` passed both Ubuntu and Windows at the pre-freeze baseline.                                                             |
