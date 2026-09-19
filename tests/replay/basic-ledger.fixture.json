@@ -1,0 +1,94 @@
+{
+  "name": "basic-ledger",
+  "description": "A fixed four-event stream whose projection result is small enough to verify by reading the reducers rather than by recording their output. The `project` reducer counts every event and records the last seq/type; the `rules` reducer keys `rule.*` events by payload id and takes the status from the event-type suffix. Four events therefore produce exactly the `expected` block below, and a change to either reducer must be explained rather than absorbed by editing this file.",
+  "events": [
+    {
+      "schemaVersion": "1",
+      "eventVersion": "1",
+      "id": "ev-1",
+      "type": "interaction.recorded",
+      "occurredAt": "2026-09-16T00:00:00.000Z",
+      "observedAt": "2026-09-16T00:00:00.000Z",
+      "recordedAt": "2026-09-16T00:00:00.000Z",
+      "actor": { "type": "human", "id": "fixture" },
+      "source": { "kind": "fixture", "ref": "basic-ledger" },
+      "payload": { "note": "first" },
+      "evidence": [
+        {
+          "artifactHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "origin": "declared"
+        }
+      ],
+      "provenance": { "origin": "declared", "confidence": 1 }
+    },
+    {
+      "schemaVersion": "1",
+      "eventVersion": "1",
+      "id": "ev-2",
+      "type": "rule.registered",
+      "occurredAt": "2026-09-16T00:00:01.000Z",
+      "observedAt": "2026-09-16T00:00:01.000Z",
+      "recordedAt": "2026-09-16T00:00:01.000Z",
+      "actor": { "type": "human", "id": "fixture" },
+      "source": { "kind": "fixture", "ref": "basic-ledger" },
+      "payload": { "id": "rule-a" },
+      "evidence": [
+        {
+          "artifactHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "origin": "declared"
+        }
+      ],
+      "provenance": { "origin": "declared", "confidence": 1 }
+    },
+    {
+      "schemaVersion": "1",
+      "eventVersion": "1",
+      "id": "ev-3",
+      "type": "interaction.recorded",
+      "occurredAt": "2026-09-16T00:00:02.000Z",
+      "observedAt": "2026-09-16T00:00:02.000Z",
+      "recordedAt": "2026-09-16T00:00:02.000Z",
+      "actor": { "type": "human", "id": "fixture" },
+      "source": { "kind": "fixture", "ref": "basic-ledger" },
+      "payload": { "note": "third" },
+      "evidence": [
+        {
+          "artifactHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "origin": "declared"
+        }
+      ],
+      "provenance": { "origin": "declared", "confidence": 1 }
+    },
+    {
+      "schemaVersion": "1",
+      "eventVersion": "1",
+      "id": "ev-4",
+      "type": "rule.disabled",
+      "occurredAt": "2026-09-16T00:00:03.000Z",
+      "observedAt": "2026-09-16T00:00:03.000Z",
+      "recordedAt": "2026-09-16T00:00:03.000Z",
+      "actor": { "type": "human", "id": "fixture" },
+      "source": { "kind": "fixture", "ref": "basic-ledger" },
+      "payload": { "id": "rule-a" },
+      "evidence": [
+        {
+          "artifactHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "origin": "declared"
+        }
+      ],
+      "provenance": { "origin": "declared", "confidence": 1 }
+    }
+  ],
+  "expected": {
+    "project": {
+      "eventCount": 4,
+      "lastSeq": 4,
+      "lastEventType": "rule.disabled"
+    },
+    "rules": {
+      "rules": {
+        "rule-a": { "id": "rule-a", "status": "disabled", "lastSeq": 4 }
+      }
+    }
+  }
+}

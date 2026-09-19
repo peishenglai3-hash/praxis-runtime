@@ -4,6 +4,10 @@ export { restoreDatabaseFile, SqliteEventStore } from "./sqlite.js";
 export type {
   BackupManifest,
   BackupOptions,
+  LegacyImportRecordInput,
+  LegacyImportRecordResult,
+  LegacyImportRunRecord,
+  LegacyIntegrityIssue,
   ManagedBackup,
   PurgeCleanupResult,
   PrivacyPurgeOptions,

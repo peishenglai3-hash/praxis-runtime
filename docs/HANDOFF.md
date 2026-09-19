@@ -1,8 +1,14 @@
 # Praxis Runtime — External Agent Handoff
 
-**Handoff target:** private GitHub repository
-
+**Handoff target:** GitHub repository
 `https://github.com/peishenglai3-hash/praxis-runtime`
+
+> **Visibility correction, 2026-09-16; final-freeze privacy correction,
+> 2026-09-19.** GitHub reports this repository as **PUBLIC**. Treat every push
+> as publishing. The final-freeze candidate removes author machine-specific
+> paths from current public documents; historical commits are not rewritten.
+> No credential, `.env`, database, raw chat, DOCX body, or historical corpus is
+> authorized for publication. See `BP-056` and the current release audit.
 
 **Owner:** Lai Peisheng
 
@@ -17,6 +23,61 @@ repository handoff map, not a replacement for the controlling RFC or Bible.
 
 ## Current checkpoint
 
+- **Phase 6B is complete: the EPIC-010 adapter boundary.** Provider-neutral
+  ports, a twelve-kind error taxonomy, fail-closed capability negotiation,
+  timeout/cancellation semantics, and side-effect classification — an
+  irreversible operation with an unknown outcome is `side_effect_uncertainty`,
+  not `timeout`, and is not retried until the external state is verified. The
+  boundary is enforced by the dependency graph: `packages/adapters` cannot
+  import the store or the runtime. A 15-case conformance suite ships inside
+  the package. Read [`PHASE-6B-GATE.md`](./PHASE-6B-GATE.md) and
+  [`ADR-0014`](./ADR/ADR-0014-phase6b-adapter-boundary.md). **No provider
+  adapter exists and the boundary is not wired into the runtime** — that is
+  Phase 6V, separately authorised. Alpha release stays `NO-GO`.
+- **Phase 6A is complete: EPIC-007 hardening.** Under an owner-frozen charter
+  that reverses Bible section 15's delivery order — the asset and promotion
+  mechanism first, the adapter boundary after — the seven EPIC-007 acceptance
+  criteria, the epic gate and the risk-register mitigation were re-derived from
+  the tree rather than inherited from the Phase 4 gate. **All conform. No
+  defect was found.** The phase added no capability; it closed one verification
+  gap (the asset catalog against the asset projection) and registered the
+  delivery-order deviation as `RFC MISMATCH: PHASE6_DELIVERY_ORDER` / `BP-057`
+  before building on it. Read
+  [`PHASE-6-GATE.md`](./PHASE-6-GATE.md) and
+  [`PHASE-6A-EPIC-007-CONFORMANCE.md`](./PHASE-6A-EPIC-007-CONFORMANCE.md).
+  **Phase 6A is code completion, not behavioural validation** — it ends with
+  [`PHASE-6-FIELD-VALIDATION-PLAN.md`](./PHASE-6-FIELD-VALIDATION-PLAN.md)
+  (`L1 → L2 → Golden Fixture 01 → L3 → L4`), not with a release. Phase 6B does
+  not start until the owner says so. Alpha release is `NO-GO`.
+- The Phase 5 public baseline is tagged `phase5-baseline-2026-09-17` at
+  `ca4d3d6`. Phase 6A is on `phase6/epic-007-hardening`, branched from it.
+- **Phase 5.5 / INC-001 recovery is complete, and the P5-OPEN baseline repair
+  followed.** The incident was opened after it was established that Phase 5 had
+  been implemented without the Bible being
+  read in full, and against a constraint set missing one of the three author
+  documents. The recovery read every authoritative document, audited the
+  repository against the Bible requirement by requirement, and repaired. Read
+  [`incidents/INC-001-partial-bible-execution.md`](./incidents/INC-001-partial-bible-execution.md),
+  [`incidents/INC-001-bible-conformance-audit.md`](./incidents/INC-001-bible-conformance-audit.md)
+  and [`PHASE-5.5-RECOVERY-GATE.md`](./PHASE-5.5-RECOVERY-GATE.md) **before**
+  any phase gate — a gate written before the recovery states things the
+  recovery changed. No CRITICAL mismatch was found and no invariant was
+  violated, so the classification was REPAIR, not REVERT. Golden Fixture 01 is
+  `WAITING_FOR_AUTHOR_SOURCE` and must not be synthesised.
+- Phase 5 / Bible `EPIC-008` and `EPIC-009` is implemented and locally verified
+  within the declared local capability boundary: audited Legacy migration plus
+  command-line, diagnostics and operational evidence. `pnpm verify` passes
+  205/205 tests across 23 files at that checkpoint, plus the Phase 1-5 scenarios, including a
+  four-process concurrent import and a real-process command-line scenario. No
+  exact Node `22.13.0` runner evidence exists for this checkpoint yet, so it is
+  a local slice rather than a closed phase gate. The phase is `PARTIAL`: issue
+  081's `cursors` and `context` doctor scope is uncovered, by owner decision.
+  Entry points:
+  `docs/PHASE-5-GATE.md`, `docs/ADR/ADR-0012-phase5-legacy-migration.md`,
+  `docs/ADR/ADR-0013-phase5-cli-diagnostics.md`, and
+  `docs/migration/LEGACY-FIELD-MAP.md`. The Phase 5 review round and the three
+  boundary findings it escalated (`BP-047` fixed by owner decision, `BP-048`
+  avoided, `BP-049` closed by the recovery) are set out in the gate document.
 - Phase 4 / Bible `EPIC-007` Reusable Assets is implemented and verified within
   the declared local capability boundary.
 - Gates A–D are `PASS` within that boundary. GitHub Actions run
@@ -101,11 +162,11 @@ Ubuntu and Windows. A local Node 24 pass is useful development evidence only.
 
 ## Remote governance boundary
 
-- The repository is private and MIT-licensed. Its Git history is protected by
-  ordinary non-force synchronization and immutable commit ancestry, but the
-  current GitHub plan does not provide branch protection for this private
-  repository. Treat `main` as owner-controlled by protocol, not as a
-  server-enforced protected branch.
+- The repository is **MIT-licensed and, as of 2026-09-16, verified PUBLIC** —
+  see the visibility correction at the top of this document. Its Git history is
+  protected by ordinary non-force synchronization and immutable commit
+  ancestry. Treat `main` as owner-controlled by protocol rather than as a
+  server-enforced protected branch, and treat every push as publishing.
 - The repository Actions policy currently allows all actions. The checked-in
   core workflow requests only `contents: read`, uses no provider secrets, and
   has passed the exact Node 22 gate; workflow changes still require owner
@@ -140,10 +201,11 @@ Ubuntu and Windows. A local Node 24 pass is useful development evidence only.
 
 The remaining Bible delivery slices are:
 
-- **Phase 5 — EPIC-008 / EPIC-009:** audited Legacy migration plus CLI
-  diagnostics and operational evidence. This requires a hashed, dry-run,
-  reversible migration fixture and explicit treatment of malformed, duplicate,
-  privacy-sensitive, and unmapped legacy records.
+- **Phase 5 — EPIC-008 / EPIC-009:** implemented. The remaining external gate
+  is exact Node `22.13.0` Ubuntu/Windows CI evidence for this checkpoint, which
+  is the same runner boundary Gate D closed for Phase 4. One scope gap is named
+  in `docs/PHASE-5-GATE.md`: Bible section 13.2's context-ranking weights,
+  reflection budgets and timing-residual thresholds remain package defaults.
 - **Phase 6 — EPIC-010:** dummy-first adapters and provider isolation. This
   requires provider-independent contracts, deterministic fake adapters,
   timeout/error/budget fixtures, and proof that provider SDKs cannot enter the
@@ -151,7 +213,8 @@ The remaining Bible delivery slices are:
 - **Release closure:** final gate reconciliation, controlled visibility/publication
   decision, and release documentation. The exact Node `22.13.0` CI evidence
   and Phase 4 Alpha gate are already closed; the MIT license is present, but
-  public release is not implied by this private handoff.
+  public release is not implied by this handoff. (It reads "private" in the
+  line above and in older gates; see the visibility correction at the top.)
 
 No external model should label the project “complete” merely because Phase 4
 code exists or local Node 24 verification passes.

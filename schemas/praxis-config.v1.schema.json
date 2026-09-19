@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://praxis-runtime.local/schemas/praxis-config.v1.schema.json",
+  "title": "Praxis operator configuration v1",
+  "description": "Operator configuration for the local runtime. The file is strict: an unknown field is an error, not an extension point. Secrets do not belong here; provider credentials are read from the environment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "dataDir": { "type": "string", "minLength": 1 },
+    "migrationsDir": { "type": "string", "minLength": 1 },
+    "backupsDir": { "type": "string", "minLength": 1 },
+    "legacyArchiveRoot": { "type": "string", "minLength": 1 },
+    "legacyPrivacyRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ruleId", "pathPrefix", "reason"],
+        "properties": {
+          "ruleId": { "type": "string", "minLength": 1 },
+          "pathPrefix": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "enum": ["human", "model", "agent", "tool", "system"] },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "actorId": { "type": "string", "minLength": 1 },
+    "writerId": { "type": "string", "minLength": 1 },
+    "promotionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimumEvidence", "minimumIndependentEpisodes"],
+      "properties": {
+        "minimumEvidence": { "type": "integer", "minimum": 1 },
+        "minimumIndependentEpisodes": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

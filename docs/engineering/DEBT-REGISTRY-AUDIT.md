@@ -1,0 +1,70 @@
+# Debt Registry Audit
+
+**Date:** 2026-09-18  
+**Checker:** `scripts/audit-registries.mjs`  
+**Command:** `pnpm audit:registries`
+
+## Final-freeze recheck — 2026-09-19
+
+The same machine-derived checker was rerun on the release candidate before the
+freeze documents were prepared: `registry audit PASS (breakpoints=69, RFC
+labels=24)`. The repository still has 69 unique breakpoint IDs and 24 unique
+RFC labels; no manual count was substituted for the checker. The regression
+test remains the enforcement point for duplicate IDs, missing rows, impossible
+statuses and stale RFC reconciliation rows.
+
+## Result
+
+**PASS — `registry audit PASS (breakpoints=69, RFC labels=24)`**
+
+The check is also executed by `tests/regression/registry-audit.test.mjs`. It fails closed when any of the following occurs:
+
+- a breakpoint ID is duplicated or missing from the declared total;
+- a breakpoint status row is missing, duplicated, or inconsistent with the summary counts;
+- a status row uses an impossible combination;
+- an RFC mismatch label is duplicated or lacks a reconciliation row;
+- the RFC reconciliation count disagrees with the rows it declares.
+
+## Current breakpoint state
+
+The current registry contains 69 unique IDs. The reconciled state is:
+
+| Status              |  Count | Notes                                                                                |
+| ------------------- | -----: | ------------------------------------------------------------------------------------ |
+| `CLOSED`            |     66 | Includes BP-049, BP-064, BP-065, BP-066, BP-067, and BP-068 after this round's fixes |
+| `ACTIVE`            |      0 | —                                                                                    |
+| `EVIDENCE-REQUIRED` |      1 | BP-037                                                                               |
+| `DEFERRED`          |      1 | BP-042                                                                               |
+| `WONTFIX`           |      1 | BP-056                                                                               |
+| **Total**           | **69** | Machine-checked                                                                      |
+
+BP-064 has a repair in place for both layers of the foreign-cwd failure: the
+checker anchors its child process at the repository root and passes relative
+fixture/config paths after the Windows Node 22.13.0 CI exposed the drive-path
+edge case. GitHub Actions run `35350733719` now passes on Ubuntu and Windows
+with all 11 stages complete, so the closure has canonical evidence.
+BP-065 is closed with a shared semantic range parser, a negative Node 24 test,
+and a positive Node 22 parser test; the positive test is not a substitute for
+running the full project on Node 22.13.0. BP-066 is closed with an
+unknown-verifier regression proving that `null` remains unadjudicated rather
+than becoming a failure/residual/candidate. BP-067 is closed with a bounded
+WAL initialization retry, a fail-closed regression, and exact Node 22.13.0
+Ubuntu/Windows artifacts from run `35353350996`.
+BP-068 is closed by removing the stale literal breakpoint total from the
+regression test; the test now checks the machine-derived row invariants, and
+run `35355177455` passes the complete canonical gate on Ubuntu and Windows.
+
+Earlier final-freeze evidence remains recorded for historical traceability. The
+latest candidate check was run `35427872938`, which passed the complete 11-stage
+gate on both Ubuntu and Windows at clean commit `58b15f5a0440b669dd7fe0768264822d81ebc6e2`.
+
+## Current RFC registry state
+
+The 24 RFC labels and 24 reconciliation rows are unique and aligned. The key re-entry outcomes are:
+
+- `LEGACY_PATTERN_TO_CANDIDATE_ASSET`: **RESOLVED**, author decision Option B is implemented by the explicit human-run conversion path.
+- `CLI_SURFACE_GAPS_VS_13`: **RESOLVED** in the current tree: rebuild/report paths exist and privacy purge accepts the Bible's positional scope while retaining `--session` as a compatibility alias; conflicting forms are rejected by an integration regression.
+- `GOLDEN_FIXTURE_01_ABSENT`: **BLOCKING**, still waiting for bounded author-provided source material.
+- `BP-049` is **CLOSED** by the author's 2026-09-18 canonical-order decision, recorded in `docs/断点记录.md`, `docs/ADR/ADR-0007-runtime-ci-reproducibility.md`, and `docs/engineering/BP-049-CANONICAL-VERIFY.md`; the machine check verifies the reconciled table and counts.
+
+The checker validates registry structure. It does not decide author-owned semantics and cannot turn a stale or missing source decision into a PASS.

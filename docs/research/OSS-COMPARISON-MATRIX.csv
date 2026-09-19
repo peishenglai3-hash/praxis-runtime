@@ -1,0 +1,44 @@
+axis,project_or_dataset,subsystem,mechanism_observed,praxis_analogue,verdict,priority,evidence_quality
+A1,Temporal,event history + replay,replay from event history with non-determinism DETECTED,projection rebuild + replay,adopt principle; Praxis asserts what Temporal verifies,HIGH,search-summary-only
+A1,Temporal,history bound,hard cap 51200 events / 50MB with state carry-over,unbounded ledger,adopt principle,HIGH,search-summary-only
+A1,LangGraph,checkpointer,checkpoint IS the state; replay re-executes nodes,ledger is source of truth; snapshots disposable,DO NOT ADOPT,HIGH,search-summary-only
+A1,Restate,ctx.run journaling,journals before executing; runtime-seeded ids,Expectation registered before the act,adopt principle,MEDIUM,search-summary-only
+A1,CQRS / event sourcing,projections,upcasting and five schema-evolution techniques,no evolution story,adopt principle,HIGH,search-summary-only
+A2,Graphiti,bi-temporal graph,four timestamps; LLM contradiction invalidation on write,challenge / deprecate,adopt timestamps; DO NOT ADOPT auto-invalidation,HIGH,search-summary-only
+A2,Mem0,memory editor,four-op LLM arbiter; v3 pivoted to ADD-only,append-first,DO NOT ADOPT hard delete; pivot corroborates direction,MEDIUM,search-summary-only
+A2,Letta,sleep-time agents,background agent with direct memory-write authority,Reflection has no write port,DO NOT ADOPT,HIGH,search-summary-only
+A2,skill-evidence cluster (x6),promotion gate,evidence count + independence + human ratification,Asset promotion gate,already implemented; independence rule worth copying,MEDIUM,search-summary-only
+A3,OpenHands,EventLog,event TREE with parent_id; flock append; no actor at the append boundary,flat seq + links.causedBy; ACL on every write,adopt causal parentage; UNENFORCED causedBy is a Praxis gap,MEDIUM,primary (curl)
+A3,AutoGen Core,mailbox,actor core with mailboxes; NO ledger; save_state implementation-defined,Mailbox + ledger as truth,DO NOT ADOPT; Mailbox failure vocabulary is a Praxis gap,LOW,primary (curl)
+A3,smolagents,provider boundary,none exists; backend-specific exceptions,Adapter Boundary,DO NOT ADOPT; second data point,LOW,primary (curl)
+A4,MCP,capability negotiation,fail-closed; refusal names only what is MISSING,missing AND present,adopt principle; Praxis is a strict superset,HIGH,primary (curl)
+A4,MCP,error codes,schema-resident non-reuse policy; two codes already retired,12 kinds with no non-reuse policy,gap: write a reserved-range policy,MEDIUM,primary (curl)
+A4,MCP,protocol envelope,per-request protocolVersion + clientCapabilities,no equivalent needed,DO NOT ADOPT - clearest unnecessary abstraction,MEDIUM,primary (curl)
+A4,MCP,tool outcome,isError bool; ToolAnnotations explicitly untrusted,sideEffect commitment + effectStatus,cannot express side_effect_uncertainty; DO NOT ADOPT,MEDIUM,primary (curl)
+A4,OpenHands,ErrorClassification,frozen 8-kind taxonomy with retryable flag; has QUOTA and CONFIG,12 kinds without quota or config,gap: check both against a real provider in 6V-0,HIGH,primary (curl)
+A4,OpenHands,observability neutrality,leaked vendor detail into neutral layer 3 ways in ~1 year,provider-neutral AdapterObservation,counterexample: one rule over two boundaries needs two enforcement points,HIGH,primary (curl)
+A5,OpenTelemetry GenAI,semconv,Development status; moved repos; error.type registry has ONE value,made-up 12 kinds,map outward on demand; do not freeze gen_ai names,MEDIUM,primary (curl)
+A5,OpenTelemetry GenAI,privacy,store content externally and record references on spans,ledger seq references,adopt as providerMetadata default posture,MEDIUM,primary (curl)
+A6,Home Assistant,manifest,two-tier dependencies; iot_class assumed_state,hard vs soft deps; effectStatus unknown,adopt principle - FUTURE ONLY,LOW,primary (curl)
+A6,VS Code,manifest,capability enumerable without executing the plugin,future skill/plugin design,adopt principle - FUTURE ONLY,LOW,primary (curl)
+B-E1,KUQ,abstention,~6884 items ~50/50 known/unknown; MIT; ungated,does the runtime stay quiet,USE SUBSET 50-100,HIGH,search-summary-only
+B-E1,MemoryAgentBench,contradiction + temporal,FactConsolidation SH/MH + EventQA; MIT; ungated,stale facts + temporal retrieval,USE SUBSET 20-40,HIGH,search-summary-only
+B-E1,Memora / FAMA,forgetting-aware metric,penalises reliance on invalidated memory,superseded claim reused as current,metadata only - availability unconfirmed,HIGH,search-summary-only
+B-E1,BEAM,contradiction resolution,near-zero for every method; licence UNVERIFIED,unsaturated axis,128K tier only; licence first,MEDIUM,search-summary-only
+B-E1,LongMemEval,knowledge update + abstention,MIT; 500 q; temporal + abstention slices,context planning,USE SUBSET 20-50,MEDIUM,search-summary-only
+B-E1,LoCoMo,long-term dialogue,CC BY-NC 4.0; 94% of questions need <=2 sessions,BLOCKED - non-commercial,REJECT as data,LOW,search-summary-only
+B-E2,CUA Debugger Trajectories,failure corpus,failure + root step + grounded evidence + suggested correction; Apache-2.0,best match to Expectation->...->Repair,USE SUBSET 30-60,HIGH,search-summary-only
+B-E2,TRAIL,step-level error spans,148 traces / 841 human-labelled errors; OTel format; MIT + gated + eval-only rider,input shape for Reflection,USE SUBSET 20-50 after checking rider,HIGH,search-summary-only
+B-E2,LongRCA Bench,natural long-horizon failures,1140 failures mean 156 steps; licence UNVERIFIED,best long-horizon match,metadata only until licensed,MEDIUM,search-summary-only
+B-E2,MAST / MAST-Data,multi-agent failure taxonomy,14 modes in 3 families; FC3 = verification failures,verifier-bearing Expectation,ADOPT THE TAXONOMY; data is judge-labelled,MEDIUM,search-summary-only
+B-E2,AgentLens,lucky passes,10.7% of PASSING trajectories were illegitimate,promotion from noise,concept adopted now; data unreleased,HIGH,search-summary-only
+B-E2,SWE-rebench V1,verifiable tasks,execution-verified fail-to-pass; CC BY 4.0; prebuilt images,L2 verifier,USE SUBSET 20-50,HIGH,search-summary-only
+B-E3,ALFWorld,reversible environment,reversible + immediate feedback; MIT reported,does the runtime stay quiet,USE SUBSET 30-60,HIGH,search-summary-only
+B-E3,TextWorld,generation tool,MIT; can generate seeded trivial games,controlled nothing-warranted condition,USE FULL,MEDIUM,search-summary-only
+B-E3,tau-bench / tau2 / tau3,shipped trajectories,MIT; historical_trajectories with reward + message arrays,same-task cross-MODEL material,reuse shipped trajectories 20-40,MEDIUM,search-summary-only
+B-E3,AppWorld,collateral damage,Apache-2.0 + encrypted bundle conditions,did more than warranted,USE SUBSET 20-40,MEDIUM,search-summary-only
+B-E3,OSWorld / WindowsAgentArena,computer use,full desktop VM cost; variance dominated by data draw,REJECT - cost and variance,LOW,search-summary-only
+B-E4,Multi-SWE-bench_trajs,cross-model x cross-scaffold,9 models x 3 scaffolds; licence UNVERIFIED,C2 scaffold portability,metadata only until licensed,HIGH,search-summary-only
+B-E4,Exgentic agent-llm-traces,OTel traces,1781 traces 5 frameworks x 5 models; CDLA-Permissive-2.0; NO ground truth,cross-scaffold comparison,metadata only - no labels,MEDIUM,search-summary-only
+B-E4,GateMem,memory governance,91 episodes / 2218 checkpoints; CC-BY-4.0 data,stale and shared memory with ground truth,USE SUBSET,MEDIUM,search-summary-only
+B-E4,DEBATE,real debates,real people's private opinions; non-commercial,REJECT - privacy,MEDIUM,search-summary-only

@@ -1,0 +1,48 @@
+{
+  "associations": [
+    {
+      "from": "alpha:x",
+      "to": "alpha:y",
+      "strength": 0.4,
+      "frequency": 2
+    },
+    {
+      "from": "alpha:x",
+      "to": "beta:p",
+      "strength": 0.4,
+      "frequency": 2
+    },
+    {
+      "from": "alpha:x",
+      "to": "beta:q",
+      "strength": 0.4,
+      "frequency": 2
+    },
+    {
+      "from": "alpha:y",
+      "to": "beta:p",
+      "strength": 0.4,
+      "frequency": 2
+    },
+    {
+      "from": "alpha:y",
+      "to": "beta:q",
+      "strength": 0.4,
+      "frequency": 2
+    },
+    {
+      "from": "beta:p",
+      "to": "beta:q",
+      "strength": 0.4,
+      "frequency": 2
+    }
+  ],
+  "lastBuilt": "2026-06-02T00:00:00.000Z",
+  "patternCount": 6,
+  "adaptiveThreshold": {
+    "value": 0.1146,
+    "cv": 0.75,
+    "baseRate": 0.3,
+    "numCategories": 2
+  }
+}

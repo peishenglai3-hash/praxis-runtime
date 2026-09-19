@@ -1,18 +1,34 @@
 # Praxis Runtime
 
-`Praxis Runtime` 是一个从零开始的、local-first 的 TypeScript 长期人机协作运行时。它把交互历史作为可追溯材料保存下来，在不覆盖原始记录的前提下重建派生状态、选择当前上下文、识别有边界的残差，并把经过验证的协作经验转化为可检查、可撤销、可 Fork 的 Rule、Skill 或 Workflow。
+> **v0.1.0-engineering-preview release candidate.** The engineering gate has
+> passed and the author has authorized the final GitHub merge, tag and Release
+> sequence. This is not a claim of production readiness or empirical
+> usefulness.
 
-当前仓库是 `codex-habit` 之后的第二代 fresh start。第一代公开原型仅作为未来 Legacy migration 的输入基线，不作为本仓库的代码依赖，也不被静默复制或改写：<https://github.com/peishenglai3-hash/codex-habit>。
+Praxis is a local-first TypeScript runtime for auditable, long-term
+human–AI collaboration. It preserves raw interaction events, reconstructs
+derived state, plans bounded context, records residuals and reflections, and
+turns only explicitly validated experience into contestable reusable assets.
 
-## 开发初衷与理想主义
+The project is a second-generation fresh start after the public
+[`codex-habit`](https://github.com/peishenglai3-hash/codex-habit) prototype.
+The first generation is a future migration input, not a runtime dependency.
 
-下面这段是依据作者的两份《The Final》材料、`Codex Implementation Bible v1.0` 和已确认的工程规划所作的工程化转述，不是 AI 代作者发表的逐字引语。
+## Motivation and idealism
 
-这个项目的初衷，不是把 AI 包装成一个越来越像人的主体，也不是把人的经验交给某个模型替人作最终决定。问题更具体，也更麻烦：当人、AI、Prompt、Skill、Memory、工具、编译器、测试、权限和外部现实共同参与长期实践时，历史如何被保留，滞后与错配如何被看见，断点如何留下材料痕迹，反思如何能够回到后续行动，责任又如何回到具体的人、制度和现实后果？
+This project is not an attempt to make an AI increasingly resemble a person,
+or to hand human judgment to a model. Its practical question is harder: when
+people, models, prompts, skills, memory, tools, permissions and external
+reality participate in a long practice, can the history remain inspectable?
+Can delay, mismatch, failure and responsibility remain visible instead of
+being smoothed into a fluent answer?
 
-这里的理想主义，是希望知识和工具能够被检查、修改、质疑和 Fork；希望一次失败的协作不只留下“模型答错了”，而能留下可回放的证据、边界和下一次实践的可能；希望被验证的经验可以上升为可复用的工程对象，但仍然保留版本、来源、权限、争议、禁用、恢复和退出机制。
-
-这份理想主义并不承诺系统天然进步。开放不等于免除责任，自动化不等于权力平等，模型流畅不等于现实正确，内部共识也不自动胜过外部证据。系统必须允许人重新进入现实、复判、拒绝、纠正和中断；它也必须允许自己的规则被挑战、废止和超越。代码能做的是留下这些能力的工程接口和可验证痕迹，不能替人完成最终判断。
+The idealism is deliberately operational. Experience should be checkable,
+modifiable, challengeable and forkable. A failed collaboration should leave
+replayable evidence and a possible next step. A useful rule may become a
+versioned asset, but it must retain provenance, permission, dissent, disable,
+restore, fork, export, purge and exit paths. Automation does not replace the
+author's final judgment; it makes the points of judgment easier to inspect.
 
 ## Mission
 
@@ -21,186 +37,192 @@ event history
   → deterministic state reconstruction
   → context planning
   → action / observation
-  → residual detection
+  → bounded residual detection
   → bounded reflection
   → candidate reusable asset
   → validation
-  → active rule / skill / workflow
-  → new event history
+  → explicit human confirmation
+  → active asset
 ```
 
-这不是每个任务都必须经过的自动闭环。任务类型、外部反馈、后果强度、反馈延迟和责任关系决定哪些步骤实际发生。系统的目标是让这些差异可见，而不是用一个全局 Judge 把它们压平。
+This is not a mandatory loop for every task. Field, consequence, verification
+strength and feedback latency determine which stages are appropriate.
 
-## Engineering commitments
+## What Praxis is — and is not
 
-- 原始事实采用 append-first 记录；纠正是新事件，不覆盖旧事件。
-- 观察事实、推断、候选规则和用户确认的可复用资产分层保存，并保留 provenance。
-- 派生状态是可重建 projection；事件顺序以 SQLite `events.seq` 为权威游标，不能用 UUID 代替。
-- 不同 Agent 可以处在不同 cursor 和历史位置；系统不假设它们拥有相同状态或相同权力。
-- 残差必须可解释、可回放；弱外部验证场景保持不确定性，`unknown` 不能被静默升级为控制信号。
-- Rule、Skill、Workflow 和 Agent policy 必须可检查、质疑、禁用、恢复、Fork，并保留版本与来源。
-- 外部测试、事实、责任和现实后果可以拒绝内部模型共识。
-- 人始终保留 inspect、contest、disable、restore、fork、export、purge 和中断能力。
-- 结构性冲突进入 `RFC MISMATCH`，不由实现者静默补偿。
+It is:
 
-## What this is not
+- a local SQLite/WAL event ledger with append-first history;
+- deterministic, rebuildable projections and replay;
+- explainable context ranking over supplied relevance signals;
+- bounded outcome, timing and rule residuals;
+- bounded `STOP` / `CONTINUE` / `ESCALATE` reflection proposals;
+- a versioned asset lifecycle: candidate → validation → human confirmation → active;
+- a provider-neutral adapter boundary and an evaluation harness.
 
-本项目不是 AGI 框架、基础模型训练项目、通用人格画像系统、云端多租户 SaaS、社会理论证明器，也不是把人的主体性自动化掉的“完美对齐”系统。当前版本不实现 learned router、World Model、自动 Skill Evolution、C++ runtime 或未经验证的复杂权力推断。
+It is not AGI, a foundation-model trainer, a universal personality profile, a
+cloud SaaS, a learned router, a World Model, an automatic skill-evolution
+system, a provider marketplace, or an enterprise IAM boundary. A local process
+with file access can modify a local database; the writer/ACL layer is a local
+capability boundary, not OS isolation or authentication.
 
-## Repository layout
+## Architecture
 
 ```text
-packages/contracts   lowest-level DTOs, ports, and schemas
-packages/store       SQLite event ledger and persistence
-packages/state       deterministic state reconstruction
-packages/context     context ranking and exposure planning
-packages/residual    bounded residual detection
-packages/reflection  bounded reflection proposals
-packages/assets      versioned reusable assets
-packages/agents      agent cursors and mailbox-facing ports
-packages/adapters    model/tool/clock/id/budget adapter ports
-packages/runtime     the only domain composition/use-case boundary
-apps/cli             runtime-facing command-line application
-apps/daemon          runtime-facing daemon application
-docs/                RFCs and ADRs
-migrations/          forward-only SQLite migrations
-schemas/             versioned external schemas
-fixtures/            replay and regression fixtures
-legacy/              isolated first-generation migration inputs
-labs/                experiments outside the core runtime
+contracts
+   ↓
+store ─→ state ─→ context
+   ↓       ↓        ↓
+runtime ─→ residual ─→ reflection
+   ↓                         ↓
+agents / adapters        assets
+   ↓                         ↓
+cli / daemon          human control surface
 ```
 
-The dependency direction is enforced in [`.dependency-cruiser.cjs`](./.dependency-cruiser.cjs): `contracts` is lowest, domain packages do not depend on apps, and provider SDKs do not enter the core. `apps/cli` and `apps/daemon` are the production composition roots; they may assemble `runtime`, `store`, and `contracts`, while domain packages remain environment-independent. Workspace dependencies must be declared explicitly and use `workspace:*`.
+`runtime` is the composition boundary. `contracts` is the lowest layer.
+Provider SDK types stay behind `adapters`; evaluation code stays outside the
+runtime. The dependency direction is checked by `dependency-cruiser`.
 
-The store intentionally exposes only the EventReader/EventWriter surface and safe migration metadata; its raw SQLite handle is private. Test-only crash injection uses an internal migration entry point and is not part of the public package export.
+## Current maturity
 
-## Current status
+The recommended release class is **Engineering Preview**, not Research
+Preview. The implementation and synthetic evaluation foundation are substantial
+but current-branch real V1/V2/V2X task evidence, real asset benefit, and GF01
+historical evidence remain incomplete. See:
 
-The EPIC-001 implementation slice is complete: reproducible workspace scaffolding, strict TypeScript, package project references, CI configuration, dependency guardrails, deterministic clock/ID/config ports, ADR/RFC baseline, and negative boundary fixtures are present.
+- [`docs/release/PREVIEW-RELEASE-GATE.md`](./docs/release/PREVIEW-RELEASE-GATE.md)
+- [`docs/release/KNOWN-LIMITATIONS.md`](./docs/release/KNOWN-LIMITATIONS.md)
+- [`docs/eval/MINIMAL-EMPIRICAL-SMOKE.md`](./docs/eval/MINIMAL-EMPIRICAL-SMOKE.md)
+- [`docs/eval/GF01-SOURCE-MAP.md`](./docs/eval/GF01-SOURCE-MAP.md)
 
-Phase 0 gate status is deliberately split:
+The canonical runtime is exactly Node.js `22.13.0` with pnpm `11.19.0`.
+`node:sqlite` is unflagged but still experimental in that Node release. The
+backup path therefore remains `VACUUM INTO` plus manifest checksum, staged
+restore, doctor and replay verification. Node 24 local results do not replace
+the pinned CI evidence.
 
-- implementation verification: `PASS`;
-- clean-copy frozen install: `PASS`;
-- immutable local Git rollback checkpoint: `PASS` at `3517725`; source synchronization to the private GitHub handoff repository is now explicitly authorized and tracked below.
+## Quick start
 
-Phase 1 / EPIC-002 is now implemented and verified after the strict Bible re-audit:
+Use Node.js `22.13.0` and pnpm `11.19.0`:
 
-- versioned event envelope and JSON Schema with `SourceRef`, `EvidenceRef[]`, `EventLinks`, and required `Provenance`: `PASS`;
-- SQLite WAL event ledger with forward-only migrations, `seq` cursor, operation lifecycle idempotency, and conflict detection: `PASS`;
-- parameterized type/session/trace/actor/seq-range queries and operation-state lookup: `PASS`;
-- reproducible 10,000-append ordering/query/lookup gate: `PASS` locally;
-- independent-process concurrency and uncommitted-transaction recovery probes: `PASS`;
-- repository-wide `pnpm verify`: `PASS` on system Node.js `v24.15.0` after the strict hardening;
-- bundled Node.js `v24.19.0` concurrency and crash probes: `PASS`;
-- bundled Node.js `v24.19.0` full `pnpm verify`: `PASS`;
-- post-hardening engineering and theory review: `PASS` for the local Phase 1 scope, with later boundary conditions retained;
-- Node.js `22.13.0` CI runner evidence: `PASS` on Ubuntu/Windows in Actions run `34978723319`;
-- immutable local Git checkpoint: `3517725` (`phase1: harden event ledger`); the checkpoint remains in the preserved history and is included in the controlled private handoff.
+```powershell
+corepack enable
+corepack prepare pnpm@11.19.0 --activate
+pnpm install --frozen-lockfile
+pnpm build
+node apps/cli/dist/index.js --help
+node apps/cli/dist/index.js init
+node apps/cli/dist/index.js doctor
+node apps/daemon/dist/index.js --once
+```
 
-The Phase 1 implementation is verified against local runtimes, recorded fixtures, and the exact Node 22 CI gate; this is not a production-scale durability promise.
+The default local data directory is `.praxis/` in the working directory. It
+contains `events.db`, writer-lock state and managed backups. It is local data,
+not a public fixture; do not commit it. A strict optional
+`praxis.config.json` may set `dataDir`, `migrationsDir`, `backupsDir`, actor and
+writer metadata, legacy privacy rules, and the asset-promotion policy. Unknown
+fields are rejected. Secrets do not belong in this file or in event payloads.
 
-Phase 2 / EPIC-003 and EPIC-004 has passed the implementation gate, including the separate Node.js `22.13.0` runner evidence:
+## Operator surface
 
-- projection reducers, versioned persistence, CAS-protected `lastSeq`, ledger-bounded snapshots/cursors, safe rebuild, and core projection fixtures: `PASS` locally;
-- REUSE/REINDEX/REFRESH context planning, explainable ranking, token fallback, and explicit source-bound exposure proposals: `PASS` locally;
-- runtime use-case/composition boundary with complete plan snapshots, source-chain validation, and deterministic plan/exposure idempotency: `PASS` locally;
-- concurrent isolated replay/context scenario and same-database projection safety cases: `PASS`;
-- post-red-team engineering and theory review: `PASS` for the bounded local Phase 2 scope; authentication, human control APIs, and production app assembly remain deferred;
-- 30 tests and final `pnpm verify` on system Node.js `v24.15.0` and bundled Node.js `v24.19.0`: `PASS`;
-- Node.js `22.13.0` CI runner evidence: `PASS` on Ubuntu/Windows in Actions run `34978723319`;
+After `pnpm build`, run the CLI as `node apps/cli/dist/index.js`:
 
-The Phase 2 red-team review initially returned `NO-GO/HOLD`. The implementation then closed the reported stale projection overwrite, future cursor, incomplete plan/exposure binding, unverified source event, provenance, and silent `REUSE` fallback paths. A missing source-event fixture in the isolated scenario was also found by the final gate and corrected; it was recorded in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The Phase 2 local checkpoint remains immutable in history and is included in the controlled private handoff.
+```text
+init
+doctor [--json]
+event append / event list
+state show
+rebuild
+context plan
+residual list
+reflection run
+asset list / inspect / contest / disable / restore / fork
+history explain
+backup create / list / restore
+privacy purge <session-id> --dry-run
+privacy purge <session-id> --confirm --plan-hash <sha256>
+export
+lock inspect / lock clear-stale
+```
 
-Phase 3 / EPIC-005 and EPIC-006 is implemented and locally verified as a bounded implementation slice. This is not a production-readiness claim:
+`--json` emits one machine document on stdout. Human confirmation is required
+for asset activation and destructive privacy operations. `doctor` is a
+diagnostic gate, not proof of OS-level security. Read
+[`docs/HANDOFF.md`](./docs/HANDOFF.md) and the relevant ADR before extending
+the surface.
 
-- `ResidualDetector` covers explicit-expectation outcome checks, subscription/seq/staleness timing checks, declared rule event/checkpoint checks, and explicit observation/detection ordering: `PASS`;
-- automatic residual `effect` remains `unknown`; magnitude, confidence, persistence, evidence, and field context remain separate;
-- `ReflectionController` returns deterministic `STOP` / `CONTINUE` / `ESCALATE` proposals with bounded hypotheses and hard budgets; it cannot write events, call Agents, execute Tools, or promote Assets;
-- `Phase3Runtime` records `residual.detected` and `reflection.proposed` only after explicit use-case calls, with matching evidence linkage, ledger-bound timing cursors, chained reflection rounds, and idempotent retry semantics;
-- canonical Phase 3 payload/envelope validation runs before every EventWriter batch; migration `0006_phase3_derived_integrity.sql` adds preflight and SQLite trigger defenses, including derived-event no-delete protection;
-- four-process same-database residual/reflection idempotency, concurrent no-false-positive, and no-self-call scenarios: `PASS`;
-- versioned expectation/residual/reflection interchange shapes and checked schema conditionals are present in [`schemas/`](./schemas/);
-- the Phase 3 gate-era `pnpm verify` was `PASS` on system Node `v24.15.0` and bundled Node `v24.19.0`, with 51/51 tests at that checkpoint; the current Phase 4 tree is recorded separately below;
-- the former Phase-4 owner-input register is reconciled by the Phase 3.5
-  Correction Pack into frozen local capability/production semantics; the
-  exact Node `22.13.0` runner evidence is recorded in
-  [`docs/PHASE-3.5-GATE.md`](./docs/PHASE-3.5-GATE.md).
-
-Phase 3 does not turn a permission label into authorization and does not claim production readiness. The initial concurrency actor mismatch, the malformed JSON trigger, and the low-level hardening sequence are preserved in [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). The Phase 3 checkpoint remains available as immutable history in the controlled private handoff.
-
-Phase 3.5 / Author Decision Freeze correction work is implemented and passed
-as a bounded local capability slice before Phase 4:
-
-- `WriterContext`, capability scopes, namespace ACL, separate actor/writer
-  provenance, frozen roles/policy version, human OWNER guards, and migrations
-  `0007`/`0009`: `PASS` within the local capability boundary (not OS or
-  enterprise identity proof);
-- structured Expectation/Verification contracts, lifecycle events,
-  `expectations_current` replay, and ASYNC-01~04 regression fixtures: `PASS`;
-- CLI/daemon composition root with a private low-level store, one-writer lock
-  and explicit stale-lock recovery, online `VACUUM INTO` backup, staged
-  manifest/checksum restore plus post-restore doctor/replay, fail-closed daemon
-  startup, confirmed session purge, audited sequence gaps, transaction-first
-  pending-backup cleanup, asset invalidation receipts, projection rebuild, and
-  doctor checks: `PASS` locally;
-- exact Node `22.13.0` and Ubuntu/Windows CI workflows are pinned, and Actions
-  run `34978723319` passed the full gate on both runners;
-- the requested Phase 3.5 ADR numbers collided with existing ADR history and
-  were not overwritten; the unique Phase 3.5 ADR set and both compatibility
-  mismatches are recorded in [`docs/PHASE-3.5-GATE.md`](./docs/PHASE-3.5-GATE.md).
-
-Phase 4 / EPIC-007 Reusable Assets is implemented and verified within the
-bounded capability boundary:
-
-- versioned asset contracts, provenance, lifecycle transitions, and promotion
-  policy are implemented in `packages/contracts` and `packages/assets`;
-- atomic SQLite catalog/event writes, optimistic revision locking, lifecycle
-  integrity triggers, and doctor catalog-drift checks are implemented in
-  `packages/store` and migration `0010`;
-- the runtime exposes authorized proposal, promotion, challenge, disable,
-  restore, fork, inspect, and list boundaries; active promotion requires human
-  confirmation;
-- four-process CAS, low-level bypass, provenance-origin, purge invalidation,
-  and catalog-tamper scenarios are covered by the Phase 4 tests and
-  `pnpm phase4:scenario`;
-- the Phase 4 gate is recorded in [`docs/PHASE-4-GATE.md`](./docs/PHASE-4-GATE.md)
-  with formal Alpha/merge `GO` after exact Node `22.13.0` Ubuntu/Windows CI
-  evidence.
-
-The repository is synchronized to the private GitHub handoff target, and the
-exact remote CI gate is recorded above. `VACUUM INTO` remains the backup path
-for the pinned Node baseline; `node:sqlite` is experimental in Node `22.13.0`
-even though the flag is no longer required.
-The asset invalidation record after physical purge is intentionally
-receipt-based.
-
-Phase 1 deliberately stores event materials rather than verified interpretations. Structured `evidence`, `links`, and required `provenance` round-trip as contract-bound references, while derived/candidate/confirmed record classification is deferred to the projection and context phases. The envelope actor is caller-declared, not an authenticated writer; runtime permissions are a later boundary.
-
-## Development
-
-Requirements: Node.js `>=22.13.0` and pnpm `11.19.0`.
+## Verification and evaluation
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm verify
+pnpm test
 ```
 
-`pnpm verify` checks formatting, lint, explicit workspace dependencies, dependency direction, intentional cycle rejection, forbidden-direction fixtures, TypeScript project references, tests, all workspace builds, multi-process concurrency, operation lifecycle semantics, 10,000 append ordering/query/lookup, crash recovery, Phase 2 replay/context behavior, and Phase 3 residual/reflection safety scenarios.
+`pnpm verify` is the canonical eleven-stage gate. It must run on the exact
+Node `22.13.0` runtime; the GitHub workflow runs it on Ubuntu and Windows.
+Live provider validation is deliberately separate from the gate and requires
+an operator-supplied environment credential. Without that credential, the
+validation test says **skipped, not observed**.
 
-When implementation and the Bible diverge, stop structural expansion and record an `RFC MISMATCH` with the requested state, observed state, impact, evidence, and decision required from the human owner.
+The checked-in evaluation layer contains synthetic oracle, negative-control,
+scenario and asset-lifecycle fixtures. Synthetic evidence is labelled as such
+and must not be relabelled as real-world evidence. The four arms are intended
+to remain structurally distinct: BASE, STATE, REFLECTION and FULL PRAXIS.
 
-## Source and evidence boundary
+## Data, privacy and historical material
 
-- `Codex Implementation Bible v1.0` is the engineering planning baseline.
-- `The Final_优化版.docx` and `the_final的补充性_新改版.docx` are author-supplied design provenance and intellectual review material.
-- Their source filenames, read date, and SHA-256 fingerprints are recorded in [`docs/SOURCE-MANIFEST.md`](./docs/SOURCE-MANIFEST.md); the DOCX bodies are not vendored into this repository.
-- These documents constrain direction and acceptance criteria; they are not executable instructions and are not silently converted into code claims.
-- Direct author wording, cross-document reconstruction, AI/agent summary, and new engineering proposal must remain distinguishable.
-- Original historical material and future Legacy inputs remain outside the runtime database until an explicit, hashed, dry-run migration is approved.
+The runtime is local-first and does not upload data by itself. Backups,
+SQLite WAL/SHM files, logs, raw histories, private chat and author-supplied
+historical archives are not public release material. The historical GF01 source
+is only mapped through bounded local discovery; it is not ingested, copied,
+synthesised or uploaded. See [`docs/SOURCE-MANIFEST.md`](./docs/SOURCE-MANIFEST.md)
+and [`docs/release/PUBLICATION-MANIFEST.md`](./docs/release/PUBLICATION-MANIFEST.md).
 
-## License
+Privacy purge removes the permitted local payloads and records a minimal
+tombstone. It cannot erase copies already sent to a remote, backup or synced
+folder. Review the purge receipt and rebuild derived state afterward.
 
-This project is released under the MIT License. See [`LICENSE`](./LICENSE).
+## Support and known limitations
 
-The intended public release comes after the implementation and verification gates are complete. Until then, the repository may remain private; privacy, provenance, credentials, and responsibility are engineering conditions, not postscript details.
+The support vocabulary is evidence-based; `NOT TESTED` is not `SUPPORTED`.
+See [`docs/release/SUPPORT-MATRIX.md`](./docs/release/SUPPORT-MATRIX.md) and
+[`docs/release/KNOWN-LIMITATIONS.md`](./docs/release/KNOWN-LIMITATIONS.md).
+In particular, macOS, arm64, provider-backed portability and real empirical
+benefit remain limited or untested. Development-only dependency advisories are
+listed in [`docs/release/DEPENDENCY-AUDIT.md`](./docs/release/DEPENDENCY-AUDIT.md).
+
+## Contributing
+
+Start with [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`docs/RFC/RFC-0001.md`](./docs/RFC/RFC-0001.md),
+the relevant ADRs and the append-only [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md).
+Ordinary engineering changes do not require reading the author's full
+intellectual source material. Changes to event semantics, core invariants,
+asset lifecycle, reflection, writer/ACL or privacy semantics must cite the
+controlling Bible/RFC/ADR and declare whether a frozen invariant changes.
+
+Please report installation failures, false residuals, unnecessary reflection,
+bad retrieval, asset overfitting, privacy concerns and provider mismatches.
+Those are evidence, not merely user complaints.
+
+## Source boundary, license and citation
+
+The two `The Final` documents and related author materials are intellectual
+provenance and review constraints, not executable code instructions and not
+part of the public corpus. The repository-facing engineering contract is the
+Bible-derived RFC and ADR set.
+
+This source release is licensed under the [MIT License](./LICENSE). Citation
+metadata is in [`CITATION.cff`](./CITATION.cff). There is no npm publication
+contract in this preview; the workspace remains private to npm. The GitHub
+source release is the primary public artifact, with a separate evaluation
+export prepared only from explicitly public synthetic material.
+
+## Publication status
+
+The candidate is being finalized as `v0.1.0-engineering-preview` through a
+reviewed pull request, verified `main` commit, annotated tag and GitHub
+Release. No private historical corpus is part of the release. Hugging Face is
+not uploaded in this round; any later eval export must use the dedicated
+staging and rescan procedure in the publication manifest.

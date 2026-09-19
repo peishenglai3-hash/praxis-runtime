@@ -3,6 +3,14 @@ const { join } = require("node:path");
 module.exports = {
   forbidden: [
     {
+      name: "runtime-does-not-depend-on-evals",
+      severity: "error",
+      comment:
+        "Phase 6V / ADR-0015. The evaluator depends on the runtime; the runtime must never depend on the evaluator. An evaluator the subject can reach is an evaluator the subject can influence, and every result in evals/ would be void. `evals` is a from-rule root only (see the invocation in package.json), so nothing under packages/ or apps/ should ever resolve into it.",
+      from: { path: "^(packages|apps)/" },
+      to: { path: "^evals/" },
+    },
+    {
       name: "no-circular",
       severity: "error",
       from: {},
@@ -64,6 +72,16 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/context/" },
       to: { path: "^packages/residual/" },
+    },
+    {
+      name: "adapters-cannot-reach-the-store-or-runtime",
+      severity: "error",
+      comment:
+        "Phase 6B / EPIC-010. An adapter that cannot import the store cannot write to it, and one that cannot import the runtime cannot promote through it. That is a stronger guarantee than any runtime check, and it is the one the EPIC-010 gate asks for. `adapters` is deliberately absent from `core-does-not-depend-on-provider-sdks`: it is where a provider SDK is allowed to live.",
+      from: { path: "^packages/adapters/" },
+      to: {
+        path: "^packages/(store|state|context|residual|reflection|assets|agents|runtime)/",
+      },
     },
     {
       name: "core-does-not-depend-on-provider-sdks",

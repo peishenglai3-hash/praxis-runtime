@@ -31,7 +31,12 @@ import type {
   LedgerSeqGap,
   JsonObject,
   JsonValue,
+  LegacyAnomaly,
+  LegacyMigrationPlan,
+  LegacyMigrationReport,
+  LegacyPrivacyRule,
   ProjectionPersistence,
+  ProjectionStateRecord,
   ReusableAsset,
   WriterContext,
 } from "@praxis/contracts";
@@ -65,6 +70,7 @@ import type {
   ContextExposureProposal,
 } from "@praxis/context";
 import type {
+  ReflectionBudget,
   ReflectionEvidenceDelta,
   ReflectionInput,
   ReflectionResult,
@@ -96,6 +102,10 @@ import type { CatchUpResult, Projection } from "@praxis/state";
 import type {
   BackupManifest,
   BackupOptions,
+  LegacyImportRecordInput,
+  LegacyImportRecordResult,
+  LegacyImportRunRecord,
+  LegacyIntegrityIssue,
   ManagedBackup,
   PurgeCleanupResult,
   PrivacyPurgeOptions,
@@ -104,10 +114,53 @@ import type {
   StoreHealth,
 } from "@praxis/store";
 
+import {
+  buildLegacyImportEvents,
+  buildLegacyMigrationPlan,
+  buildLegacyMigrationReport,
+  legacyRootLabels,
+  legacySessionId,
+  NodeLegacyFileSystem,
+  withRoot,
+  writeLegacyArchive,
+} from "./legacy/index.js";
+import type { LegacyFileSystem } from "./legacy/index.js";
+
 export interface ContextExposureTiming {
   occurredAt?: string;
   observedAt?: string;
   recordedAt?: string;
+}
+
+/**
+ * Event types that only a dedicated runtime use case may produce.
+ *
+ * The list lives here rather than in each caller so that the ledger's
+ * "record through the use case, not through the generic append" rule has one
+ * definition, and a command-line or test caller can ask the same question the
+ * runtime asks instead of repeating the vocabulary and drifting from it.
+ */
+export const runtimeReservedEventTypes: readonly string[] = [
+  "expectation.registered",
+  "expectation.created",
+  "expectation.updated",
+  "expectation.cancelled",
+  "expectation.status.changed",
+  "verification.requested",
+  "verification.completed",
+  "residual.detected",
+  "reflection.proposed",
+  "asset.candidate",
+  "asset.validated",
+  "asset.activate",
+  "asset.contest",
+  "asset.disable",
+  "asset.restore",
+  "asset.fork",
+];
+
+export function isRuntimeReservedEventType(type: string): boolean {
+  return runtimeReservedEventTypes.includes(type);
 }
 
 export interface Phase2RuntimePorts {
@@ -145,23 +198,7 @@ export class Phase2Runtime {
         "context events must be recorded through the runtime context use-cases",
       );
     }
-    if (
-      event.type === "expectation.registered" ||
-      event.type === "expectation.created" ||
-      event.type === "expectation.updated" ||
-      event.type === "expectation.cancelled" ||
-      event.type === "expectation.status.changed" ||
-      event.type === "verification.requested" ||
-      event.type === "verification.completed" ||
-      event.type === "residual.detected" ||
-      event.type === "reflection.proposed" ||
-      event.type === "asset.validated" ||
-      event.type === "asset.activate" ||
-      event.type === "asset.contest" ||
-      event.type === "asset.disable" ||
-      event.type === "asset.restore" ||
-      event.type === "asset.fork"
-    ) {
+    if (isRuntimeReservedEventType(event.type)) {
       throw new Error(
         "domain events must be recorded through their runtime use-cases",
       );
@@ -524,6 +561,14 @@ export interface RuntimeStore
   finalizePendingPurge(writer: WriterContext): PurgeCleanupResult;
   getPurgedSeqRanges(): LedgerSeqGap[];
   getHealth(): StoreHealth;
+  recordLegacyImport(
+    input: LegacyImportRecordInput,
+    writer: WriterContext,
+  ): LegacyImportRecordResult;
+  listLegacyImportRuns(): LegacyImportRunRecord[];
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null;
+  getLegacyAnomalies(runId: string): LegacyAnomaly[];
+  getLegacyIntegrityIssues(): LegacyIntegrityIssue[];
 }
 
 export interface RuntimePrivacyPurgeResult extends PrivacyPurgeResult {
@@ -592,6 +637,74 @@ export class Phase3Runtime extends Phase2Runtime {
   runReflection(input: ReflectionInput): ReflectionResult {
     validateReflectionEvidenceDelta(this.#phase3Ports, input.evidenceDelta);
     return this.reflectionController.reflect(input);
+  }
+
+  /**
+   * Build a reflection input from a residual that is already in the ledger.
+   *
+   * The assembly lives here rather than in a caller so that the use-case
+   * boundary stays in the runtime: a caller names the recorded residual and
+   * supplies a budget, and the runtime reads the ledger to decide what the
+   * evidence delta actually is. A caller cannot hand in a residual that was
+   * never recorded, and cannot claim evidence it does not name.
+   */
+  reflectionInputForResidual(
+    residualEventId: string,
+    options: {
+      budget?: Partial<ReflectionBudget>;
+      evidenceEventIds?: readonly string[];
+    } = {},
+  ): ReflectionInput {
+    const record = this.#phase3Ports.events.getById(residualEventId);
+    if (record === null || record.type !== "residual.detected") {
+      throw new Error(`no recorded residual event matches ${residualEventId}`);
+    }
+    const residual = residualFromPayload(record.payload);
+    const budget: ReflectionBudget = {
+      maxDepth: 2,
+      maxHypotheses: 3,
+      maxToolCalls: 0,
+      maxElapsedMs: 30_000,
+      ...options.budget,
+    };
+    if (
+      budget.maxDepth < 1 ||
+      budget.maxHypotheses < 1 ||
+      budget.maxToolCalls < 0 ||
+      budget.maxElapsedMs < 1
+    ) {
+      throw new Error("reflection budget values are out of range");
+    }
+
+    const evidenceRecords = (options.evidenceEventIds ?? []).map((id) => {
+      const evidenceRecord = this.#phase3Ports.events.getById(id);
+      if (evidenceRecord === null) {
+        throw new Error(`no recorded event matches ${id}`);
+      }
+      return evidenceRecord;
+    });
+    if (evidenceRecords.some((item) => item.seq < record.seq)) {
+      throw new Error(
+        "reflection evidence must follow the residual it is evidence for",
+      );
+    }
+
+    const toSeq = evidenceRecords.reduce(
+      (highest, item) => Math.max(highest, item.seq),
+      record.seq,
+    );
+    return {
+      residual,
+      budget,
+      evidenceDelta: {
+        fromSeq: record.seq,
+        toSeq,
+        evidence: evidenceRecords.map((item) => ({
+          eventId: item.id,
+          origin: item.provenance.origin,
+        })),
+      },
+    };
   }
 
   recordExpectation(expectation: Expectation): EventAppendResult {
@@ -2037,6 +2150,126 @@ function referencePayload(reference: {
   return { kind: reference.kind, id: reference.id, value: reference.value };
 }
 
+/**
+ * Read a recorded residual payload back into a `Residual`.
+ *
+ * The mapping is the inverse of `residualPayload`. It is deliberately strict:
+ * a payload that does not carry the shape the writer produced is an error
+ * rather than something to coerce, so a corrupted record cannot quietly become
+ * a reflection input.
+ */
+function residualFromPayload(payload: JsonValue): Residual {
+  const object = asJsonObject(payload);
+  if (object === null) {
+    throw new Error("recorded residual payload is not an object");
+  }
+  const readString = (key: string): string => {
+    const value = object[key];
+    if (typeof value !== "string" || value.length === 0) {
+      throw new Error(`recorded residual payload is missing ${key}`);
+    }
+    return value;
+  };
+  const readReference = (
+    key: string,
+  ): { kind: string; id: string; value: JsonValue } => {
+    const reference = asJsonObject(object[key] ?? null);
+    if (reference === null) {
+      throw new Error(`recorded residual payload is missing ${key}`);
+    }
+    return {
+      kind: String(reference["kind"]),
+      id: String(reference["id"]),
+      value: reference["value"] ?? null,
+    };
+  };
+  const field = asJsonObject(object["field"] ?? null);
+  if (field === null) {
+    throw new Error("recorded residual payload is missing field context");
+  }
+  const magnitude = object["magnitude"];
+
+  return {
+    id: readString("residualId"),
+    kind: readString("kind") as Residual["kind"],
+    ...(typeof object["baselineId"] === "string"
+      ? { baselineId: object["baselineId"] }
+      : {}),
+    ...(object["baseline"] === undefined
+      ? {}
+      : { baseline: readReference("baseline") }),
+    observed: readReference("observed"),
+    field: {
+      ...(typeof field["taskType"] === "string"
+        ? { taskType: field["taskType"] }
+        : {}),
+      externalVerification: String(field["externalVerification"]) as never,
+      consequence: String(field["consequence"]) as never,
+      reversibility: String(field["reversibility"]) as never,
+      feedbackLatency: String(field["feedbackLatency"]) as never,
+      actors: (Array.isArray(field["actors"]) ? field["actors"] : []).map(
+        (actor) => {
+          const item = asJsonObject(actor as JsonValue);
+          if (item === null) throw new Error("residual actor is not an object");
+          return { type: String(item["type"]), id: String(item["id"]) };
+        },
+      ) as never,
+      explicitRules: (Array.isArray(field["explicitRules"])
+        ? field["explicitRules"]
+        : []
+      ).map((rule) => {
+        const item = asJsonObject(rule as JsonValue);
+        if (item === null) throw new Error("residual rule is not an object");
+        return {
+          id: String(item["id"]),
+          ...(Array.isArray(item["requiredEventTypes"])
+            ? {
+                requiredEventTypes: (
+                  item["requiredEventTypes"] as JsonValue[]
+                ).map(String),
+              }
+            : {}),
+          ...(Array.isArray(item["requiredCheckpoints"])
+            ? {
+                requiredCheckpoints: (
+                  item["requiredCheckpoints"] as JsonValue[]
+                ).map(String),
+              }
+            : {}),
+        };
+      }) as never,
+    },
+    ...(typeof magnitude === "number" ? { magnitude } : {}),
+    confidence: Number(object["confidence"] ?? 0),
+    persistence: String(object["persistence"]) as Residual["persistence"],
+    effect: String(object["effect"]) as Residual["effect"],
+    evidence: (Array.isArray(object["evidence"]) ? object["evidence"] : []).map(
+      (item) => {
+        const reference = asJsonObject(item as JsonValue);
+        if (reference === null) {
+          throw new Error("residual evidence is not an object");
+        }
+        return {
+          ...(typeof reference["eventId"] === "string"
+            ? { eventId: reference["eventId"] }
+            : {}),
+          ...(typeof reference["assetId"] === "string"
+            ? { assetId: reference["assetId"] }
+            : {}),
+          ...(typeof reference["artifactHash"] === "string"
+            ? { artifactHash: reference["artifactHash"] }
+            : {}),
+          origin: String(reference["origin"]) as EvidenceOrigin,
+          ...(typeof reference["exposureInfluenced"] === "boolean"
+            ? { exposureInfluenced: reference["exposureInfluenced"] }
+            : {}),
+        };
+      },
+    ),
+    detectedAt: readString("detectedAt"),
+  };
+}
+
 function fieldContextPayload(residual: Residual): JsonObject {
   const field = residual.field;
   return {
@@ -2673,6 +2906,266 @@ export class WriterOwnershipLock {
   }
 }
 
+/**
+ * The Legacy import boundary. The composition root depends on this contract so
+ * a source-level test store and the packaged SQLite store remain structurally
+ * compatible without exposing the database handle.
+ */
+export interface LegacyImportStore {
+  recordLegacyImport(
+    input: LegacyImportRecordInput,
+    writer: WriterContext,
+  ): LegacyImportRecordResult;
+  listLegacyImportRuns(): LegacyImportRunRecord[];
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null;
+  getLegacyAnomalies(runId: string): LegacyAnomaly[];
+}
+
+export type Phase5RuntimePorts = Phase4RuntimePorts & {
+  legacy: LegacyImportStore;
+};
+
+/**
+ * The frozen writer every imported record is registered under.
+ *
+ * An import writes `legacy.*` events only. The role is confined to that
+ * namespace, so the importer cannot propose, validate or activate an asset —
+ * a first-generation pattern can never reach `validated` or `active` through
+ * the import path.
+ */
+export const legacyImporterWriterContext: WriterContext = Object.freeze({
+  writerId: "system:legacy-importer",
+  kind: "importer",
+  role: "IMPORTER",
+  authn: "system",
+  scopes: Object.freeze([
+    "system.migrate",
+    "event.read",
+  ]) as unknown as WriterContext["scopes"],
+  policyVersion: 1,
+}) as WriterContext;
+
+export interface LegacyImportPlanRequest {
+  roots: string[];
+  privacyRules?: LegacyPrivacyRule[];
+  fileSystem?: LegacyFileSystem;
+}
+
+export interface LegacyImportApplyRequest {
+  plan: LegacyMigrationPlan;
+  /** The hash of the plan the operator actually reviewed. */
+  planHash: string;
+  archiveRoot?: string;
+}
+
+export interface LegacyImportApplication {
+  runId: string;
+  status: LegacyMigrationReport["status"];
+  inserted: boolean;
+  appendedEvents: number;
+  lastSeq: number;
+  report: LegacyMigrationReport;
+  /**
+   * `true` when the corpus is already in the ledger under a different plan.
+   * Nothing was written; the caller is told so instead of being handed a
+   * silent success.
+   */
+  planDiffersFromRecorded: boolean;
+  /**
+   * Filled in by the composition root, which catches the core projections up
+   * after a successful import so the derived state does not silently lag the
+   * records that were just written.
+   */
+  projectionCatchUp?: CatchUpResult[];
+}
+
+export class LegacyImportError extends Error {
+  readonly code:
+    | "LEGACY_PLAN_MISMATCH"
+    | "LEGACY_IMPORT_UNCONFIRMED"
+    | "LEGACY_ARCHIVE_UNCONFIGURED";
+
+  constructor(code: LegacyImportError["code"], message: string) {
+    super(message);
+    this.name = "LegacyImportError";
+    this.code = code;
+  }
+}
+
+/**
+ * Phase 5 is the audited Legacy migration use-case boundary.
+ *
+ * A dry run reads the corpus and returns a hashed plan without writing
+ * anything. Applying an import requires the hash of the plan that was
+ * reviewed, so a corpus or rule-set change invalidates the confirmation
+ * before any record is written. Imported events are registered under the
+ * confined importer writer, never under the caller's identity.
+ */
+/** Phase 5 adds no constructor options beyond the Phase 4 set. */
+export type Phase5RuntimeOptions = Phase4RuntimeOptions;
+
+export class Phase5Runtime extends Phase4Runtime {
+  #phase5Ports: Phase5RuntimePorts;
+
+  constructor(
+    phase5Ports: Phase5RuntimePorts,
+    options: Phase5RuntimeOptions = {},
+  ) {
+    super(phase5Ports, options);
+    this.#phase5Ports = phase5Ports;
+  }
+
+  /**
+   * A `legacy.*` record is only ever the result of a reviewed import. Allowing
+   * a direct append would let a caller record imported material without a run,
+   * an inventory, a corpus fingerprint or an archive, so the generic path is
+   * closed here as well as in the ledger trigger.
+   */
+  override appendEvent(event: EventEnvelope): EventAppendResult {
+    if (event.type.startsWith("legacy.")) {
+      throw new Error(
+        "legacy records must be registered through applyLegacyImport",
+      );
+    }
+    return super.appendEvent(event);
+  }
+
+  planLegacyImport(request: LegacyImportPlanRequest): LegacyMigrationPlan {
+    if (request.roots.length === 0) {
+      throw new LegacyImportError(
+        "LEGACY_PLAN_MISMATCH",
+        "a legacy import plan requires at least one source root",
+      );
+    }
+    return buildLegacyMigrationPlan({
+      roots: request.roots,
+      fileSystem: request.fileSystem ?? new NodeLegacyFileSystem(),
+      ...(request.privacyRules === undefined
+        ? {}
+        : { privacyRules: request.privacyRules }),
+      now: () => new Date(this.nowIso()),
+    });
+  }
+
+  applyLegacyImport(
+    request: LegacyImportApplyRequest,
+  ): LegacyImportApplication {
+    if (request.planHash !== request.plan.planHash) {
+      throw new LegacyImportError(
+        "LEGACY_PLAN_MISMATCH",
+        "the confirmed plan hash does not match the reviewed plan; re-run the dry run",
+      );
+    }
+    if (request.archiveRoot === undefined) {
+      throw new LegacyImportError(
+        "LEGACY_ARCHIVE_UNCONFIGURED",
+        "applying a legacy import requires an archive root outside the repository",
+      );
+    }
+
+    const startedAt = this.nowIso();
+    const archive = writeLegacyArchive({
+      archiveRoot: request.archiveRoot,
+      sourceFingerprint: request.plan.sourceFingerprint,
+      createdAt: startedAt,
+      entries: this.#readArchiveEntries(request.plan),
+      // The plan names the digests of the corpus it was derived from, so the
+      // archive is proven to hold that corpus rather than merely asserted to.
+      expectedDigests: new Map(
+        request.plan.inventory.entries.map((entry) => [
+          entry.relativePath,
+          entry.sha256,
+        ]),
+      ),
+    });
+
+    const events = buildLegacyImportEvents({
+      plan: request.plan,
+      actor: { type: "system", id: "legacy-importer" },
+      recordedAt: startedAt,
+      archiveEntryCount: archive.entries.length,
+    });
+
+    const completedAt = this.nowIso();
+    const report = buildLegacyMigrationReport({
+      plan: request.plan,
+      status: "applied",
+      archive,
+      startedAt,
+      completedAt,
+    });
+
+    const recorded = this.#phase5Ports.legacy.recordLegacyImport(
+      {
+        report,
+        inventory: request.plan.inventory.entries,
+        anomalies: request.plan.inventory.anomalies,
+        events,
+      },
+      legacyImporterWriterContext,
+    );
+
+    return {
+      runId: recorded.run.runId,
+      status: recorded.run.status,
+      inserted: recorded.inserted,
+      appendedEvents: recorded.appendedEvents,
+      lastSeq: recorded.lastSeq,
+      report: recorded.run,
+      planDiffersFromRecorded: recorded.planDiffersFromRecorded,
+    };
+  }
+
+  listLegacyImportRuns(): LegacyImportRunRecord[] {
+    return this.#phase5Ports.legacy.listLegacyImportRuns();
+  }
+
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null {
+    return this.#phase5Ports.legacy.getLegacyImportRun(runId);
+  }
+
+  getLegacyImportAnomalies(runId: string): LegacyAnomaly[] {
+    return this.#phase5Ports.legacy.getLegacyAnomalies(runId);
+  }
+
+  /** Purge scope for one imported corpus. */
+  legacyImportSessionId(sourceFingerprint: string): string {
+    return legacySessionId(sourceFingerprint);
+  }
+
+  #readArchiveEntries(
+    plan: LegacyMigrationPlan,
+  ): Array<{ relativePath: string; bytes: Uint8Array }> {
+    const fileSystem = new NodeLegacyFileSystem();
+    const roots = plan.root.split(",");
+    const labels = legacyRootLabels(roots);
+    // The archive holds bytes, not a summary of bytes, so a path the privacy
+    // rules excluded has to be excluded here too. Copying it would make the
+    // exclusion nominal: the ledger would report the rule while the material
+    // the rule matched sat in the archive and was named in its manifest.
+    //
+    // An exclusion is recorded in `withRoot` spelling, so membership is
+    // decided with the same function the scanner used. Comparing against the
+    // archive's own `label/...` spelling would silently match nothing, because
+    // the label is a sanitised basename and the exclusion carries the root.
+    const excluded = new Set(
+      plan.exclusions.map((exclusion) => exclusion.relativePath),
+    );
+    const entries: Array<{ relativePath: string; bytes: Uint8Array }> = [];
+    for (const [index, root] of roots.entries()) {
+      const label = labels[index] ?? `root-${index}`;
+      for (const file of fileSystem.readSourceFiles(root)) {
+        if (excluded.has(withRoot(root, file.relativePath))) continue;
+        entries.push({
+          relativePath: `${label}/${file.relativePath}`,
+          bytes: file.bytes,
+        });
+      }
+    }
+    return entries;
+  }
+}
+
 export interface RuntimeCompositionOptions {
   store: RuntimeStore;
   actor: ActorRef;
@@ -2682,6 +3175,12 @@ export interface RuntimeCompositionOptions {
   ids?: IdGenerator;
   lockPath?: string;
   lock?: WriterOwnershipLock;
+  /**
+   * Operator-supplied promotion thresholds. Passed through to the asset
+   * policy; omitted values keep the package default rather than a value this
+   * boundary invents.
+   */
+  promotionPolicy?: AssetPromotionPolicyConfig;
 }
 
 export interface DoctorCheck {
@@ -2701,7 +3200,7 @@ export class RuntimeCompositionRoot {
   readonly #store: RuntimeStore;
   readonly #lock: WriterOwnershipLock;
   readonly #writer: WriterContext;
-  readonly #runtime: Phase4Runtime;
+  readonly #runtime: Phase5Runtime;
   readonly #mode: RuntimeMode;
   readonly #clock: Clock;
   #started = false;
@@ -2717,14 +3216,20 @@ export class RuntimeCompositionRoot {
       new WriterOwnershipLock(
         options.lockPath ?? `${options.store.filename}.writer.lock`,
       );
-    const runtime = new Phase4Runtime({
-      events: this.#store,
-      projections: this.#store,
-      clock: this.#clock,
-      ids: options.ids ?? { next: () => randomUUID() },
-      actor: freezeActor(options.actor),
-      writer: this.#writer,
-    });
+    const runtime = new Phase5Runtime(
+      {
+        events: this.#store,
+        projections: this.#store,
+        clock: this.#clock,
+        ids: options.ids ?? { next: () => randomUUID() },
+        actor: freezeActor(options.actor),
+        writer: this.#writer,
+        legacy: this.#store,
+      },
+      options.promotionPolicy === undefined
+        ? {}
+        : { promotionPolicy: options.promotionPolicy },
+    );
     this.#runtime = new Proxy(runtime, {
       get: (target, property) => {
         const value = Reflect.get(target, property, target);
@@ -2741,7 +3246,7 @@ export class RuntimeCompositionRoot {
     return this.#writer;
   }
 
-  get runtime(): Phase4Runtime {
+  get runtime(): Phase5Runtime {
     return this.#runtime;
   }
 
@@ -2805,6 +3310,40 @@ export class RuntimeCompositionRoot {
     );
   }
 
+  /** The projection names this build can rebuild, in registration order. */
+  coreProjectionNames(): string[] {
+    return createCoreProjections().map((projection) => projection.name);
+  }
+
+  /**
+   * Rebuild one registered projection by name.
+   *
+   * Bible section 13 specifies `praxis rebuild [--projection <name>]`. The
+   * argument only means something if a single projection can actually be
+   * rebuilt, so an unknown name is refused with the set that would have
+   * worked, rather than accepted and ignored: silently rebuilding everything
+   * would answer a different question than the one the operator asked, and
+   * every projection costs a full ledger replay.
+   */
+  rebuildProjection(name: string): CatchUpResult {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "projection rebuild");
+    const projections = createCoreProjections();
+    const projection = projections.find((candidate) => candidate.name === name);
+    if (projection === undefined) {
+      const error = new Error(`unknown projection ${name}`);
+      Object.assign(error, {
+        code: "UNKNOWN_PROJECTION",
+        details: {
+          requested: name,
+          available: projections.map((candidate) => candidate.name),
+        },
+      });
+      throw error;
+    }
+    return this.runtime.rebuild(projection);
+  }
+
   createManagedBackup(
     destinationPath: string,
     options: { id?: string; createdAt?: number } = {},
@@ -2862,6 +3401,174 @@ export class RuntimeCompositionRoot {
     this.assertStarted();
     authorizeWriterScope(this.writer, "event.read", "list assets");
     return this.#store.listAssets();
+  }
+
+  /**
+   * Imported first-generation patterns, as the material an explicit human
+   * conversion works from.
+   *
+   * Bible section 12 and issue 073 say 「旧 patterns → candidate asset，不自动
+   * active」. The importer's frozen `IMPORTER` writer holds no `asset.*` scope
+   * at all, so a pattern lands in the ledger as inferred material and stops
+   * there. This method is the read half of the second half of that
+   * requirement: turning one into a candidate asset is a separate human action
+   * (`convertLegacyPattern`) that goes through the Phase 4 Asset Service under
+   * a writer that actually holds `asset.propose`. See INC-001 section 8.
+   */
+  listLegacyPatterns(limit = 200): Array<{
+    eventId: string;
+    seq: number;
+    patternId: string;
+    trigger: string;
+    action: string;
+    confidence: number;
+    sourceFingerprint: string;
+    origin: string;
+  }> {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "list imported patterns");
+    return this.#store
+      .query({ type: "legacy.pattern.imported", limit })
+      .map((record) => {
+        const payload = (record.payload ?? {}) as Record<string, unknown>;
+        return {
+          eventId: record.id,
+          seq: record.seq,
+          patternId: String(payload["patternId"] ?? ""),
+          trigger: String(payload["trigger"] ?? ""),
+          action: String(payload["action"] ?? ""),
+          confidence: Number(payload["confidence"] ?? 0),
+          sourceFingerprint: String(payload["sourceFingerprint"] ?? ""),
+          origin: record.provenance.origin,
+        };
+      });
+  }
+
+  /**
+   * Convert one imported pattern into a candidate asset.
+   *
+   * This is the explicit human step INC-001 section 8 froze. The importer
+   * never holds `asset.*`; the conversion runs under `asset.propose` and
+   * carries the pattern's own provenance into the new asset's evidence rather
+   * than upgrading it — an inferred pattern must not become a directly
+   * observed one by being copied. The asset starts at `candidate`, so
+   * activation still requires the full Phase 4 promotion policy and a human
+   * confirmation. Nothing here can reach `active` on its own.
+   */
+  convertLegacyPattern(input: {
+    patternEventId: string;
+    assetId: string;
+    reason: string;
+    at: string;
+  }): EventAppendResult {
+    this.assertStarted();
+    authorizeWriterScope(
+      this.writer,
+      "asset.propose",
+      "convert an imported pattern into a candidate asset",
+    );
+    const record = this.inspectEvent(input.patternEventId);
+    if (record === null || record.type !== "legacy.pattern.imported") {
+      throw new Error(
+        `no imported pattern event matches ${input.patternEventId}`,
+      );
+    }
+    const payload = (record.payload ?? {}) as Record<string, unknown>;
+    return this.runtime.proposeAsset({
+      id: input.assetId,
+      kind: "pattern",
+      version: "1.0.0",
+      body: {
+        patternId: String(payload["patternId"] ?? ""),
+        trigger: String(payload["trigger"] ?? ""),
+        action: String(payload["action"] ?? ""),
+        sourceFingerprint: String(payload["sourceFingerprint"] ?? ""),
+        sourceEventId: record.id,
+        conversionReason: input.reason,
+      },
+      derivedFrom: [{ eventId: record.id, origin: record.provenance.origin }],
+      createdAt: input.at,
+    });
+  }
+
+  /**
+   * Dry run: read the corpus and return a hashed plan. Writes nothing.
+   *
+   * `system.migrate` is required, so an observer or analysis writer cannot use
+   * the importer as a read side channel into an arbitrary directory.
+   */
+  planLegacyImport(request: LegacyImportPlanRequest): LegacyMigrationPlan {
+    this.assertStarted();
+    authorizeWriterScope(
+      this.writer,
+      "system.migrate",
+      "legacy import dry run",
+    );
+    return this.runtime.planLegacyImport(request);
+  }
+
+  /**
+   * Apply a reviewed plan. The confirmed hash must match the plan, which
+   * invalidates a confirmation whenever the corpus or the rule set changed.
+   */
+  applyLegacyImport(
+    request: LegacyImportApplyRequest,
+  ): LegacyImportApplication {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "system.migrate", "legacy import");
+    const application = this.runtime.applyLegacyImport(request);
+    if (!application.inserted) return application;
+    // Mirroring the confirmed-purge behaviour: a use case that appends a batch
+    // of records also brings the derived state forward, rather than leaving a
+    // lag that doctor would immediately, and correctly, report.
+    return {
+      ...application,
+      projectionCatchUp: this.runtime.catchUpCoreProjections(),
+    };
+  }
+
+  listLegacyImportRuns(): LegacyImportRunRecord[] {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "list legacy import runs");
+    return this.runtime.listLegacyImportRuns();
+  }
+
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null {
+    this.assertStarted();
+    authorizeWriterScope(
+      this.writer,
+      "event.read",
+      "inspect legacy import run",
+    );
+    if (runId.length < 1) throw new Error("run id is required");
+    return this.runtime.getLegacyImportRun(runId);
+  }
+
+  getLegacyImportAnomalies(runId: string): LegacyAnomaly[] {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "inspect legacy anomalies");
+    if (runId.length < 1) throw new Error("run id is required");
+    return this.runtime.getLegacyImportAnomalies(runId);
+  }
+
+  legacyImportSessionId(sourceFingerprint: string): string {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "event.read", "legacy purge scope");
+    return this.runtime.legacyImportSessionId(sourceFingerprint);
+  }
+
+  /**
+   * Read one projection's current state. This is a read of derived data: the
+   * ledger remains the source of truth, and a stale projection is reported as
+   * stale rather than silently treated as current.
+   */
+  getProjectionState(projectionName: string): ProjectionStateRecord | null {
+    this.assertStarted();
+    authorizeWriterScope(this.writer, "state.read", "projection read");
+    if (projectionName.length < 1) {
+      throw new Error("projection name is required");
+    }
+    return this.#store.getProjectionState(projectionName);
   }
 
   exportEvents(query: EventQuery = {}): EventRecord[] {
@@ -2972,7 +3679,10 @@ export class RuntimeCompositionRoot {
           health.managedBackups.invalidChecksums.length === 0
             ? "pass"
             : "fail",
-        message: "managed backup paths and checksums are checked",
+        message:
+          health.managedBackups.unfinalizedReservations.length === 0
+            ? "managed backup paths and checksums are checked"
+            : `managed backup paths and checksums are checked; ${health.managedBackups.unfinalizedReservations.length} reservation(s) have no recorded digest yet`,
         details: health.managedBackups,
       },
       {
@@ -3024,6 +3734,16 @@ export class RuntimeCompositionRoot {
         details: projection as unknown as Record<string, unknown>,
       });
     }
+    const legacyIssues = this.#store.getLegacyIntegrityIssues();
+    checks.push({
+      name: "legacy-import-integrity",
+      status: legacyIssues.length === 0 ? "pass" : "fail",
+      message:
+        legacyIssues.length === 0
+          ? "imported legacy records are reachable from recorded runs"
+          : "legacy import records and the event ledger disagree",
+      details: { issues: legacyIssues },
+    });
     return {
       status: checks.some((check) => check.status === "fail") ? "fail" : "pass",
       checks,
@@ -3042,3 +3762,25 @@ export class RuntimeCompositionRoot {
     }
   }
 }
+
+// The Legacy scanner is part of the Phase 5 runtime surface: the CLI reads a
+// corpus through it, and tests inject a virtual filesystem through the same
+// port. The raw parse helpers stay internal to the legacy module.
+export {
+  buildLegacyImportEvents,
+  buildLegacyMigrationPlan,
+  buildLegacyMigrationReport,
+  classifyArtifact,
+  legacySessionId,
+  NodeLegacyFileSystem,
+  scanLegacySources,
+  serialiseLegacyMigrationReport,
+  summariseLegacyAnomalies,
+} from "./legacy/index.js";
+export type {
+  LegacyEventBuildInput,
+  LegacyFileSystem,
+  LegacyMigrationReportInput,
+  LegacyScanResult,
+  LegacySourceFile,
+} from "./legacy/index.js";

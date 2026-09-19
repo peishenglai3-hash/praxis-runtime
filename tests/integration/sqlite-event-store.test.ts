@@ -147,10 +147,10 @@ describe("SqliteEventStore", () => {
       synchronous: 2,
       busyTimeout: 5000,
     });
-    expect(currentStore.migrationVersion).toBe(10);
+    expect(currentStore.migrationVersion).toBe(11);
     expect(currentStore.migrationStatus).toEqual({
-      currentVersion: 10,
-      latestVersion: 10,
+      currentVersion: 11,
+      latestVersion: 11,
       pendingVersions: [],
     });
     expect(currentStore.getLastSeq()).toBe(0);
@@ -546,7 +546,7 @@ describe("SqliteEventStore", () => {
       legacyStore.close();
 
       store = new SqliteEventStore({ filename, migrationsDir });
-      expect(store.migrationVersion).toBe(10);
+      expect(store.migrationVersion).toBe(11);
       expect(store.getById(legacyRecord.id)).toEqual({
         ...legacyRecord,
         writer: migrationWriterContext,

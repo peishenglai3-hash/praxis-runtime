@@ -17,9 +17,12 @@ import {
   authorizeEventAppend,
   authorizeWriterScope,
   eventEnvelopeSchema,
+  legacyImportRunId,
   parseWriterContext,
+  parseLegacyMigrationReport,
   parseReusableAsset,
   stableStringify,
+  validateLegacyEventEnvelope,
   validatePhase3EventEnvelope,
 } from "@praxis/contracts";
 import type {
@@ -36,6 +39,9 @@ import type {
   EventWriter,
   EvidenceRef,
   LedgerSeqGap,
+  LegacyAnomaly,
+  LegacyMigrationReport,
+  LegacySourceEntry,
   OperationState,
   OperationStatus,
   ProjectionDataRecord,
@@ -70,6 +76,58 @@ function sqlStringLiteral(value: string): string {
 
 function isSha256(value: string): boolean {
   return /^[a-f0-9]{64}$/i.test(value);
+}
+
+/**
+ * `PRAGMA journal_mode = WAL` changes a file-level SQLite setting. On
+ * Windows, a second process can receive SQLITE_BUSY during that transition
+ * even though the connection's busy timeout is already configured. Keep this
+ * compatibility retry local to the transition: ordinary SQL errors must still
+ * fail immediately, and a permanently locked database must not be hidden.
+ *
+ * The constructor `timeout` option is deliberately not used here. It was not
+ * available in the canonical Node 22.13.0 runtime; this bounded retry keeps
+ * the implementation on the Bible's runtime/API surface.
+ */
+const SQLITE_WAL_RETRY_DELAYS_MS = [10, 25, 50, 100, 200, 400, 800];
+
+function isSqliteBusyError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as {
+    code?: unknown;
+    errcode?: unknown;
+    message?: unknown;
+  };
+  const message =
+    typeof candidate.message === "string" ? candidate.message : "";
+  return (
+    candidate.code === "ERR_SQLITE_ERROR" &&
+    (candidate.errcode === 5 ||
+      candidate.errcode === 6 ||
+      /database(?: table)? is locked/i.test(message))
+  );
+}
+
+function sleepSynchronously(milliseconds: number): void {
+  const signal = new Int32Array(
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+  );
+  Atomics.wait(signal, 0, 0, milliseconds);
+}
+
+/** @internal — exercised by the regression suite, not exported by the package barrel. */
+export function retrySqliteBusy<T>(operation: () => T): T {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return operation();
+    } catch (error) {
+      const retryDelay = SQLITE_WAL_RETRY_DELAYS_MS[attempt];
+      if (!isSqliteBusyError(error) || retryDelay === undefined) {
+        throw error;
+      }
+      sleepSynchronously(retryDelay);
+    }
+  }
 }
 
 function isPathWithinRoot(path: string, root: string): boolean {
@@ -263,6 +321,8 @@ export interface ProjectionHealth {
 export interface StoreHealth {
   filename: string;
   pragmas: SqlitePragmas;
+  migrationVersion: number;
+  migrationStatus: MigrationStatus;
   lastSeq: number;
   writerBackfillCount: number;
   projections: ProjectionHealth[];
@@ -274,6 +334,14 @@ export interface StoreHealth {
     deleted: number;
     missingFiles: string[];
     invalidChecksums: string[];
+    /**
+     * Active rows with no digest recorded yet. A backup records its digest
+     * after the snapshot is taken, so a database that was itself snapshotted
+     * between those two steps carries its own unfinalized reservation. That
+     * row is not a checksum mismatch — its digest is absent, not wrong — and
+     * it is disclosed here rather than counted as corruption. See BP-047.
+     */
+    unfinalizedReservations: string[];
   };
   invalidatedAssetCount: number;
   assetIntegrityIssues: string[];
@@ -333,6 +401,55 @@ export interface RestoreDatabaseOptions {
   destinationPath: string;
   safetyBackupPath?: string;
   expectedSha256?: string;
+}
+
+export interface LegacyImportRecordInput {
+  report: LegacyMigrationReport;
+  inventory: LegacySourceEntry[];
+  anomalies: LegacyAnomaly[];
+  events: EventEnvelope[];
+}
+
+export interface LegacyImportRecordResult {
+  run: LegacyMigrationReport;
+  /** `false` when this corpus was already imported. */
+  inserted: boolean;
+  appendedEvents: number;
+  lastSeq: number;
+  /**
+   * `true` when the corpus is already in the ledger under a different plan —
+   * a changed privacy rule set, for example. Nothing is written, and the
+   * caller is told so rather than being handed a silent success.
+   */
+  planDiffersFromRecorded: boolean;
+}
+
+export interface LegacyImportRunRecord {
+  runId: string;
+  sourceFingerprint: string;
+  planHash: string;
+  root: string;
+  status: LegacyMigrationReport["status"];
+  counts: LegacyMigrationReport["counts"];
+  anomalySummary: LegacyMigrationReport["anomalySummary"];
+  hasArchive: boolean;
+  startedAt: string;
+  completedAt: string;
+  lastSeq: number;
+}
+
+/**
+ * A structural problem doctor can point at. These are integrity signals about
+ * record linkage, not a judgement about whether the imported material is true.
+ */
+export interface LegacyIntegrityIssue {
+  kind:
+    | "legacy-event-without-run"
+    | "legacy-run-count-mismatch"
+    | "legacy-run-without-events"
+    | "legacy-inventory-missing"
+    | "legacy-completion-missing";
+  detail: string;
 }
 
 interface EventRow {
@@ -725,6 +842,44 @@ function rowToAsset(row: Record<string, unknown>): ReusableAsset {
       },
     );
   }
+}
+
+function legacyRunRecordFromRow(
+  row: Record<string, unknown>,
+): LegacyImportRunRecord {
+  const readJsonField = (value: unknown, label: string): unknown => {
+    if (typeof value !== "string") {
+      throw new StoreError("STORAGE_ERROR", `legacy run ${label} is not text`);
+    }
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      throw new StoreError(
+        "STORAGE_ERROR",
+        `legacy run ${label} is not valid JSON`,
+      );
+    }
+  };
+  const archiveJson = row["archive_manifest_json"];
+  return {
+    runId: String(row["run_id"]),
+    sourceFingerprint: String(row["source_fingerprint"]),
+    planHash: String(row["plan_hash"]),
+    root: String(row["root"]),
+    status: String(row["status"]) as LegacyImportRunRecord["status"],
+    counts: readJsonField(
+      row["counts_json"],
+      "counts_json",
+    ) as LegacyImportRunRecord["counts"],
+    anomalySummary: readJsonField(
+      row["anomaly_summary_json"],
+      "anomaly_summary_json",
+    ) as LegacyImportRunRecord["anomalySummary"],
+    hasArchive: typeof archiveJson === "string" && archiveJson.length > 0,
+    startedAt: new Date(Number(row["started_at"])).toISOString(),
+    completedAt: new Date(Number(row["completed_at"])).toISOString(),
+    lastSeq: Number(row["last_seq"] ?? 0),
+  };
 }
 
 export class SqliteEventStore
@@ -1654,10 +1809,22 @@ export class SqliteEventStore
     const activeBackups = managedBackups.filter(
       (item) => item.status === "active",
     );
+    // An active row with no digest is a reservation whose backup has not been
+    // registered yet. It is kept apart from the checksum comparison: an absent
+    // digest and a wrong digest are different conditions, and only the second
+    // is evidence that a backup file changed. A managed backup's own snapshot
+    // contains such a row — the reservation it was taken under — so treating
+    // it as corruption made every restore fail its own doctor gate (BP-047).
+    const unfinalizedReservations = activeBackups
+      .filter((item) => item.backupSha256.length === 0)
+      .map((item) => item.id);
+    const finalizedBackups = activeBackups.filter(
+      (item) => item.backupSha256.length > 0,
+    );
     const missingFiles = activeBackups
       .filter((item) => !existsSync(item.path))
       .map((item) => item.id);
-    const invalidChecksums = activeBackups
+    const invalidChecksums = finalizedBackups
       .filter((item) => {
         if (!existsSync(item.path)) return false;
         try {
@@ -1681,6 +1848,8 @@ export class SqliteEventStore
     return {
       filename: resolve(this.filename),
       pragmas: this.pragmas,
+      migrationVersion: this.migrationVersion,
+      migrationStatus: this.migrationStatus,
       lastSeq,
       writerBackfillCount: this.getWriterBackfillCount(),
       projections: this.getProjectionHealth(lastSeq),
@@ -1696,6 +1865,7 @@ export class SqliteEventStore
           .length,
         missingFiles,
         invalidChecksums,
+        unfinalizedReservations,
       },
       invalidatedAssetCount,
       assetIntegrityIssues,
@@ -1861,6 +2031,414 @@ export class SqliteEventStore
     }
   }
 
+  /**
+   * Record one Legacy import run and its imported events atomically.
+   *
+   * The run row, the source inventory, the anomaly rows and every `legacy.*`
+   * event commit in one transaction, so a crash leaves either the whole run or
+   * none of it. Idempotency is by `(source_fingerprint, plan_hash)`: an
+   * identical re-import is reported as `already-imported` and appends nothing,
+   * while a changed corpus produces new event identities through the
+   * fingerprint that participates in them.
+   */
+  recordLegacyImport(
+    input: LegacyImportRecordInput,
+    writer: WriterContext,
+  ): LegacyImportRecordResult {
+    this.assertOpen();
+    let authorizedWriter: WriterContext;
+    try {
+      authorizedWriter = authorizeWriterScope(
+        writer,
+        "system.migrate",
+        "legacy import",
+      );
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        throw new StoreError(
+          "AUTHORIZATION_ERROR",
+          error.message,
+          error.details,
+        );
+      }
+      throw this.authorizationStoreError(error);
+    }
+    const role = authorizedWriter.role.toUpperCase();
+    if (authorizedWriter.kind !== "importer" && role !== "OWNER") {
+      throw new StoreError(
+        "AUTHORIZATION_ERROR",
+        "legacy import requires an importer writer or an owner writer",
+        { writerId: authorizedWriter.writerId, role: authorizedWriter.role },
+      );
+    }
+
+    let report: LegacyMigrationReport;
+    try {
+      report = parseLegacyMigrationReport(input.report);
+    } catch (error) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "legacy migration report failed contract validation",
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
+    }
+    if (report.status === "dry-run") {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "a dry-run report is not an import; only applied runs are recorded",
+      );
+    }
+    for (const event of input.events) {
+      if (!event.type.startsWith("legacy.")) {
+        throw new StoreError(
+          "INVALID_EVENT",
+          "a legacy import run may only append legacy.* events",
+          { eventType: event.type },
+        );
+      }
+    }
+    if (input.events.length === 0) {
+      throw new StoreError(
+        "INVALID_EVENT",
+        "a legacy import run must append at least its completion event",
+      );
+    }
+
+    const { normalizedEvents } = this.authorizeAndNormalizeEvents(
+      input.events,
+      authorizedWriter,
+    );
+
+    const startedAt = Date.parse(report.startedAt);
+    const completedAt = Date.parse(report.completedAt);
+
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      // Idempotency is keyed on the corpus, not on the plan. The Bible
+      // requires that the same source fingerprint re-imports idempotently, and
+      // keying on the plan as well would make a corrected rule set collide
+      // with the records the earlier run already wrote instead of being
+      // recognised as the same corpus.
+      const existing = this.readLegacyRunInTransaction(
+        report.sourceFingerprint,
+      );
+      if (existing !== null) {
+        this.#database.exec("COMMIT");
+        return {
+          run: { ...report, runId: existing.runId, status: "already-imported" },
+          inserted: false,
+          appendedEvents: 0,
+          lastSeq: existing.lastSeq,
+          planDiffersFromRecorded: existing.planHash !== report.planHash,
+        };
+      }
+
+      // Events first, so the run row can be written complete in a single
+      // insert. `legacy_import_runs` is append-only — a run is history, and a
+      // correction is a new run — so there is deliberately no follow-up
+      // UPDATE of `last_seq`.
+      const results = this.appendEventsInTransaction(
+        normalizedEvents,
+        authorizedWriter,
+      );
+      const lastSeq = results[results.length - 1]?.record.seq ?? 0;
+
+      const runId = legacyImportRunId(
+        report.sourceFingerprint,
+        report.planHash,
+      );
+      this.#database
+        .prepare(
+          `INSERT INTO legacy_import_runs (
+             run_id, source_fingerprint, plan_hash, root, status, counts_json,
+             anomaly_summary_json, archive_manifest_json, started_at,
+             completed_at, last_seq
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          runId,
+          report.sourceFingerprint,
+          report.planHash,
+          report.root,
+          report.status,
+          stableStringify(report.counts as unknown as JsonValue),
+          stableStringify(report.anomalySummary as unknown as JsonValue),
+          report.archive === null
+            ? null
+            : stableStringify(report.archive as unknown as JsonValue),
+          startedAt,
+          completedAt,
+          lastSeq,
+        );
+
+      const inventoryStatement = this.#database.prepare(
+        `INSERT INTO legacy_source_inventory (
+           run_id, relative_path, artifact_kind, size_bytes, modified_at,
+           sha256, parse_status, anomaly_classes_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const entry of input.inventory) {
+        inventoryStatement.run(
+          runId,
+          entry.relativePath,
+          entry.artifactKind,
+          entry.sizeBytes,
+          entry.modifiedAtMs,
+          entry.sha256,
+          entry.parseStatus,
+          stableStringify(entry.anomalyClasses as unknown as JsonValue),
+        );
+      }
+
+      const anomalyStatement = this.#database.prepare(
+        `INSERT INTO legacy_anomalies (
+           run_id, anomaly_id, anomaly_class, reason, relative_path,
+           artifact_kind, affected_count, declared_value
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const anomaly of input.anomalies) {
+        anomalyStatement.run(
+          runId,
+          anomaly.id,
+          anomaly.class,
+          anomaly.reason,
+          anomaly.relativePath ?? null,
+          anomaly.artifactKind ?? null,
+          anomaly.affectedCount,
+          anomaly.declaredValue ?? null,
+        );
+      }
+
+      this.#database.exec("COMMIT");
+
+      return {
+        run: { ...report, runId },
+        inserted: true,
+        appendedEvents: results.filter((result) => result.inserted).length,
+        lastSeq,
+        planDiffersFromRecorded: false,
+      };
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original import failure.
+      }
+      if (error instanceof StoreError) throw error;
+      throw new StoreError(
+        "STORAGE_ERROR",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  listLegacyImportRuns(): LegacyImportRunRecord[] {
+    this.assertOpen();
+    const rows = this.#database
+      .prepare(
+        `SELECT run_id, source_fingerprint, plan_hash, root, status,
+                counts_json, anomaly_summary_json, archive_manifest_json,
+                started_at, completed_at, last_seq
+         FROM legacy_import_runs
+         ORDER BY completed_at DESC, run_id ASC`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((row) => legacyRunRecordFromRow(row));
+  }
+
+  getLegacyImportRun(runId: string): LegacyImportRunRecord | null {
+    this.assertOpen();
+    const row = this.#database
+      .prepare(
+        `SELECT run_id, source_fingerprint, plan_hash, root, status,
+                counts_json, anomaly_summary_json, archive_manifest_json,
+                started_at, completed_at, last_seq
+         FROM legacy_import_runs
+         WHERE run_id = ?`,
+      )
+      .get(runId) as Record<string, unknown> | undefined;
+    return row === undefined ? null : legacyRunRecordFromRow(row);
+  }
+
+  getLegacyAnomalies(runId: string): LegacyAnomaly[] {
+    this.assertOpen();
+    const rows = this.#database
+      .prepare(
+        `SELECT anomaly_id, anomaly_class, reason, relative_path,
+                artifact_kind, affected_count, declared_value
+         FROM legacy_anomalies
+         WHERE run_id = ?
+         ORDER BY anomaly_id ASC`,
+      )
+      .all(runId) as Array<Record<string, unknown>>;
+    return rows.map((row) => {
+      const anomaly: LegacyAnomaly = {
+        id: String(row["anomaly_id"]),
+        class: String(row["anomaly_class"]) as LegacyAnomaly["class"],
+        reason: String(row["reason"]),
+        affectedCount: Number(row["affected_count"]),
+      };
+      const relativePath = row["relative_path"];
+      if (typeof relativePath === "string") {
+        anomaly.relativePath = relativePath;
+      }
+      const artifactKind = row["artifact_kind"];
+      if (typeof artifactKind === "string") {
+        anomaly.artifactKind = artifactKind as NonNullable<
+          LegacyAnomaly["artifactKind"]
+        >;
+      }
+      const declaredValue = row["declared_value"];
+      if (typeof declaredValue === "string") {
+        anomaly.declaredValue = declaredValue;
+      }
+      return anomaly;
+    });
+  }
+
+  /**
+   * Doctor's view of the Legacy boundary. These checks prove that every
+   * imported record is reachable from a recorded run and that the recorded
+   * counts match the ledger; they do not claim the imported material is true.
+   */
+  getLegacyIntegrityIssues(): LegacyIntegrityIssue[] {
+    this.assertOpen();
+    const issues: LegacyIntegrityIssue[] = [];
+
+    const orphanEvents = this.#database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM events
+         WHERE type LIKE 'legacy.%'
+           AND json_extract(payload_json, '$.sourceFingerprint') NOT IN (
+             SELECT source_fingerprint FROM legacy_import_runs
+           )`,
+      )
+      .get() as Record<string, unknown> | undefined;
+    const orphanCount = Number(orphanEvents?.["count"] ?? 0);
+    if (orphanCount > 0) {
+      issues.push({
+        kind: "legacy-event-without-run",
+        detail: `${orphanCount} legacy event(s) reference a corpus fingerprint with no recorded import run`,
+      });
+    }
+
+    const runs = this.#database
+      .prepare(
+        `SELECT run_id, source_fingerprint, counts_json
+         FROM legacy_import_runs`,
+      )
+      .all() as Array<Record<string, unknown>>;
+
+    // Material the operator deleted through an authorised purge is not
+    // missing, and a check that cannot tell the two apart ends up blaming the
+    // import for the operator's own exercise of their deletion right.
+    const purgedScopes = new Set(
+      (
+        this.#database
+          .prepare(
+            `SELECT scope_value FROM purge_receipts WHERE scope_value LIKE 'legacy:%'`,
+          )
+          .all() as Array<Record<string, unknown>>
+      ).map((entry) => String(entry["scope_value"])),
+    );
+
+    for (const row of runs) {
+      const runId = String(row["run_id"]);
+      const fingerprint = String(row["source_fingerprint"]);
+      if (purgedScopes.has(`legacy:${fingerprint.slice(0, 16)}`)) {
+        // A receipt covers this corpus. The remaining records are what the
+        // operator chose to keep, so a count comparison has nothing to say.
+        continue;
+      }
+      let counts: Record<string, unknown> = {};
+      try {
+        counts = JSON.parse(String(row["counts_json"])) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        issues.push({
+          kind: "legacy-run-count-mismatch",
+          detail: `run ${runId} has unreadable counts`,
+        });
+        continue;
+      }
+
+      const observed = this.#database
+        .prepare(
+          `SELECT type, COUNT(*) AS count FROM events
+           WHERE json_extract(payload_json, '$.sourceFingerprint') = ?
+           GROUP BY type`,
+        )
+        .all(fingerprint) as Array<Record<string, unknown>>;
+      const byType = new Map<string, number>();
+      for (const entry of observed) {
+        byType.set(String(entry["type"]), Number(entry["count"]));
+      }
+
+      const expected: Array<[string, string]> = [
+        ["signals", "legacy.signal.imported"],
+        ["patterns", "legacy.pattern.imported"],
+        ["graphEdges", "legacy.graph-edge.imported"],
+      ];
+      for (const [field, type] of expected) {
+        const declared = Number(counts[field] ?? 0);
+        const actual = byType.get(type) ?? 0;
+        if (declared !== actual) {
+          issues.push({
+            kind: "legacy-run-count-mismatch",
+            detail: `run ${runId} declares ${declared} ${field} but the ledger holds ${actual}`,
+          });
+        }
+      }
+      if ((byType.get("legacy.import.completed") ?? 0) === 0) {
+        issues.push({
+          kind: "legacy-completion-missing",
+          detail: `run ${runId} has no legacy.import.completed event`,
+        });
+      }
+      if (byType.size === 0) {
+        issues.push({
+          kind: "legacy-run-without-events",
+          detail: `run ${runId} has no ledger events for its corpus fingerprint`,
+        });
+      }
+
+      const inventoryCount = this.#database
+        .prepare(
+          "SELECT COUNT(*) AS count FROM legacy_source_inventory WHERE run_id = ?",
+        )
+        .get(runId) as Record<string, unknown> | undefined;
+      if (Number(inventoryCount?.["count"] ?? 0) === 0) {
+        issues.push({
+          kind: "legacy-inventory-missing",
+          detail: `run ${runId} recorded no source inventory`,
+        });
+      }
+    }
+
+    return issues;
+  }
+
+  private readLegacyRunInTransaction(
+    sourceFingerprint: string,
+  ): { runId: string; planHash: string; lastSeq: number } | null {
+    const row = this.#database
+      .prepare(
+        `SELECT run_id, plan_hash, last_seq FROM legacy_import_runs
+         WHERE source_fingerprint = ?
+         ORDER BY completed_at ASC, run_id ASC
+         LIMIT 1`,
+      )
+      .get(sourceFingerprint) as Record<string, unknown> | undefined;
+    if (row === undefined) return null;
+    return {
+      runId: String(row["run_id"]),
+      planHash: String(row["plan_hash"]),
+      lastSeq: Number(row["last_seq"] ?? 0),
+    };
+  }
+
   private authorizeAndNormalizeEvents(
     events: EventEnvelope[],
     writer: WriterContext,
@@ -1912,6 +2490,7 @@ export class SqliteEventStore
       const normalized = parsed.data as EventEnvelope;
       try {
         validatePhase3EventEnvelope(normalized);
+        validateLegacyEventEnvelope(normalized);
       } catch (error) {
         throw new StoreError(
           "INVALID_EVENT",
@@ -2966,7 +3545,9 @@ export class SqliteEventStore
 
   private configureConnection(): void {
     this.#database.exec("PRAGMA busy_timeout = 5000");
-    this.#database.exec("PRAGMA journal_mode = WAL");
+    retrySqliteBusy(() => {
+      this.#database.exec("PRAGMA journal_mode = WAL");
+    });
     this.#database.exec("PRAGMA foreign_keys = ON");
     this.#database.exec("PRAGMA synchronous = FULL");
   }

@@ -1,0 +1,149 @@
+{
+  "scenarioId": "reentry-round1-scenario-sweep",
+  "scenarioVersion": "1.0.0",
+  "title": "Round 1 narrative integration scenarios",
+  "corpusType": "corpus-c",
+  "ladder": "6V-1",
+  "concurrency": "C0",
+  "frozenAt": "2026-09-18T00:00:00.000Z",
+  "field": {
+    "taskType": "synthetic-local-collaboration",
+    "externalVerification": "strong",
+    "consequence": "low",
+    "reversibility": "easy",
+    "feedbackLatency": "short",
+    "actors": [
+      { "type": "human", "id": "owner" },
+      { "type": "agent", "id": "scenario-runner" }
+    ],
+    "placementRationale": "Synthetic, local, and reversible. This manifest is a harness fixture for scenario wiring, not evidence from the historical corpus or a field result."
+  },
+  "verifier": {
+    "kind": "filesystem",
+    "reference": "scenario-owned deterministic verifier",
+    "independent": true
+  },
+  "notes": "The ten episodes are the executable manifest for the Round 1 narrative sweep. They are intentionally synthetic and must not be reported as empirical field evidence. Individual asset lifecycle assertions live in evals/test/assets.test.ts; the remaining scenarios are mapped to existing integration and regression fixtures in docs/eval/SCENARIO-BUG-SWEEP.md.",
+  "episodes": [
+    {
+      "episodeId": "sc-01-promote-and-reuse",
+      "task": "Complete a repeated local workflow whose second successful completion can justify a reusable asset.",
+      "assetExpectation": "help",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": true,
+        "shouldIntervene": true,
+        "shouldProduceCandidate": true,
+        "rationale": "A real residual is observed, reflection proposes a candidate, and later use is permitted only after validation and explicit human confirmation."
+      }
+    },
+    {
+      "episodeId": "sc-02-one-off-no-promotion",
+      "task": "Resolve one accidental local mismatch once; do not treat the one-off correction as a general rule.",
+      "assetExpectation": "none",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": true,
+        "shouldIntervene": true,
+        "shouldProduceCandidate": false,
+        "rationale": "A single correction is insufficient independent evidence for a reusable asset."
+      }
+    },
+    {
+      "episodeId": "sc-03-obsolete-active-rule",
+      "task": "Use an active workflow after the owner has explicitly changed the preference; challenge the obsolete asset.",
+      "assetExpectation": "challenge",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": true,
+        "shouldIntervene": true,
+        "shouldProduceCandidate": false,
+        "rationale": "An explicit change is a counterexample to the active rule and must remain visible as a challenge rather than being silently ignored."
+      }
+    },
+    {
+      "episodeId": "sc-04-irrelevant-history",
+      "task": "Answer a small current task while the ledger contains a large unrelated history.",
+      "assetExpectation": "ignore",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": false,
+        "shouldIntervene": false,
+        "shouldProduceCandidate": false,
+        "rationale": "Selective context is required; unrelated history must not be injected merely because it exists."
+      }
+    },
+    {
+      "episodeId": "sc-05-simple-abstention",
+      "task": "Perform a routine reversible task with no surprise and no durable lesson.",
+      "assetExpectation": "none",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": false,
+        "shouldIntervene": false,
+        "shouldProduceCandidate": false,
+        "rationale": "The correct outcome is successful completion without residual, reflection, or candidate creation."
+      }
+    },
+    {
+      "episodeId": "sc-06-evaluateby-late-success",
+      "task": "Meet the eventual outcome after missing the evaluateBy boundary.",
+      "assetExpectation": "none",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": true,
+        "shouldIntervene": true,
+        "shouldProduceCandidate": false,
+        "rationale": "Later success does not erase a timing residual; outcome and timing must remain separate."
+      }
+    },
+    {
+      "episodeId": "sc-07-adapter-neutrality",
+      "task": "Run the same ledger interaction through two adapter scaffolds and compare the core event semantics.",
+      "assetExpectation": "none",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": false,
+        "shouldIntervene": false,
+        "shouldProduceCandidate": false,
+        "rationale": "Adapter variation may change execution context, not the append-first core schema or provenance semantics."
+      }
+    },
+    {
+      "episodeId": "sc-08-wrong-runtime",
+      "task": "Attempt canonical verification under an unsupported Node runtime.",
+      "assetExpectation": "none",
+      "oracle": {
+        "taskOutcome": "fail",
+        "residualIsReal": true,
+        "shouldIntervene": true,
+        "shouldProduceCandidate": false,
+        "rationale": "The canonical gate must fail closed when the runtime is outside the pinned Node range."
+      }
+    },
+    {
+      "episodeId": "sc-09-interrupted-restart",
+      "task": "Interrupt a local run, restart from the durable ledger, and resume without duplicating valid events.",
+      "assetExpectation": "none",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": false,
+        "shouldIntervene": false,
+        "shouldProduceCandidate": false,
+        "rationale": "Crash recovery and replay should preserve append-first history and idempotent progress."
+      }
+    },
+    {
+      "episodeId": "sc-10-correct-derived-state",
+      "task": "Correct a derived projection with a new event while preserving the original raw observation.",
+      "assetExpectation": "none",
+      "oracle": {
+        "taskOutcome": "succeed",
+        "residualIsReal": true,
+        "shouldIntervene": true,
+        "shouldProduceCandidate": false,
+        "rationale": "A correction event may change current derived state, but it must not rewrite or delete the raw history."
+      }
+    }
+  ]
+}

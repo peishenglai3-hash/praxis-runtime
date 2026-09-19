@@ -1,9 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { log } from "node:console";
 import { execPath, stderr, stdout } from "node:process";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const dependencyCruiser = resolve(
+  repositoryRoot,
   "node_modules/dependency-cruiser/bin/dependency-cruise.mjs",
 );
 const result = spawnSync(
@@ -14,7 +18,10 @@ const result = spawnSync(
     ".dependency-cruiser.cjs",
     "tests/fixtures/dependency-cycle",
   ],
-  { encoding: "utf8" },
+  // dependency-cruiser treats a Windows drive-qualified input as relative in
+  // the Node 22 Windows runner. Keep the child rooted at the repository and
+  // pass repository-relative paths; the outer script remains cwd-independent.
+  { cwd: repositoryRoot, encoding: "utf8" },
 );
 
 if (result.stdout) stdout.write(result.stdout);

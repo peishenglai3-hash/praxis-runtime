@@ -31,3 +31,15 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run the core verification gate
         run: pnpm verify
+      # The gate's semantic result is this file, not the step's exit status.
+      # A step status is read through whatever the runner wraps around it; the
+      # artifact is the same object a developer gets locally, per stage, and it
+      # is written on every path including refusal. See `scripts/gate.mjs`.
+      - name: Upload the gate result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-result-${{ matrix.os }}
+          path: test-results/gate-result.json
+          if-no-files-found: warn
+          retention-days: 30

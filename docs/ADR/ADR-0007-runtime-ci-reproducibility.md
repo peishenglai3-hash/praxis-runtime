@@ -1,6 +1,7 @@
 # ADR-0007: Runtime and CI reproducibility
 
-**Status:** Accepted; exact Node 22.13.0 runner evidence verified in CI run `34978723319`
+**Status:** Accepted; exact Node 22.13.0 runner evidence is required for each
+freeze candidate.
 
 ## Context
 
@@ -18,6 +19,30 @@ same way on the required Node 22 runner.
   `22.13.0` and no provider secrets.
 - Provider smoke is a separate manual workflow and is never a required pull
   request gate.
+
+## Canonical verification order (BP-049 author decision, 2026-09-18)
+
+The canonical `pnpm verify` order is fixed and load-bearing:
+
+```text
+runtime / version
+→ dependency / lockfile
+→ lint
+→ typecheck
+→ unit
+→ integration
+→ replay
+→ regression
+→ build
+→ CLI smoke
+→ daemon smoke
+```
+
+The regression stage runs both `tests/regression` and the credential-free
+`evals/test` harness self-tests. This keeps the evaluation checks inside the
+approved regression position without inserting an unapproved stage into the
+canonical order. The gate runner and its regression test assert the sequence
+against `package.json#scripts.verify:chain`.
 
 ## Native SQLite mismatch boundary
 
