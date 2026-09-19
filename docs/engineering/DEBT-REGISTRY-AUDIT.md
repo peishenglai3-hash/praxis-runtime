@@ -4,6 +4,15 @@
 **Checker:** `scripts/audit-registries.mjs`  
 **Command:** `pnpm audit:registries`
 
+## Final-freeze recheck — 2026-09-19
+
+The same machine-derived checker was rerun on the release candidate before the
+freeze documents were prepared: `registry audit PASS (breakpoints=69, RFC
+labels=24)`. The repository still has 69 unique breakpoint IDs and 24 unique
+RFC labels; no manual count was substituted for the checker. The regression
+test remains the enforcement point for duplicate IDs, missing rows, impossible
+statuses and stale RFC reconciliation rows.
+
 ## Result
 
 **PASS — `registry audit PASS (breakpoints=69, RFC labels=24)`**

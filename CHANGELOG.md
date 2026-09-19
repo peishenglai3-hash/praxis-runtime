@@ -56,8 +56,9 @@ These are recorded rather than omitted. Each is tracked in
 [`docs/incidents/INC-001-bible-conformance-audit.md`](./docs/incidents/INC-001-bible-conformance-audit.md)
 with a decision owner.
 
-- **Phase 6 has not started.** There is no provider adapter of any kind;
-  `packages/adapters` is an empty stub.
+- **Phase 6V is not empirically complete.** The provider-neutral adapter
+  boundary and evaluation harness exist, but current-branch V1/V2/V2X real
+  task evidence has not been collected.
 - **Golden Fixture 01 is `WAITING_FOR_AUTHOR_SOURCE`.** It is authorial
   history and must not be synthesised.
 - **`doctor` does not cover issue 081's full scope.** The `cursors` and

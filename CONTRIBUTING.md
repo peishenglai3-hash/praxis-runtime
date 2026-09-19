@@ -1,8 +1,10 @@
 # Contributing
 
-**This project is pre-alpha.** Read the status note at the top of the
-[README](./README.md) first. Phase 5 is complete, Phase 6 has not started, and
-the contracts, schema and command-line surface can still change without notice.
+**This project is an engineering preview candidate, not a stable release.**
+Read the status note at the top of the [README](./README.md) first. Phases 5,
+5.5, 6A and 6B are implemented; Phase 6V remains evidence-limited and the
+release candidate is not yet authorized for publication. Contracts, schema and
+the command-line surface can still change without notice.
 
 ## Before you write code
 

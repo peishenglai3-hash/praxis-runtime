@@ -4,6 +4,26 @@
 **Decision:** **NO-GO**. Base Freeze is not authorized.  
 **Release Engineering:** **NOT STARTED**.
 
+## Final-freeze addendum — 2026-09-19
+
+This document is retained as the Round 1 baseline. The final pre-open-source
+round has not changed the decision to `NO-GO`. Release-facing documents now
+record the following additional facts:
+
+- current public documents containing the author's machine-specific paths were
+  redacted; reachable historical commits were not rewritten;
+- no high-confidence real secret was found in the current tree or the 74
+  reachable commits, but historical synthetic credential-shaped test literals
+  and non-secret path metadata remain documented privacy findings;
+- four GitHub Dependabot alert records represent three unique open
+  development advisories: two moderate Vitest paths and one low esbuild path;
+- the final tracked-tree clean-install report and exact Node 22 CI run for the
+  candidate commit are still pending;
+- V1/V2/V2X real evidence, real asset benefit and GF01 remain unavailable or
+  waiting, so the candidate cannot be called a Research Preview.
+
+The release-facing gate is [`PREVIEW-RELEASE-GATE.md`](PREVIEW-RELEASE-GATE.md).
+
 ## Closed in this round
 
 - BP-049: the author-approved eleven-stage canonical verification order is

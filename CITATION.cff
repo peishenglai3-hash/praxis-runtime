@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+title: "Praxis Runtime"
+message: "If you use Praxis Runtime, please cite this repository and the version you used."
+type: software
+authors:
+  - family-names: Lai
+    given-names: Peisheng
+version: "0.1.0"
+license: MIT
+repository-code: "https://github.com/peishenglai3-hash/praxis-runtime"
+abstract: >-
+  A local-first TypeScript runtime for auditable long-term human-AI
+  collaboration, with append-first event history, deterministic replay,
+  bounded residual/reflection paths, and explicitly human-confirmed reusable
+  assets.
