@@ -15,13 +15,16 @@ directory and still be installed from tracked files only.
 
 ## Current evidence
 
-| Check                            | State                                             | Evidence                                                                      |
-| -------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Tracked-tree export              | `PENDING FINAL COMMIT`                            | Must be rerun after the candidate hardening commit.                           |
-| Clean install                    | `PENDING FINAL COMMIT`                            | Must be rerun from the export, not the working checkout.                      |
-| Clean build and CLI/daemon smoke | `PENDING FINAL COMMIT`                            | Must be rerun from the export.                                                |
-| Exact Node 22 CI                 | `PASS on prior baseline; pending candidate rerun` | Run `35356138756` passed both Ubuntu and Windows at the pre-freeze baseline.  |
-| Node 24 canonical gate           | `EXPECTED FAIL`                                   | The runtime pin check correctly rejects the developer machine's Node 24.15.0. |
+| Check                            | State                                             | Evidence                                                                                                                                 |
+| -------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Tracked-tree export              | `PASS`                                            | `git archive` of commit `2447004` extracted to a new temporary directory; no `.git`, `node_modules` or `.praxis` existed before install. |
+| Clean install                    | `PASS`                                            | `pnpm install --frozen-lockfile` succeeded from the tracked export.                                                                      |
+| Clean build and CLI/daemon smoke | `PASS`                                            | `pnpm build`, CLI help/init/doctor, daemon `--once` and `pnpm test:evals` (63/63) succeeded from the export.                             |
+| Exact Node 22 CI                 | `PASS on prior baseline; pending candidate rerun` | Run `35356138756` passed both Ubuntu and Windows at the pre-freeze baseline.                                                             |
+| Node 24 canonical gate           | `EXPECTED FAIL`                                   | The runtime pin check correctly rejects the developer machine's Node 24.15.0.                                                            |
 
-The candidate cannot be called reproducible until the pending export and a
-fresh exact-runtime CI run are attached to the final commit.
+The clean local result is Node 24 development evidence for installation and
+operator smoke. The canonical verify stage correctly failed before running the
+remaining stages because Node 24 is outside the pinned range. The candidate
+cannot be called fully reproducible until a fresh exact-runtime CI run is
+attached to the final commit.

@@ -11,6 +11,11 @@ provider credential was requested, guessed, searched for, or persisted. No
 author-approved prospective task list or licence-cleared historical slice was
 provided in this round.
 
+The separate engineering smoke did run from a tracked-only export: fresh
+install, build, CLI init/doctor, daemon one-shot and 63 synthetic eval tests
+completed successfully. That is installation/runtime evidence, not V1
+behavioral evidence.
+
 | Arm        | Required evidence                                                        | Current state               | Honest interpretation                                                       |
 | ---------- | ------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------------------- |
 | V1         | 5–10 real low-risk tasks and BASE/STATE/REFLECTION/FULL comparison       | `BLOCKED / NOT RUN`         | The checked-in oracle is synthetic readiness evidence only.                 |
