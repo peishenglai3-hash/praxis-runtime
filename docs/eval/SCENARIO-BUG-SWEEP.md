@@ -3,8 +3,8 @@
 ## Final-freeze addendum — 2026-09-19
 
 The current candidate's tracked-only install/operator smoke passed, and run
-`35422995773` passed the complete 11-stage Node `22.13.0` gate on Ubuntu and
-Windows at clean commit `46a461a7`. The synthetic scenario classification below
+`35427872938` passed the complete 11-stage Node `22.13.0` gate on Ubuntu and
+Windows at clean commit `58b15f5`. The synthetic scenario classification below
 is unchanged; it is not real-provider or historical-corpus evidence.
 
 **Date:** 2026-09-18  

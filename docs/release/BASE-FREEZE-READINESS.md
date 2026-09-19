@@ -37,7 +37,9 @@ The release-facing gate is [`PREVIEW-RELEASE-GATE.md`](PREVIEW-RELEASE-GATE.md).
 The prior Round 1 `NO-GO` is superseded for the engineering-preview release
 class. The final candidate gate is `PASS — ENGINEERING PREVIEW`:
 
-- run `35422995773` passed Ubuntu and Windows on exact Node `22.13.0`;
+- run `35427872938` passed Ubuntu and Windows on exact Node `22.13.0` at the
+  clean candidate commit `58b15f5` (the Windows job passed on rerun after one
+  transient Vitest worker timeout);
 - no Critical or High correctness, security or data-loss blocker was observed;
 - no real secret or private historical corpus is in the release tree;
 - non-secret historical path metadata is disclosed and accepted without history
