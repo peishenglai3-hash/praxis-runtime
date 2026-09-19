@@ -33,6 +33,6 @@ usefulness or historical learning.
 ## Final candidate CI addendum
 
 FR-01's tracked-only install/operator smoke passed locally, and GitHub Actions
-run `35422128031` passed the canonical 11-stage gate on both Ubuntu and Windows
-at commit `7dec4e1789ce`. The scenario table remains conservative because the
+run `35422401720` passed the canonical 11-stage gate on both Ubuntu and Windows
+at commit `9da7f2840e4e`. The scenario table remains conservative because the
 real-provider and historical-source rows are still not executed.

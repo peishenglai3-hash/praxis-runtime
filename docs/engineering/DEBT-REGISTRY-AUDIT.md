@@ -59,6 +59,10 @@ the complete 11-stage gate on both Ubuntu and Windows at clean commit
 `7dec4e1789ce`. This is current candidate evidence; the older run above remains
 historical closure evidence for BP-068.
 
+The final documentation-alignment commit was then rechecked separately: run
+`35422401720` passed the complete 11-stage gate on both Ubuntu and Windows at
+clean commit `9da7f2840e4e`.
+
 ## Current RFC registry state
 
 The 24 RFC labels and 24 reconciliation rows are unique and aligned. The key re-entry outcomes are:

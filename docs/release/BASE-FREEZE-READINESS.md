@@ -18,8 +18,8 @@ record the following additional facts:
 - four GitHub Dependabot alert records represent three unique open
   development advisories: two moderate Vitest paths and one low esbuild path;
 - the final tracked-tree clean-install report and exact Node 22 CI run for the
-  candidate commit are now closed: run `35422128031` passed both runners and
-  its artifacts point to clean commit `7dec4e1`;
+  candidate commit are now closed: run `35422401720` passed both runners and
+  its artifacts point to clean commit `9da7f28`;
 - V1/V2/V2X real evidence, real asset benefit and GF01 remain unavailable or
   waiting, so the candidate cannot be called a Research Preview.
 
