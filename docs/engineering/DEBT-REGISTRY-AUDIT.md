@@ -55,8 +55,8 @@ regression test; the test now checks the machine-derived row invariants, and
 run `35355177455` passes the complete canonical gate on Ubuntu and Windows.
 
 Earlier final-freeze evidence remains recorded for historical traceability. The
-latest candidate check was run `35422691407`, which passed the complete 11-stage
-gate on both Ubuntu and Windows at clean commit `a55ee2d56799`.
+latest candidate check was run `35422995773`, which passed the complete 11-stage
+gate on both Ubuntu and Windows at clean commit `46a461a7bbd8297e003aae0b2976b41ce69b18fb`.
 
 ## Current RFC registry state
 

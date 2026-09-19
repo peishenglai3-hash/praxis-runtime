@@ -1,9 +1,9 @@
 # Praxis Runtime
 
-> **Engineering Preview candidate — not yet released.** The repository is
-> public, but formal publication is still gated by the author's explicit
-> `OPEN_SOURCE_GO` instruction. This candidate is reproducible engineering
-> work, not a claim of production readiness or empirical usefulness.
+> **v0.1.0-engineering-preview release candidate.** The engineering gate has
+> passed and the author has authorized the final GitHub merge, tag and Release
+> sequence. This is not a claim of production readiness or empirical
+> usefulness.
 
 Praxis is a local-first TypeScript runtime for auditable, long-term
 human–AI collaboration. It preserves raw interaction events, reconstructs
@@ -215,13 +215,14 @@ Bible-derived RFC and ADR set.
 
 This source release is licensed under the [MIT License](./LICENSE). Citation
 metadata is in [`CITATION.cff`](./CITATION.cff). There is no npm publication
-contract in this preview; the workspace remains private to npm and the first
-public artifact, when authorized, is the GitHub source release plus a separate
-evaluation export.
+contract in this preview; the workspace remains private to npm. The GitHub
+source release is the primary public artifact, with a separate evaluation
+export prepared only from explicitly public synthetic material.
 
 ## Publication status
 
-The candidate branch may be pushed for CI and review. Do not merge it into
-`main`, create a final tag, publish a GitHub Release, or upload to Hugging Face
-until the author explicitly says `OPEN_SOURCE_GO`. The current publication
-map is [`docs/release/PUBLICATION-MANIFEST.md`](./docs/release/PUBLICATION-MANIFEST.md).
+The candidate is being finalized as `v0.1.0-engineering-preview` through a
+reviewed pull request, verified `main` commit, annotated tag and GitHub
+Release. No private historical corpus is part of the release. Hugging Face is
+not uploaded in this round; any later eval export must use the dedicated
+staging and rescan procedure in the publication manifest.

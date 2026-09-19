@@ -20,7 +20,9 @@ metadata, dependency alerts and publication boundary.
 
 ## Publication consequence
 
-No real credential was found, but the historical path metadata keeps privacy
-from being a clean unconditional release gate. The author must decide whether
-to accept that ancestry, authorize a separately planned history remediation, or
-keep the candidate unreleased. This round does not rewrite Git history.
+No real credential or private historical corpus was found. The final closeout
+instruction accepts non-secret historical path metadata as a disclosed
+limitation and explicitly rejects broad history rewriting for this release.
+Current public files remain redacted. This is therefore a release-compatible
+privacy caveat, not a publication blocker; real secrets or sensitive material
+would still stop publication immediately.

@@ -36,6 +36,6 @@ intentionally narrower than the complete RFC debt register.
 - No installer, GUI, Electron shell, cloud service, marketplace or telemetry
   system is included.
 - The repository's historical Git ancestry contains non-secret path metadata
-  from earlier engineering records. Current public documents are being
-  redacted; history is not rewritten in this round. Formal publication remains
-  subject to the author's privacy decision.
+  from earlier engineering records. Current public documents are redacted;
+  history is not rewritten in this round. The engineering preview discloses
+  this limitation and does not include any real secret or private corpus.

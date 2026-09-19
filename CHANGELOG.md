@@ -5,16 +5,34 @@ All notable changes to this project are recorded here. The format follows
 intends to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 once it has releases.
 
-## No versions have been released
+## [0.1.0-engineering-preview] - 2026-09-19
 
-There is no tagged release, no published package, and no supported version.
-This project is **pre-alpha**. Everything below is development history recorded
-so that the next contributor can reconstruct it, not a set of releases.
+This is the first public source release. It is an Engineering Preview, not a
+Research Preview or production-ready runtime.
 
-The delivery plan's version markers — `v0.1.0` Event substrate, `v0.2.0`
-Replay + Context, `v0.3.0` Residual + Reflection, `v0.4.0` Reusable assets,
-`v0.5.0-alpha` Legacy + real pilot — are milestones in the plan. They have
-**not** been tagged in this repository.
+### Added
+
+- Append-first SQLite/WAL event ledger, deterministic projections and replay.
+- Bounded context planning, residual/reflection controls and human-gated asset
+  lifecycle.
+- CLI/daemon operator surface, backup/restore, privacy purge and diagnostics.
+- Synthetic scenario, negative-control and asset-lifecycle evaluation fixtures.
+
+### Changed
+
+- Final engineering gate verified on Windows and Ubuntu with Node `22.13.0`.
+- Public documentation states the evidence boundary and excludes private
+  historical corpus from GitHub and Hugging Face publication.
+
+### Known limitations
+
+- Real V1/V2/V2X behavior, GF01 and real Asset benefit remain unvalidated.
+- macOS/arm64 and live provider portability remain untested or experimental.
+- Development-only dependency advisories remain disclosed in the release audit.
+
+There is no npm publication contract for this preview.
+
+## Development history before the first release
 
 ## [Unreleased]
 
@@ -47,7 +65,7 @@ Replay + Context, `v0.3.0` Residual + Reflection, `v0.4.0` Reusable assets,
 
 - `CONTRIBUTING.md`, `SECURITY.md`, this changelog, and the GitHub issue and
   pull-request templates.
-- A Pre-alpha / Research Preview label at the top of the README.
+- An Engineering Preview release boundary and evidence-based limitations.
 
 ## Known limitations at this checkpoint
 

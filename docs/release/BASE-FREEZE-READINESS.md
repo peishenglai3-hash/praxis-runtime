@@ -4,11 +4,18 @@
 **Decision:** **NO-GO**. Base Freeze is not authorized.  
 **Release Engineering:** **NOT STARTED**.
 
+> The Round 1 decision above is historical. The final closeout instruction
+> explicitly permits an `v0.1.0-engineering-preview` despite incomplete real
+> V1/V2/V2X, GF01 and Asset-benefit evidence, provided those limits are stated
+> honestly and no Critical/High/security/privacy/license blocker remains.
+
 ## Final-freeze addendum — 2026-09-19
 
-This document is retained as the Round 1 baseline. The final pre-open-source
-round has not changed the decision to `NO-GO`. Release-facing documents now
-record the following additional facts:
+This section is retained as the Round 1 baseline and is not the current release
+gate. At that point, the final pre-open-source round had not changed the
+decision to `NO-GO`. The later final closeout addendum below supersedes that
+decision for the engineering-preview release class. The Round 1 record includes
+the following facts:
 
 - current public documents containing the author's machine-specific paths were
   redacted; reachable historical commits were not rewritten;
@@ -17,13 +24,29 @@ record the following additional facts:
   and non-secret path metadata remain documented privacy findings;
 - four GitHub Dependabot alert records represent three unique open
   development advisories: two moderate Vitest paths and one low esbuild path;
-- the final tracked-tree clean-install report and exact Node 22 CI run for the
-  candidate commit are now closed: run `35422691407` passed both runners and
-  its artifacts point to clean commit `a55ee2d`;
+- the then-current tracked-tree clean-install report and exact Node 22 CI run
+  were closed: run `35422691407` passed both runners and its artifacts pointed
+  to clean commit `a55ee2d`;
 - V1/V2/V2X real evidence, real asset benefit and GF01 remain unavailable or
   waiting, so the candidate cannot be called a Research Preview.
 
 The release-facing gate is [`PREVIEW-RELEASE-GATE.md`](PREVIEW-RELEASE-GATE.md).
+
+## Final closeout addendum — 2026-09-19
+
+The prior Round 1 `NO-GO` is superseded for the engineering-preview release
+class. The final candidate gate is `PASS — ENGINEERING PREVIEW`:
+
+- run `35422995773` passed Ubuntu and Windows on exact Node `22.13.0`;
+- no Critical or High correctness, security or data-loss blocker was observed;
+- no real secret or private historical corpus is in the release tree;
+- non-secret historical path metadata is disclosed and accepted without history
+  rewrite;
+- V1/V2/V2X, GF01 and real Asset benefit remain Known Limitations, not claims;
+- MIT licensing and the publication manifest are resolved.
+
+The remaining operations are release mechanics: PR, required CI, merge,
+verified `main` SHA, annotated tag and GitHub Release.
 
 ## Closed in this round
 

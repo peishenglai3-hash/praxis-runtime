@@ -17,7 +17,7 @@ Include what you can: what you did, what happened, what you expected, the
 version or commit, and the smallest reproduction you have. A partial report is
 more useful than a withheld one.
 
-This is a pre-alpha research project maintained by one person. There is no
+This is an engineering preview maintained by one person. There is no
 response-time commitment, no bounty, and no support contract. Reports will be
 acknowledged and handled as time allows, and the fix will be recorded in
 [`docs/断点记录.md`](./docs/%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md) with the
