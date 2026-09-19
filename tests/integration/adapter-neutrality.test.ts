@@ -126,7 +126,12 @@ describe("execution / error boundary", () => {
         ...context,
         diagnostic: {
           vendorRequestId: "req_abc123",
-          headers: { authorization: "Bearer sk-abcdefghijklmnopqrstuvwxyz01" },
+          headers: {
+            authorization: [
+              "Bearer",
+              ["sk", "abcdefghijklmnopqrstuvwxyz01"].join("-"),
+            ].join(" "),
+          },
         },
       }),
     );
@@ -270,7 +275,10 @@ describe("observability boundary", () => {
   });
 
   it("withholds a credential in scoped metadata and records where", () => {
-    const secret = "Bearer sk-abcdefghijklmnopqrstuvwxyz012345";
+    const secret = [
+      "Bearer",
+      ["sk", "abcdefghijklmnopqrstuvwxyz012345"].join("-"),
+    ].join(" ");
     const observation = observe({
       providerMetadata: { headers: { authorization: secret } },
     });

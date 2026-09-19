@@ -8,8 +8,8 @@
 
 The main Codex agent personally read the following before modifying code:
 
-- `C:\Users\35636\Downloads\Codex_Implementation_Bible_v1.0.docx` — complete extraction/read, 892 non-empty paragraphs.
-- `C:\Users\35636\Downloads\Codex_Phase3.5_Correction_Pack_v1.0.docx` — complete extraction/read, 507 paragraphs.
+- `Codex_Implementation_Bible_v1.0.docx` — complete extraction/read, 892 non-empty paragraphs; the author's local absolute path is intentionally omitted from the public record.
+- `Codex_Phase3.5_Correction_Pack_v1.0.docx` — complete extraction/read, 507 paragraphs; the author's local absolute path is intentionally omitted from the public record.
 - `docs/RFC/RFC-0001.md`.
 - All ADRs in `docs/ADR/ADR-0001` through `ADR-0015`.
 - `docs/PHASE-3.5-GATE.md`, `docs/PHASE-5-GATE.md`, `docs/PHASE-5.5-RECOVERY-GATE.md`.

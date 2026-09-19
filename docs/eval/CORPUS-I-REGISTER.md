@@ -35,7 +35,7 @@ experiment artefact derived from it may either.
 The owner pointed at two locations. They are different in kind, and conflating
 them would be a mistake.
 
-### 2.1 `D:\红色源代码：洪湖篇\` — the substantive archive
+### 2.1 Author-controlled historical archive — the substantive archive
 
 A structured, machine-readable, already-de-identified research corpus.
 

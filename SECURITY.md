@@ -4,9 +4,10 @@
 
 **Do not open a public issue for a security problem.**
 
-The channel is GitHub's private vulnerability reporting
-(**Security → Report a vulnerability** on this repository). It was enabled on
-2026-09-17 and is the preferred route.
+The preferred channel is GitHub's private vulnerability reporting (**Security →
+Report a vulnerability**) if it is enabled for the repository. Its current
+availability is not asserted here because the public API did not expose a
+security-policy URL during the final-freeze audit.
 
 If it is unavailable, open a minimal public issue that says only that you have
 a security report and asks for a private channel. Do not include the details,
@@ -24,33 +25,33 @@ rest of the project's failure history.
 
 ## Repository security controls
 
-Inspected and changed on 2026-09-17, during Phase 6B, under the owner's
-authorisation to execute the minimum changes where admin capability existed and
-nothing required a plan migration or incurred billing. All of these are free on
-a public repository.
+The repository-level settings below were previously reported by the project
+record. During the final-freeze audit, the public API exposed the repository's
+four Dependabot alerts but did not expose security-policy or code-scanning
+status. Rows marked **not independently revalidated** are not release evidence.
 
-| Setting                             | State       | Why it matters                                                                                                              |
-| ----------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Secret scanning                     | **enabled** | The repository is public and its history is immutable. Scanning is how a future accidental commit is caught.                |
-| Secret scanning **push protection** | **enabled** | The highest-value control: it blocks the commit rather than reporting it afterwards.                                        |
-| Private vulnerability reporting     | **enabled** | Without it this file's first instruction cannot be followed.                                                                |
-| Dependabot alerts                   | **enabled** |                                                                                                                             |
-| Dependabot **security updates**     | disabled    | Available, deliberately off: it opens pull requests automatically, which is a workflow change rather than a visibility one. |
-| Non-provider secret patterns        | disabled    | Available; not enabled.                                                                                                     |
-| Secret-scanning validity checks     | disabled    | Available; not enabled.                                                                                                     |
+| Setting                             | State                             | Why it matters                                                                                                              |
+| ----------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Secret scanning                     | **not independently revalidated** | The public API did not return the setting during this audit.                                                                |
+| Secret scanning **push protection** | **not independently revalidated** | The public API did not return the setting during this audit.                                                                |
+| Private vulnerability reporting     | **not independently revalidated** | `securityPolicyUrl` was `null` during this audit.                                                                           |
+| Dependabot alerts                   | **observed: 4 alerts**            | Alert inventory was queried from GitHub during this audit.                                                                  |
+| Dependabot **security updates**     | disabled                          | Available, deliberately off: it opens pull requests automatically, which is a workflow change rather than a visibility one. |
+| Non-provider secret patterns        | disabled                          | Available; not enabled.                                                                                                     |
+| Secret-scanning validity checks     | disabled                          | Available; not enabled.                                                                                                     |
 
-A full-history audit of all 518 text blobs across every ref was run on
-2026-09-17 and found no credential of any kind. That is the difference between
-"nothing leaked" and "nothing can leak quietly" — the second is what these
-controls buy.
+A full-history audit of the current 74 reachable commits was repeated for the
+final-freeze candidate. It found no high-confidence real credential. It did
+find credential-shaped **synthetic test literals** in historical adapter-
+redaction tests; these are not usable secrets and are now assembled from
+fragments in the working tree. That is the difference between "nothing leaked"
+and "nothing can leak quietly" — the second is what these controls buy.
 
-**One hazard was removed before push protection was enabled.** The Phase 6B
-conformance suite needs credential-shaped values to prove that redaction works,
-and its first draft wrote them as literals — which is exactly what push
-protection blocks, meaning the test written to prove secrets do not leak would
-have blocked the push that carried it. The values are now assembled from
-fragments at runtime, so the test stays realistic and the repository stays
-pushable.
+**One hazard was removed before this candidate was prepared.** The Phase 6B
+conformance suite needs credential-shaped values to prove that redaction works.
+The working-tree values are assembled from fragments at runtime, so the test
+stays realistic without leaving a provider-shaped token literal in the public
+source.
 
 ## What the security boundary actually is
 

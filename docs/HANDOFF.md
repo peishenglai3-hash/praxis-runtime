@@ -3,17 +3,12 @@
 **Handoff target:** GitHub repository
 `https://github.com/peishenglai3-hash/praxis-runtime`
 
-> **Visibility correction, 2026-09-16.** This document, the README, the phase
-> gates and the INC-001 recovery all described this repository as **private**.
-> It is not: `gh repo view` reports `visibility: PUBLIC`, `isPrivate: false`,
-> created `2026-09-14T02:28:27Z`. It has been publicly readable since it
-> existed, and everything on `origin/main` is public. The audit of that tree
-> found no credential, no `.env`, no database file, no raw chat and no DOCX
-> body, and none of those paths was ever committed; `docs/SOURCE-MANIFEST.md`
-> does expose the owner's local absolute paths and personal directory names.
-> No change was made — the visibility decision belongs to the owner. See
-> `BP-056` in [`断点记录.md`](./%E6%96%AD%E7%82%B9%E8%AE%B0%E5%BD%95.md). Until
-> that decision is made, treat every push as **publishing**.
+> **Visibility correction, 2026-09-16; final-freeze privacy correction,
+> 2026-09-19.** GitHub reports this repository as **PUBLIC**. Treat every push
+> as publishing. The final-freeze candidate removes author machine-specific
+> paths from current public documents; historical commits are not rewritten.
+> No credential, `.env`, database, raw chat, DOCX body, or historical corpus is
+> authorized for publication. See `BP-056` and the current release audit.
 
 **Owner:** Lai Peisheng
 
