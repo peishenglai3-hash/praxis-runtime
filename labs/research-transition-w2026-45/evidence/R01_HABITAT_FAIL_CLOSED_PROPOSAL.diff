@@ -1,0 +1,6 @@
+diff --git a/scripts/signal-capture.mjs b/scripts/signal-capture.mjs
+--- a/scripts/signal-capture.mjs
++++ b/scripts/signal-capture.mjs
+@@ -60,1 +60,1 @@
+-    writeFileSync(join(targetDir, `${id}.md`), lines.join("\n"));
++    writeFileSync(join(targetDir, `${id}.md`), lines.join("\n"), { flag: "wx" });
