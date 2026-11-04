@@ -54,3 +54,9 @@ C1修复6523390和当前d58c941为LOCAL_ONLY_COMMIT，远端未包含；不提�
 FENCE_HOST未知，P0仍待Owner；T合同待决，故两diff无新执行；P本地canonical NOT_RUN。匹配Node22.13/pnpm11.19的未来维护窗口需另批；不以安装依赖或降级门禁取得绿。P1/P2及模型主体不在本包执行范围。
 
 冻结四主件的预审SHA交给独立Reviewer；原始意见附入Week Closure，若有一次定点修订，列出变更位置与受影响复核。公开前仅做范围/格式/路径/常见secret模式检查；不是对Git全历史或真实宿主安全的认证。
+
+## Owner批准后的限定续作 · 2026-11-04
+
+本周研究白名单现为11件：原四主件、三JSON、两diff，加evidence/R01_APPROVED_CHECK.mjs与R01_APPROVED_RECEIPT.json；本节覆盖前述9件上限用于这次已获准续作。两份历史收据排版副本不变，新收据为本次Node24.15实际执行。脚本仅恢复已校验公开原字节至新合成副本，应用wx单行修改，限制子进程仅访问该脚本和合成HOME。无依赖安装、无网络/模型/生产库/真实HOME访问。
+
+R01脚本执行版与收据版本通过内容哈希定位；不得用协调器exit0把其ABORT_PATCH结论报成通过。索引故障由合成目录占用索引文件名造成，未更改OS权限；只做一次重试，失败后停止。脚本后续若仅格式化，必须标NOT_REEXECUTED_AFTER_CHANGE；不因此重跑实验。

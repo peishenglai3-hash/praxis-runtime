@@ -77,3 +77,14 @@ P0仍为OWNER_ACTION_REQUIRED。负责人可另行选择：授权只看安装/�
 P1/P1-Lite/G0-B环境修理/P2真实记忆试验均NOT_RUN。Memory选中、送达、实际采用、影响是不同命题；用普通Git/Issue/笔记即可提出一行DESIGN_ONLY引用，不建Schema/引擎。普通工具足够则NO_ADDITION/ABSTAIN。
 
 本周实测人工工时、Token/费用和真实任务净收益UNKNOWN；一轮后验审查只支持有限修订，不能关闭P0或无限滚动下周施工。最终Owner建议及原始Reviewer意见见[Week Closure](WEEK_CLOSURE_DECISION.md)。
+
+## Owner批准后的限定续作 · 2026-11-04
+
+负责人已批准按计划继续；上文WP表与未执行状态为预审历史，本节为最新增量。授权用于元数据级核查、R01合成副本验证及既定研究工件同步，不自动扩大为真实宿主停用、核心合入或发布。
+
+- Habitat元数据：已知两个Skill根和插件cache顶层的名称检查未见同名安装；公共installer自身并不证明宿主注册。未打开真实Habit目录/配置/日志，未禁用任何对象；FENCE_HOST仍UNKNOWN，不能以未找到当已停用。
+- R01：仅在新建合成HOME应用既有wx单行候选。[新收据](evidence/R01_APPROVED_RECEIPT.json)显示同批控制通过、碰撞不覆盖且buffer保留，但第二次flush失败；索引写失败后出现未入索引文件，一次普通重试仍失败。结论ABORT_PATCH / INCOMPLETE_RECOVERY；停止该候选，不继续补平台或合入。
+- TFRK：沿已建议ADVISORY方向形成最小文档候选：将human解释为验证/审查优先级标签，明确它不提供等待批准保证；requires human gate文案若要保留为强制承诺，须另批MANDATORY合同。此为文档候选，正式T仓未改；未把笼统续作批准冒充互斥合同已经签选。
+- canonical：已知5个bundled Node均24.19或24.22.1，默认24.15；未取得22.13现成组合，不安装/升级。pnpm verify仍NOT_RUN。
+
+总状态仍HOLD_FOR_P0。当前可行退出为保留旧写入口FENCE，并由负责人明确宿主核查/停用范围；若需要恢复写入，不能把本次wx候选作为完整修复使用。

@@ -29,3 +29,9 @@
 `TASK_REF | MEMORY_REF | SELECTED? | EXPOSED? | ACTUALLY_READ_OR_USED? | ACTOR/MODEL/TOOL | ACTION_OR_DIFF_REF | EXTERNAL_FEEDBACK_REF | REVISION/REJECTION | DECISION_OWNER | HUMAN_COST | UNKNOWN`
 
 当前无授权实例，所有行为/成本字段保持UNKNOWN或不填。发送日志可证明exposed，不能证明内部阅读；引用/动作也不能单独证明因果。不存在记忆时不要求使用Praxis或填该行；不写正式资产。未来若普通Git+Issue+短笔记可满足，选择REDUCE/ABSTAIN。
+
+## Owner批准后的限定续作 · 2026-11-04
+
+R01-02：H@c3be4af，仅既有wx候选、Node24.15、合成HOME。EXECUTED / BEHAVIOR_VERIFIED限于：碰撞不覆盖、buffer保留、同批两条控制成功。反证同样保留：第二次独立flush失败；索引失败留下未索引文件且一次重试未恢复。不能声称端到端完整性/恢复已修，USER_BENEFIT UNKNOWN。来源为R01_APPROVED_RECEIPT.json及对应检查脚本；正式源码/真实数据未改。
+
+H-02续：名称级安装检查未发现不等于所有Hook停止；HOST状态仍UNKNOWN。P-02续：限定已知runtime缓存未找到22.13，不推断全机不存在。T-02续：ADVISORY仅文档候选，未宣称负责人已选定制度。此前NOT_RUN仅指此前阶段，本次没有P1/P2主体。
