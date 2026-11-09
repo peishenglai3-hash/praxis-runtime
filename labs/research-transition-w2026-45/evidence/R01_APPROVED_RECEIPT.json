@@ -1,0 +1,345 @@
+{
+  "date": "2026-11-04",
+  "authority": "Owner approved continuation; isolated R01 candidate verification only",
+  "node": "v24.15.0",
+  "canonical": false,
+  "sourceSha256": "f2e437b0d43d133501424cdecf2c3b281ba0f572974e14859e457c0759580ab5",
+  "patchedSha256": "b746af9999950ca7fc87e4dcbac1b2a727eeccb8070d85b33c93dd0b562ad8a6",
+  "sandbox": "test-results/stage-closure-20261031/approved-r01-L4iGuj",
+  "sourceUnchanged": true,
+  "cases": [
+    {
+      "case": "two-flushes",
+      "operations": [
+        {
+          "arg": "--capture",
+          "input": {
+            "type": "preference",
+            "category": "synthetic",
+            "value": "first",
+            "evidence": "synthetic-first"
+          },
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+          "stderr": ""
+        },
+        {
+          "arg": "--flush",
+          "input": null,
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"flushed\",\"count\":1,\"theoryFields\":true}\n",
+          "stderr": ""
+        },
+        {
+          "arg": "--capture",
+          "input": {
+            "type": "preference",
+            "category": "synthetic",
+            "value": "second",
+            "evidence": "synthetic-second"
+          },
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+          "stderr": ""
+        },
+        {
+          "arg": "--flush",
+          "input": null,
+          "exitCode": 1,
+          "error": null,
+          "stdout": "",
+          "stderr": "node:fs:561\r\n  return binding.open(\r\n                 ^\r\n\r\nError: EEXIST: file already exists, open '[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\approved-r01-L4iGuj\\separate-flushes\\.codex-habit\\signals\\2026-11\\sig_20261104_001.md'\r\n    at Object.openSync (node:fs:561:18)\r\n    at writeFileSync (node:fs:2428:35)\r\n    at flushBuffer (file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:60:5)\r\n    at file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:109:19\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)\r\n    at async node:internal/modules/esm/loader:639:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\r\n  errno: -4075,\r\n  code: 'EEXIST',\r\n  syscall: 'open',\r\n  path: '[PRAXIS_ROOT]\\\\test-results\\\\stage-closure-20261031\\\\approved-r01-L4iGuj\\\\separate-flushes\\\\.codex-habit\\\\signals\\\\2026-11\\\\sig_20261104_001.md'\r\n}\r\n\r\nNode.js v24.15.0\r\n"
+        }
+      ],
+      "after": {
+        "buffer": {
+          "signals": [
+            {
+              "type": "preference",
+              "category": "synthetic",
+              "value": "second",
+              "evidence": "synthetic-second",
+              "timestamp": "2026-11-04T12:37:01.825Z"
+            }
+          ]
+        },
+        "index": {
+          "signals": [
+            {
+              "id": "sig_20261104_001",
+              "type": "preference",
+              "category": "synthetic",
+              "value": "first",
+              "timestamp": "2026-11-04T12:37:01.695Z",
+              "confidence": 0.5,
+              "order_of_worth": null,
+              "justification": null,
+              "test_count": 0,
+              "test_survival_rate": null,
+              "reflexive_effect": null,
+              "context_label": null,
+              "source": "codex"
+            }
+          ],
+          "patterns": []
+        },
+        "files": [
+          {
+            "name": "sig_20261104_001.md",
+            "sha256": "4bf4deec6870a315616c36f26d6e205346eeb18509b4ceedb000caa2f035b815",
+            "text": "---\ntype: preference\ncategory: synthetic\nvalue: first\ntimestamp: 2026-11-04T12:37:01.695Z\nid: sig_20261104_001\n---\n\nEvidence: synthetic-first"
+          }
+        ]
+      },
+      "noOverwrite": true,
+      "bufferRetained": true,
+      "bothFlushesSucceeded": false
+    },
+    {
+      "case": "single-batch-control",
+      "operations": [
+        {
+          "arg": "--capture",
+          "input": {
+            "type": "preference",
+            "category": "synthetic",
+            "value": "one",
+            "evidence": "synthetic-one"
+          },
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+          "stderr": ""
+        },
+        {
+          "arg": "--capture",
+          "input": {
+            "type": "preference",
+            "category": "synthetic",
+            "value": "two",
+            "evidence": "synthetic-two"
+          },
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"captured\",\"bufferSize\":2}\n",
+          "stderr": ""
+        },
+        {
+          "arg": "--flush",
+          "input": null,
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"flushed\",\"count\":2,\"theoryFields\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "after": {
+        "buffer": {
+          "signals": []
+        },
+        "index": {
+          "signals": [
+            {
+              "id": "sig_20261104_001",
+              "type": "preference",
+              "category": "synthetic",
+              "value": "one",
+              "timestamp": "2026-11-04T12:37:02.265Z",
+              "confidence": 0.5,
+              "order_of_worth": null,
+              "justification": null,
+              "test_count": 0,
+              "test_survival_rate": null,
+              "reflexive_effect": null,
+              "context_label": null,
+              "source": "codex"
+            },
+            {
+              "id": "sig_20261104_002",
+              "type": "preference",
+              "category": "synthetic",
+              "value": "two",
+              "timestamp": "2026-11-04T12:37:02.265Z",
+              "confidence": 0.5,
+              "order_of_worth": null,
+              "justification": null,
+              "test_count": 0,
+              "test_survival_rate": null,
+              "reflexive_effect": null,
+              "context_label": null,
+              "source": "codex"
+            }
+          ],
+          "patterns": []
+        },
+        "files": [
+          {
+            "name": "sig_20261104_001.md",
+            "sha256": "cb3570ba78c94a9ad130917f029d5f66e6bab06b1560d6728f1258244d63022b",
+            "text": "---\ntype: preference\ncategory: synthetic\nvalue: one\ntimestamp: 2026-11-04T12:37:02.265Z\nid: sig_20261104_001\n---\n\nEvidence: synthetic-one"
+          },
+          {
+            "name": "sig_20261104_002.md",
+            "sha256": "f284fbe98d313d5777cdd591d75b9c088d24fd478267aa4e4482e1f7b04310db",
+            "text": "---\ntype: preference\ncategory: synthetic\nvalue: two\ntimestamp: 2026-11-04T12:37:02.265Z\nid: sig_20261104_002\n---\n\nEvidence: synthetic-two"
+          }
+        ]
+      },
+      "consistent": true
+    },
+    {
+      "case": "collision",
+      "operations": [
+        {
+          "arg": "--capture",
+          "input": {
+            "type": "preference",
+            "category": "synthetic",
+            "value": "new",
+            "evidence": "synthetic-new"
+          },
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+          "stderr": ""
+        },
+        {
+          "arg": "--flush",
+          "input": null,
+          "exitCode": 1,
+          "error": null,
+          "stdout": "",
+          "stderr": "node:fs:561\r\n  return binding.open(\r\n                 ^\r\n\r\nError: EEXIST: file already exists, open '[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\approved-r01-L4iGuj\\existing-file\\.codex-habit\\signals\\2026-11\\sig_20261104_001.md'\r\n    at Object.openSync (node:fs:561:18)\r\n    at writeFileSync (node:fs:2428:35)\r\n    at flushBuffer (file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:60:5)\r\n    at file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:109:19\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)\r\n    at async node:internal/modules/esm/loader:639:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\r\n  errno: -4075,\r\n  code: 'EEXIST',\r\n  syscall: 'open',\r\n  path: '[PRAXIS_ROOT]\\\\test-results\\\\stage-closure-20261031\\\\approved-r01-L4iGuj\\\\existing-file\\\\.codex-habit\\\\signals\\\\2026-11\\\\sig_20261104_001.md'\r\n}\r\n\r\nNode.js v24.15.0\r\n"
+        }
+      ],
+      "after": {
+        "buffer": {
+          "signals": [
+            {
+              "type": "preference",
+              "category": "synthetic",
+              "value": "new",
+              "evidence": "synthetic-new",
+              "timestamp": "2026-11-04T12:37:02.384Z"
+            }
+          ]
+        },
+        "index": null,
+        "files": [
+          {
+            "name": "sig_20261104_001.md",
+            "sha256": "61b822fd86521785323f342ba64b7e48ed727123a8486592315829c3135f78a1",
+            "text": "SYNTHETIC_EXISTING"
+          }
+        ]
+      },
+      "noOverwrite": true,
+      "bufferRetained": true
+    },
+    {
+      "case": "index-write-failure-and-one-retry",
+      "operations": [
+        {
+          "arg": "--capture",
+          "input": {
+            "type": "preference",
+            "category": "synthetic",
+            "value": "pending",
+            "evidence": "synthetic-pending"
+          },
+          "exitCode": 0,
+          "error": null,
+          "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+          "stderr": ""
+        },
+        {
+          "arg": "--flush",
+          "input": null,
+          "exitCode": 1,
+          "error": null,
+          "stdout": "",
+          "stderr": "node:fs:2414\r\n    return binding.writeFileUtf8(\r\n                   ^\r\n\r\nError: EISDIR: illegal operation on a directory, open '[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\approved-r01-L4iGuj\\index-failure\\.codex-habit\\.signals_index.json'\r\n    at writeFileSync (node:fs:2414:20)\r\n    at writeIndex (file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:32:26)\r\n    at flushBuffer (file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:79:3)\r\n    at file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:109:19\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)\r\n    at async node:internal/modules/esm/loader:639:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\r\n  errno: -4068,\r\n  code: 'EISDIR',\r\n  syscall: 'open',\r\n  path: '[PRAXIS_ROOT]\\\\test-results\\\\stage-closure-20261031\\\\approved-r01-L4iGuj\\\\index-failure\\\\.codex-habit\\\\.signals_index.json'\r\n}\r\n\r\nNode.js v24.15.0\r\n"
+        },
+        {
+          "arg": "--flush",
+          "input": null,
+          "exitCode": 1,
+          "error": null,
+          "stdout": "",
+          "stderr": "node:fs:561\r\n  return binding.open(\r\n                 ^\r\n\r\nError: EEXIST: file already exists, open '[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\approved-r01-L4iGuj\\index-failure\\.codex-habit\\signals\\2026-11\\sig_20261104_001.md'\r\n    at Object.openSync (node:fs:561:18)\r\n    at writeFileSync (node:fs:2428:35)\r\n    at flushBuffer (file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:60:5)\r\n    at file:///[PRAXIS_ROOT]/test-results/stage-closure-20261031/approved-r01-L4iGuj/signal-capture.mjs:109:19\r\n    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)\r\n    at async node:internal/modules/esm/loader:639:26\r\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\r\n  errno: -4075,\r\n  code: 'EEXIST',\r\n  syscall: 'open',\r\n  path: '[PRAXIS_ROOT]\\\\test-results\\\\stage-closure-20261031\\\\approved-r01-L4iGuj\\\\index-failure\\\\.codex-habit\\\\signals\\\\2026-11\\\\sig_20261104_001.md'\r\n}\r\n\r\nNode.js v24.15.0\r\n"
+        }
+      ],
+      "afterFailure": {
+        "buffer": {
+          "signals": [
+            {
+              "type": "preference",
+              "category": "synthetic",
+              "value": "pending",
+              "evidence": "synthetic-pending",
+              "timestamp": "2026-11-04T12:37:02.620Z"
+            }
+          ]
+        },
+        "index": null,
+        "files": [
+          {
+            "name": "sig_20261104_001.md",
+            "sha256": "716dc4fded5e8d3551148979efac79d2510b6e62db77bf48a683196b0d31ac1a",
+            "text": "---\ntype: preference\ncategory: synthetic\nvalue: pending\ntimestamp: 2026-11-04T12:37:02.745Z\nid: sig_20261104_001\n---\n\nEvidence: synthetic-pending"
+          }
+        ]
+      },
+      "afterRetry": {
+        "buffer": {
+          "signals": [
+            {
+              "type": "preference",
+              "category": "synthetic",
+              "value": "pending",
+              "evidence": "synthetic-pending",
+              "timestamp": "2026-11-04T12:37:02.620Z"
+            }
+          ]
+        },
+        "index": null,
+        "files": [
+          {
+            "name": "sig_20261104_001.md",
+            "sha256": "716dc4fded5e8d3551148979efac79d2510b6e62db77bf48a683196b0d31ac1a",
+            "text": "---\ntype: preference\ncategory: synthetic\nvalue: pending\ntimestamp: 2026-11-04T12:37:02.745Z\nid: sig_20261104_001\n---\n\nEvidence: synthetic-pending"
+          }
+        ]
+      },
+      "bufferRetained": true,
+      "orphanFile": true,
+      "recoverableByPlainRetry": false
+    }
+  ],
+  "verdict": "ABORT_PATCH / INCOMPLETE_RECOVERY — no-overwrite guard is not a complete R01 fix",
+  "host": "NOT_MODIFIED / HABIT_DATA_NOT_READ",
+  "P1_P2": "NOT_RUN",
+  "executedHarnessSha256": "9269af817822ebe287d3d64e66fdef1b07d2f670bd42831b03a9857e844a734f",
+  "metadataReview": {
+    "sameNameSkillRoots": "No matching names in two known roots; limited name metadata only",
+    "pluginCache": "No matching top-level habit directory; no host enablement state verified",
+    "hostHookState": "UNKNOWN",
+    "knownBundledNodeVersions": [
+      "24.22.1",
+      "24.22.1",
+      "24.22.1",
+      "24.19.0",
+      "24.19.0"
+    ],
+    "canonical": "NOT_RUN / known checked runtimes do not match 22.13.0"
+  },
+  "deliveryNote": "Only formatting may follow; delivered harness NOT_REEXECUTED_AFTER_CHANGE; this receipt preserves execution hash.",
+  "sanitization": {
+    "priorReceiptHash": "622e846da1a70c45e0f4ca21b95426f80a425e9416c9f641fcec5d31412b8a10",
+    "scope": "Replace URL-encoded personal root in synthetic error stacks only; case results unchanged",
+    "publicationCheck": "Initial scan stopped on escaped synthetic error-path metadata; corrected before publication; no private corpus or secret involved"
+  }
+}

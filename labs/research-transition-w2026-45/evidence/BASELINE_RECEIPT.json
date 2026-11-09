@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-04",
+  "purpose": "WP-0 evidence review; no behavior rerun",
+  "roots": {
+    "P": "repository root",
+    "H": "test-results/stage-closure-20261031/habitat-source",
+    "T": "../the-final-runtime"
+  },
+  "repos": {
+    "P": {
+      "head": "d58c941f815b66eb00e2f4b742f87f6197c956e1",
+      "tree": "32885a1939b68504a6fd21e6f4cacfb213c54879",
+      "branch": "release/v0.1.0-preview-candidate",
+      "trackedCount": 343,
+      "trackedDigest": "735958375d976433d53835e0d3ac357ff5cf4ad00eb474ccf8da45eb595b0c28",
+      "trackedDiff": ""
+    },
+    "H": {
+      "head": "c3be4af760e8e7ec2f27184584b1c949484305e0",
+      "tree": "0bcc3bdf43f5fd2475cb71f3b06155909844d7b6",
+      "branch": "DETACHED",
+      "trackedCount": 19,
+      "trackedDigest": "b5aa84232eab436654f692dd0be1521b350d16deba2ef7ac68657c60ec6879ad",
+      "trackedDiff": ""
+    },
+    "T": {
+      "head": "88fd1123b1375573cbb2dc19fd3f58e23d2d11e3",
+      "tree": "14f9e2e2814808ce31314a945a4cb179c278ebb9",
+      "branch": "main",
+      "trackedCount": 31,
+      "trackedDigest": "13a87b57a483eea847712a093b8c38696d3c5d27560ecc8e0600fd5d376bf85a",
+      "trackedDiff": ""
+    }
+  },
+  "remoteRead": {
+    "date": "2026-11-04",
+    "tool": "GitHub connector GET branches",
+    "P_main": "64137d3cccc8ae3cdd7f45a22ec5cbcdb55ee8df",
+    "P_candidate": "21851cedcd09c8bf2b531fe38a37f38c5f0fe0e5",
+    "H_main": "c3be4af760e8e7ec2f27184584b1c949484305e0",
+    "T_main": "88fd1123b1375573cbb2dc19fd3f58e23d2d11e3"
+  },
+  "fence": {
+    "DOC": "risk warning in WEEK_READINESS_AND_RISK",
+    "PROJECT": "this-week source/evidence/doc operations only; old capture/flush/install/hooks/H3 scripts excluded from execution; not an OS access restriction",
+    "HOST": "UNKNOWN / NOT INSPECTED",
+    "P0": "OWNER_ACTION_REQUIRED"
+  },
+  "canonical": {
+    "required": "Node 22.13.0 / pnpm 11.19.0",
+    "observedNode": "v24.15.0",
+    "fullVerify": "NOT_RUN"
+  },
+  "legacyReceipts": {
+    "H3_RECEIPT_20261031.json": "16f1ffb2b877fbc01fdc2e5522542f4735e1fbccb543098526d412b62a24bf67",
+    "H3_X3_FLUSH_RECEIPT_20261031.json": "bd057c8566a7c54b8077fee946187ebb2fce2cd8211a5e95932d2c4e24106173"
+  },
+  "sourceFiles": {
+    "packages/assets/src/index.ts": "9303c63d6d2e17f7c1734e8ca7660f05abb5de3c2da5035fcf2dc346710e6101",
+    "packages/contracts/src/assets.ts": "3228b2d2ea448c8b60c8933a2b9627226617ac65696ae3cd33ddc4d5e8507709",
+    "packages/runtime/src/index.ts": "715e66f67afa66812dfab03c2c16ce9e39c91ca7b40e156c5df2e732166c37e8",
+    "packages/store/src/sqlite.ts": "723ce8b6f386980e63cc1cb1166053411c495827054d45fbec321e4b65c574de",
+    "packages/context/src/index.ts": "c41488ae0118198e2d8ac98f788579f30f8fb4806b9307459f6b89c727573edd",
+    "packages/reflection/src/index.ts": "9ebc6f97108cf734c4840fef0b7854246cd82e6dbc6d9be26a31a7610a7c82c2",
+    "evals/src/runner.ts": "6d05951eed2572ee81bdc91d788d8ff2c12e0afef5303ab76c4fc6f27acb2da7"
+  },
+  "excluded": "No real HOME/.praxis/local-only/chat/ZIP/credentials; no raw Bible copied"
+}

@@ -1,0 +1,204 @@
+{
+  "date": "2026-10-31",
+  "check": "X3 original public bytes; same-day repeated flush vs two signals in one batch",
+  "node": "v24.15.0",
+  "ref": "c3be4af760e8e7ec2f27184584b1c949484305e0",
+  "sourceSha256": "f2e437b0d43d133501424cdecf2c3b281ba0f572974e14859e457c0759580ab5",
+  "preflightReceiptSha256": "5e9a5ebbb895c9688589f5e083e83fd9db43fcbddcc0fe946107cd85126f6d24",
+  "sandbox": "test-results/stage-closure-20261031/checks-G4akGp",
+  "publicInputs": [
+    {
+      "type": "preference",
+      "category": "synthetic",
+      "value": "first",
+      "evidence": "synthetic-first"
+    },
+    {
+      "type": "preference",
+      "category": "synthetic",
+      "value": "second",
+      "evidence": "synthetic-second"
+    }
+  ],
+  "operations": [
+    {
+      "command": [
+        "<node24.15>",
+        "--permission",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-write=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "--capture"
+      ],
+      "input": {
+        "type": "preference",
+        "category": "synthetic",
+        "value": "first",
+        "evidence": "synthetic-first"
+      },
+      "exitCode": 0,
+      "error": null,
+      "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "<node24.15>",
+        "--permission",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-write=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "--flush"
+      ],
+      "input": null,
+      "exitCode": 0,
+      "error": null,
+      "stdout": "{\"status\":\"flushed\",\"count\":1,\"theoryFields\":true}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "<node24.15>",
+        "--permission",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-write=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "--capture"
+      ],
+      "input": {
+        "type": "preference",
+        "category": "synthetic",
+        "value": "second",
+        "evidence": "synthetic-second"
+      },
+      "exitCode": 0,
+      "error": null,
+      "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "<node24.15>",
+        "--permission",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-write=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\synthetic-home",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "--flush"
+      ],
+      "input": null,
+      "exitCode": 0,
+      "error": null,
+      "stdout": "{\"status\":\"flushed\",\"count\":1,\"theoryFields\":true}\n",
+      "stderr": ""
+    }
+  ],
+  "afterFirst": {
+    "ids": ["sig_20261031_001"],
+    "values": ["first"],
+    "files": [
+      {
+        "name": "sig_20261031_001.md",
+        "sha256": "ebdf10272f6baba965ac591a1eca3ead5548f3b14153a1f47cd2072b01e87112",
+        "text": "---\ntype: preference\ncategory: synthetic\nvalue: first\ntimestamp: 2026-10-31T07:34:50.793Z\nid: sig_20261031_001\n---\n\nEvidence: synthetic-first"
+      }
+    ]
+  },
+  "afterSecond": {
+    "ids": ["sig_20261031_001", "sig_20261031_001"],
+    "values": ["first", "second"],
+    "files": [
+      {
+        "name": "sig_20261031_001.md",
+        "sha256": "6bd87e1cfbf563d6e29a76696e5515df29804b6bf7e5cf872bfd42f1a0e6d637",
+        "text": "---\ntype: preference\ncategory: synthetic\nvalue: second\ntimestamp: 2026-10-31T07:34:50.952Z\nid: sig_20261031_001\n---\n\nEvidence: synthetic-second"
+      }
+    ]
+  },
+  "controlOperations": [
+    {
+      "command": [
+        "<node24.15>",
+        "--permission",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\single-batch-home",
+        "--allow-fs-write=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\single-batch-home",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "--capture"
+      ],
+      "input": {
+        "type": "preference",
+        "category": "synthetic",
+        "value": "first",
+        "evidence": "synthetic-first"
+      },
+      "exitCode": 0,
+      "error": null,
+      "stdout": "{\"status\":\"captured\",\"bufferSize\":1}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "<node24.15>",
+        "--permission",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\single-batch-home",
+        "--allow-fs-write=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\single-batch-home",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "--capture"
+      ],
+      "input": {
+        "type": "preference",
+        "category": "synthetic",
+        "value": "second",
+        "evidence": "synthetic-second"
+      },
+      "exitCode": 0,
+      "error": null,
+      "stdout": "{\"status\":\"captured\",\"bufferSize\":2}\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "<node24.15>",
+        "--permission",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\single-batch-home",
+        "--allow-fs-write=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\single-batch-home",
+        "--allow-fs-read=[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "[PRAXIS_ROOT]\\test-results\\stage-closure-20261031\\checks-G4akGp\\signal-capture.mjs",
+        "--flush"
+      ],
+      "input": null,
+      "exitCode": 0,
+      "error": null,
+      "stdout": "{\"status\":\"flushed\",\"count\":2,\"theoryFields\":true}\n",
+      "stderr": ""
+    }
+  ],
+  "control": {
+    "ids": ["sig_20261031_001", "sig_20261031_002"],
+    "values": ["first", "second"],
+    "files": [
+      {
+        "name": "sig_20261031_001.md",
+        "sha256": "d04bda0156658d4b25c00b56afbf066ea13ff5da1c1dc938cdbb21cf27a91e75",
+        "text": "---\ntype: preference\ncategory: synthetic\nvalue: first\ntimestamp: 2026-10-31T07:34:51.200Z\nid: sig_20261031_001\n---\n\nEvidence: synthetic-first"
+      },
+      {
+        "name": "sig_20261031_002.md",
+        "sha256": "351108f912e650fd6dd01929d2d6d572e07fd959dee3ca89c2593eab7540edb9",
+        "text": "---\ntype: preference\ncategory: synthetic\nvalue: second\ntimestamp: 2026-10-31T07:34:51.200Z\nid: sig_20261031_002\n---\n\nEvidence: synthetic-second"
+      }
+    ]
+  },
+  "actual": {
+    "sameDay": true,
+    "separateFlushesOverwrite": true,
+    "oneBatchKeepsBoth": true,
+    "sourceUnchanged": true
+  },
+  "limitation": "Synthetic HOME only. No original tree/source change, real Habit data, model calls, OS permission changes or network. This is a deterministic storage counterexample, not behavioral learning evidence."
+}

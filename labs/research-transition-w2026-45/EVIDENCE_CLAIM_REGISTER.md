@@ -1,0 +1,37 @@
+# Evidence Claim Register · W2026-45
+
+唯一声明表；日期2026-11-04。L0 SOURCE、L1 IMPLEMENTED、L2 EXECUTED、L3 BEHAVIOR_VERIFIED、L4 USER_BENEFIT不自动晋升。旧执行日期保留；本周源码/收据复核不是重新运行。当前风险状态以[Readiness](WEEK_READINESS_AND_RISK.md)为准。下表H3链接为本周排版衍生副本，源件/公开副本hash与内容等价检查见[Repro](REPRO_MANIFEST.md)；不将副本排版算作新实验。
+
+| ID / project@SHA                             | 声明与来源/收据                                                                                                                                                      | 当前等级 / 可对外安全表述                                                         | 最强竞争解释 / 可否证条件                                                              | 人工负担 / 允许用途 / 状态                                                                 |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| H-01 H@c3be4af                               | signal-capture.mjs:43/46/60；[X3旧收据](evidence/H3_X3_FLUSH_RECEIPT_20261031.json)，原字节SHA f2e437b0d43d133501424cdecf2c3b281ba0f572974e14859e457c0759580ab5      | 10-31合成Node24.15 L3；“同日两次独立flush覆盖第一文件，同批二条控制保留二文件”    | 实际宿主可能早停用；该解释只消除暴露，不修代码。相同源码/条件保留两文件可反驳行为结论  | Owner另决宿主元数据核查/停用或R01；只限确定性完整性反例；P0_UNRESOLVED，真实损失UNKNOWN    |
+| H-02 H / 本周施工                            | BASELINE_RECEIPT与本周不调用旧写入口的作业范围；未读宿主配置                                                                                                         | L1作业FENCE；“DOC+当前施工链局部控制，HOST未知”                                   | 另一个进程仍可flush；需要获准宿主证据才可关闭                                          | 负责人保留控制权；可作风险治理记录，不作所有实例停用证据；OWNER_ACTION_REQUIRED            |
+| T-01 T@88fd112                               | operators.py:199–204、kernel.py:66–103；[H3旧收据](evidence/H3_RECEIPT_20261031.json) X2：authority/irreversibility=1均human+active1；veto rejected0、缺证据pending0 | 10-31合成Python3.14.3 L3；“路由标签本身未阻止激活”                                | 原Bible伪代码允许Valid直接commit；同情景active0可反驳行为，明确Owner合同才决定是否违约 | 合同核对已做，Owner待选；不是现实越权证据；CONTRACT_AMBIGUITY                              |
+| T-02 T原Bible / 本周合同复核                 | DOCX hash fe4f8fd77c8be694a9299f89502b69e087007e1d1a681068e50b44732958cd6a，P0130/P0189/P0377                                                                        | L0；“参考管线未设置human等待分支，与代码理由存在强弱差异”                         | implicit human语义可能比伪代码强；Owner规范决策可消除歧义                              | 原DOCX不公开；仅规范/工程解释；不当独立批准；CONTRACT_DECISION_NEEDED                      |
+| P-01 P public64137d3 vs local6523390/d58c941 | Git源内容哈希见Readiness；H3.X1含9项actual/expected；原G0-A收据hash 9d65e2aeacba378f629e18cf0db60cf228dc638e4fcca256380b393968024b4b                                 | 本周L0版本比较+10-30domain L3；“本地参考修复区分单episode多引用，公开仍旧”        | 实际调用者可能使用不同版本；公开新ref+匹配回归可改变公开状态                           | 不要求作者重复既定材料；仅工程缺陷/限定修复证据；LOCAL_FIXED/PUBLIC_UNFIXED                |
+| P-02 P@d58c941                               | package.json / ADR-0007 / 本周Node版本元数据                                                                                                                         | L0/L2环境查询；“canonical Node22.13/pnpm11.19新修复验证未完成”                    | 另处可能有未提供的匹配runner；精确HEAD和环境的完整verify收据才关闭                     | 不安装/不修沙箱；可披露限制；CANONICAL_OPEN                                                |
+| P-03 P@d58c941（核心路径公开同形）           | store/sqlite.ts:1908/1975–2032、state replay；对应integration/replay测试为SOURCE                                                                                     | L1；“实现事件与资产catalog事务、revision/CAS和可重建投影”                         | 简单工具可已足够；实现存在不证明真实净收益；适用实际产物反例可缩小机制保证             | 不重跑全套；保留库保证，不冒充L3/L4新结果；IMPLEMENTED，本周NOT_RUN                        |
+| P-04 P@d58c941 / eval harness                | context/index.ts:16/140/341，reflection/index.ts:71/422，evals/runner.ts:781                                                                                         | L1边界；“排序消费外部分数，反思给提案，synthetic passed:true不认证现实候选有效性” | 治理结构仍可能很有用；合理基线下独立任务/成本证据才能测增量                            | 解释者/验证者承担语义劳动；不宣称自主发现/因果学习；USER_BENEFIT UNKNOWN                   |
+| D2A-01 10-28单对回顾                         | 本地COMPARISON.md hash 1a35fb864eb7bee8e122ac3f965ee55a0e1166f85d91a67a33afa3a779e15e15；原输入/输出不公开                                                           | 原记录ACTOR_CLAIM/限定执行证据；“普通记录已守来源边界，Skill稳定增量尚未建立”     | 差异可能是随机生成/提示长度/注意点；公平重复/盲评/人工用时可推翻无证据状态             | 人工效用和总成本未测；只作探索性材料，不能说Skill已无效/显著有效；NO_INCREMENT_ESTABLISHED |
+| R-01 P1/P2                                   | 既有CASE_GATE/RESULTS/G0B_READINESS与本周操作范围                                                                                                                    | L0权限/记录；“本周无B0/B1/B2或真记忆主体试验”                                     | 既有预置六目录不是模型执行；需要真实授权及轨迹才变更                                   | 研究延期不等于产品Bug；模型能力/Skill增量结论不成立；NOT_AUTHORIZED/NOT_RUN                |
+| M-01 手工seam设计                            | 本周仅引用格式；Git/Issue/普通笔记可承载                                                                                                                             | DESIGN_ONLY / INFERRED；“可追溯关系的提案，必要性未知”                            | 普通笔记足够；若不能改善回查或增加劳动则拒绝                                           | 不要求填满卡；NO_ACTION/REJECT/NO_ADDITION有效；未运行P2，不作学习结果                     |
+
+## 论文安全声明白名单
+
+技术报告可以描述H-01/T-01的精确版本、合成输入、控制和旧执行环境；P-01的本地修复与公开版本差异；P-03的实现结构，但必须保留“本周未重跑”及适用范围。不能把原报告中PASS、active或validatorId单独当独立现实证据。
+
+技术—社科写作可以把“来源保全、何者有权批准、治理劳动如何分配、进步标准可被争议”提出为解释命题。它们不是本轮访谈、真实组织影响或The Final已被实证证明的结果。
+
+不允许：Praxis自主Taste/跨任务学习/RSI；记忆因曝光而改善行动；TFRK已经完成实质人工审批；Habitat所有实例已停用；公开版本已包含C1修复；Node24或Python3.14结果替代canonical；本周已证明减负/普通工具无效；单个wx补丁已经保证事务/恢复。
+
+## 只保留一行设计，不制造经验
+
+`TASK_REF | MEMORY_REF | SELECTED? | EXPOSED? | ACTUALLY_READ_OR_USED? | ACTOR/MODEL/TOOL | ACTION_OR_DIFF_REF | EXTERNAL_FEEDBACK_REF | REVISION/REJECTION | DECISION_OWNER | HUMAN_COST | UNKNOWN`
+
+当前无授权实例，所有行为/成本字段保持UNKNOWN或不填。发送日志可证明exposed，不能证明内部阅读；引用/动作也不能单独证明因果。不存在记忆时不要求使用Praxis或填该行；不写正式资产。未来若普通Git+Issue+短笔记可满足，选择REDUCE/ABSTAIN。
+
+## Owner批准后的限定续作 · 2026-11-04
+
+R01-02：H@c3be4af，仅既有wx候选、Node24.15、合成HOME。EXECUTED / BEHAVIOR_VERIFIED限于：碰撞不覆盖、buffer保留、同批两条控制成功。反证同样保留：第二次独立flush失败；索引失败留下未索引文件且一次重试未恢复。不能声称端到端完整性/恢复已修，USER_BENEFIT UNKNOWN。来源为R01_APPROVED_RECEIPT.json及对应检查脚本；正式源码/真实数据未改。
+
+H-02续：名称级安装检查未发现不等于所有Hook停止；HOST状态仍UNKNOWN。P-02续：限定已知runtime缓存未找到22.13，不推断全机不存在。T-02续：ADVISORY仅文档候选，未宣称负责人已选定制度。此前NOT_RUN仅指此前阶段，本次没有P1/P2主体。

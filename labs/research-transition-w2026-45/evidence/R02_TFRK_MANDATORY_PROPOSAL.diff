@@ -1,0 +1,14 @@
+diff --git a/src/tfrk/kernel.py b/src/tfrk/kernel.py
+--- a/src/tfrk/kernel.py
++++ b/src/tfrk/kernel.py
+@@ -75,1 +75,10 @@
+             if validation.status == "Valid":
++                if route.route == "human":
++                    pending = validation.to_dict()
++                    pending["human_decision"] = "required-not-supplied"
++                    self.store.record_pending(candidate, pending)
++                    result["human_decision"] = "required-not-supplied"
++                    result["outcome"] = "pending"
++                    results.append(result)
++                    continue
++

@@ -1,0 +1,625 @@
+{
+  "date": "2026-10-31",
+  "mode": "H3 bounded domain checks; P1/P2 NOT RUN",
+  "preliminaryHarnessFailures": [
+    "First invocation stopped at OUTSIDE_SYNTHETIC_G0A_COPY before X2/X3: loadedEntry was incorrectly treated as repo-relative. Read-only coordinator inspection established evaluator/<label> as its base. Guard retained.",
+    "Second invocation stopped before the Habitat script: audit code compared parsed JSON home with a redacted string. X2 had run but no complete receipt was retained; its final run uses a new disposable copy. Redaction now occurs after semantic comparison. These are audit-harness defects, not product or OS failures; failed attempts are not independent confirmation."
+  ],
+  "node": "v24.15.0",
+  "sandbox": "test-results/stage-closure-20261031/checks-G4akGp",
+  "X1": {
+    "mode": "REUSED_2026-10-30_NOT_REEXECUTED",
+    "receiptSha256": "9d65e2aeacba378f629e18cf0db60cf228dc638e4fcca256380b393968024b4b",
+    "environment": {
+      "node": "v24.15.0",
+      "typescript": "5.9.3",
+      "zod": "4.1.5",
+      "canonical": false,
+      "packageInstall": "NOT RUN",
+      "networkCallsByScripts": 0,
+      "fullCanonicalVerify": "NOT RUN"
+    },
+    "receiptScriptsMatch": true,
+    "sources": {
+      "preview": "1585623063dd1930ef2bad665749738f1b95ff596819f1ca769deba41c47529c",
+      "fault": "1585623063dd1930ef2bad665749738f1b95ff596819f1ca769deba41c47529c",
+      "fixed": "9303c63d6d2e17f7c1734e8ca7660f05abb5de3c2da5035fcf2dc346710e6101",
+      "current": "9303c63d6d2e17f7c1734e8ca7660f05abb5de3c2da5035fcf2dc346710e6101"
+    },
+    "runs": {
+      "fault": {
+        "exitCode": 42,
+        "passed": 4,
+        "failed": 5,
+        "artifactMatches": true,
+        "treeMatches": true,
+        "cases": [
+          {
+            "id": "C1-single-multiple-references",
+            "expected": {
+              "allowed": false,
+              "evidenceCount": 2,
+              "independentEpisodeCount": 1
+            },
+            "actual": {
+              "allowed": true,
+              "targetStatus": "validated",
+              "reasons": [],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": false
+          },
+          {
+            "id": "C1-human-cannot-bypass",
+            "expected": {
+              "allowed": false,
+              "independentEpisodeCount": 1
+            },
+            "actual": {
+              "allowed": true,
+              "targetStatus": "active",
+              "reasons": [],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": false
+          },
+          {
+            "id": "C1-duplicate-reference",
+            "expected": {
+              "allowed": false,
+              "evidenceCount": 1,
+              "independentEpisodeCount": 1
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "promotion requires evidence from at least 2 independent episodes"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": false
+          },
+          {
+            "id": "C1-shared-reference",
+            "expected": {
+              "allowed": false,
+              "evidenceCount": 1,
+              "independentEpisodeCount": 0
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "promotion requires evidence from at least 2 independent episodes"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": false
+          },
+          {
+            "id": "C1-evidence-exposure",
+            "expected": {
+              "allowed": false,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 1
+            },
+            "actual": {
+              "allowed": true,
+              "targetStatus": "validated",
+              "reasons": [],
+              "evidenceCount": 3,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": false
+          },
+          {
+            "id": "NORMAL-two-episodes",
+            "expected": {
+              "allowed": true,
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2
+            },
+            "actual": {
+              "allowed": true,
+              "targetStatus": "validated",
+              "reasons": [],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "NORMAL-active-confirmed",
+            "expected": {
+              "allowed": true,
+              "independentEpisodeCount": 2
+            },
+            "actual": {
+              "allowed": true,
+              "targetStatus": "active",
+              "reasons": [],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "NORMAL-no-confirmation",
+            "expected": {
+              "allowed": false
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "active",
+              "reasons": [
+                "active promotion requires explicit human confirmation"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "NORMAL-severe-counterexample",
+            "expected": {
+              "allowed": false
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "an unresolved severe counterexample blocks promotion"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          }
+        ]
+      },
+      "fixed": {
+        "exitCode": 0,
+        "passed": 9,
+        "failed": 0,
+        "artifactMatches": true,
+        "treeMatches": true,
+        "cases": [
+          {
+            "id": "C1-single-multiple-references",
+            "expected": {
+              "allowed": false,
+              "evidenceCount": 2,
+              "independentEpisodeCount": 1
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "promotion requires evidence from at least 2 independent episodes"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "C1-human-cannot-bypass",
+            "expected": {
+              "allowed": false,
+              "independentEpisodeCount": 1
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "active",
+              "reasons": [
+                "promotion requires evidence from at least 2 independent episodes"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "C1-duplicate-reference",
+            "expected": {
+              "allowed": false,
+              "evidenceCount": 1,
+              "independentEpisodeCount": 1
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "promotion requires at least 2 evidence items",
+                "promotion requires evidence from at least 2 independent episodes"
+              ],
+              "evidenceCount": 1,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "C1-shared-reference",
+            "expected": {
+              "allowed": false,
+              "evidenceCount": 1,
+              "independentEpisodeCount": 0
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "promotion requires at least 2 evidence items",
+                "promotion requires evidence from at least 2 independent episodes"
+              ],
+              "evidenceCount": 1,
+              "independentEpisodeCount": 0,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "C1-evidence-exposure",
+            "expected": {
+              "allowed": false,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 1
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "promotion requires evidence from at least 2 independent episodes"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 1,
+              "exposureInfluencedEvidenceCount": 1
+            },
+            "pass": true
+          },
+          {
+            "id": "NORMAL-two-episodes",
+            "expected": {
+              "allowed": true,
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2
+            },
+            "actual": {
+              "allowed": true,
+              "targetStatus": "validated",
+              "reasons": [],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "NORMAL-active-confirmed",
+            "expected": {
+              "allowed": true,
+              "independentEpisodeCount": 2
+            },
+            "actual": {
+              "allowed": true,
+              "targetStatus": "active",
+              "reasons": [],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "NORMAL-no-confirmation",
+            "expected": {
+              "allowed": false
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "active",
+              "reasons": [
+                "active promotion requires explicit human confirmation"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          },
+          {
+            "id": "NORMAL-severe-counterexample",
+            "expected": {
+              "allowed": false
+            },
+            "actual": {
+              "allowed": false,
+              "targetStatus": "validated",
+              "reasons": [
+                "an unresolved severe counterexample blocks promotion"
+              ],
+              "evidenceCount": 2,
+              "independentEpisodeCount": 2,
+              "exposureInfluencedEvidenceCount": 0
+            },
+            "pass": true
+          }
+        ]
+      }
+    },
+    "negativeControls": {
+      "wrongArtifact": {
+        "exitCode": 41,
+        "signal": null,
+        "timedOut": false,
+        "elapsedMs": 110,
+        "result": {
+          "error": "ARTIFACT_BINDING_MISMATCH"
+        }
+      },
+      "missingArtifact": {
+        "exitCode": 43,
+        "signal": null,
+        "timedOut": false,
+        "elapsedMs": 100,
+        "result": {
+          "error": "ORACLE_CANNOT_LOAD_ARTIFACT",
+          "code": "ENOENT"
+        }
+      },
+      "mutatedDependency": {
+        "exitCode": 44,
+        "signal": null,
+        "timedOut": false,
+        "elapsedMs": 410,
+        "result": {
+          "error": "SNAPSHOT_BINDING_MISMATCH"
+        }
+      }
+    }
+  },
+  "X2": {
+    "ref": "88fd1123b1375573cbb2dc19fd3f58e23d2d11e3",
+    "manifest": [
+      {
+        "path": "src/tfrk/__init__.py",
+        "sha256": "a86dc32ca2522c944c408663cb6cfa4bcee2fa34983928ae210c02acda4ffd46"
+      },
+      {
+        "path": "src/tfrk/adapters/__init__.py",
+        "sha256": "a88220fbe7ac9fbe407bf63ffef123ec31d814a44c083c8e614cf1be149eb694"
+      },
+      {
+        "path": "src/tfrk/adapters/coding.py",
+        "sha256": "dd376f201810062b647893aa954abbef82857dccd099b4a3e32be381350078aa"
+      },
+      {
+        "path": "src/tfrk/cli.py",
+        "sha256": "7db744cb8d84a3342ca8731d776c4677a6ec0279540f0c4fa991b0743e282a16"
+      },
+      {
+        "path": "src/tfrk/kernel.py",
+        "sha256": "698ae8f2985e80e8552cea124ed7392677ee1260ec65ff28d83079ec6b55bb1f"
+      },
+      {
+        "path": "src/tfrk/model.py",
+        "sha256": "3d42e174318b673710ccb0c08f29b36fcecc8480f950907ae50f60fec739f63b"
+      },
+      {
+        "path": "src/tfrk/operators.py",
+        "sha256": "53b4cb5db864bda71cb55c885ab6c807d842930c9eea1ae18f7b1bb18cb9e144"
+      },
+      {
+        "path": "src/tfrk/projection.py",
+        "sha256": "4f54b1900c0c027f5f37aa33010025782232dba5ea0184445aaf185e01f2f477"
+      },
+      {
+        "path": "src/tfrk/store.py",
+        "sha256": "0113eb84d0ca3448043fe9c8e12dacd4c4271deac3d27a92b27a15bd3f334fad"
+      },
+      {
+        "path": "tests/cases/case_a_technical_path.json",
+        "sha256": "a741992575f5dfc9653aa7cd1d73b1778c6bcc3a660dc15da0b1c217e0e7e579"
+      }
+    ],
+    "probeSha256": "7b9ac6ed82787700af7060e5b04d000a9e86b20ec6c87e6dd1d3c9ed97449716",
+    "command": "<python314> -I -S -B probe.py",
+    "run": {
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "stdout": "{\"python\": \"3.14.3\", \"input\": {\"id\": \"case-a-path-mismatch\", \"actor\": {\"id\": \"developer\", \"kind\": \"human\", \"label\": \"developer\"}, \"target\": {\"id\": \"repository-tool\", \"kind\": \"tool\", \"label\": \"repository tool\"}, \"action\": \"open-path\", \"expected\": \"C:\\\\repo\\\\src\", \"observed\": \"/workspace/src\", \"context\": {\"friction_type\": \"execution\", \"environment\": \"windows\", \"protocol_scope\": {\"environment\": \"windows\"}, \"path\": \"C:\\\\repo\\\\src\", \"tool\": \"repository-tool\", \"suggested_action\": {\"kind\": \"normalize-path\", \"strategy\": \"respect the active platform\"}, \"validation_evidence\": [{\"source\": \"fixture-validator:case-a\", \"kind\": \"deterministic_validation\", \"locator\": \"trace:case-a\", \"digest\": \"case-a-validation\"}]}, \"evidence\": [{\"source\": \"fixture:case-a\", \"kind\": \"test_result\", \"locator\": \"trace:case-a\", \"digest\": \"case-a\"}], \"benchmark\": {\"class\": \"A\", \"expected_outcome\": \"committed\", \"expected_validation\": \"Valid\", \"expected_relation_ids\": [], \"acceptable_protocol\": {\"status\": \"active\", \"action_kind\": \"normalize-path\", \"scope_environment\": \"windows\"}, \"unacceptable_protocols\": [{\"status\": \"active\", \"action_kind\": \"ignore-path-mismatch\"}]}, \"timestamp\": \"2026-09-20T10:00:00Z\"}, \"cases\": [{\"case\": \"ordinary\", \"budget\": {\"authority\": 0.0, \"irreversibility\": 0.0}, \"route\": {\"route\": \"deep\", \"reasons\": [\"objectification is warranted\"]}, \"outcome\": \"committed\", \"validation\": \"Valid\", \"active_count\": 1, \"human_approval_supplied\": false}, {\"case\": \"authority-human\", \"budget\": {\"authority\": 1, \"irreversibility\": 0.0}, \"route\": {\"route\": \"human\", \"reasons\": [\"authority boundary requires human gate\"]}, \"outcome\": \"committed\", \"validation\": \"Valid\", \"active_count\": 1, \"human_approval_supplied\": false}, {\"case\": \"irreversibility-human\", \"budget\": {\"authority\": 0.0, \"irreversibility\": 1}, \"route\": {\"route\": \"human\", \"reasons\": [\"irreversible action requires human gate\"]}, \"outcome\": \"committed\", \"validation\": \"Valid\", \"active_count\": 1, \"human_approval_supplied\": false}, {\"case\": \"external-veto\", \"budget\": {\"authority\": 1, \"irreversibility\": 0.0}, \"route\": {\"route\": \"human\", \"reasons\": [\"authority boundary requires human gate\"]}, \"outcome\": \"rejected\", \"validation\": \"Invalid\", \"active_count\": 0, \"human_approval_supplied\": false}, {\"case\": \"no-validator-evidence\", \"budget\": {\"authority\": 1, \"irreversibility\": 0.0}, \"route\": {\"route\": \"human\", \"reasons\": [\"authority boundary requires human gate\"]}, \"outcome\": \"pending\", \"validation\": \"InsufficientEvidence\", \"active_count\": 0, \"human_approval_supplied\": false}]}\r\n",
+      "stderr": ""
+    },
+    "result": {
+      "python": "3.14.3",
+      "input": {
+        "id": "case-a-path-mismatch",
+        "actor": {
+          "id": "developer",
+          "kind": "human",
+          "label": "developer"
+        },
+        "target": {
+          "id": "repository-tool",
+          "kind": "tool",
+          "label": "repository tool"
+        },
+        "action": "open-path",
+        "expected": "C:\\repo\\src",
+        "observed": "/workspace/src",
+        "context": {
+          "friction_type": "execution",
+          "environment": "windows",
+          "protocol_scope": {
+            "environment": "windows"
+          },
+          "path": "C:\\repo\\src",
+          "tool": "repository-tool",
+          "suggested_action": {
+            "kind": "normalize-path",
+            "strategy": "respect the active platform"
+          },
+          "validation_evidence": [
+            {
+              "source": "fixture-validator:case-a",
+              "kind": "deterministic_validation",
+              "locator": "trace:case-a",
+              "digest": "case-a-validation"
+            }
+          ]
+        },
+        "evidence": [
+          {
+            "source": "fixture:case-a",
+            "kind": "test_result",
+            "locator": "trace:case-a",
+            "digest": "case-a"
+          }
+        ],
+        "benchmark": {
+          "class": "A",
+          "expected_outcome": "committed",
+          "expected_validation": "Valid",
+          "expected_relation_ids": [],
+          "acceptable_protocol": {
+            "status": "active",
+            "action_kind": "normalize-path",
+            "scope_environment": "windows"
+          },
+          "unacceptable_protocols": [
+            {
+              "status": "active",
+              "action_kind": "ignore-path-mismatch"
+            }
+          ]
+        },
+        "timestamp": "2026-09-20T10:00:00Z"
+      },
+      "cases": [
+        {
+          "case": "ordinary",
+          "budget": {
+            "authority": 0,
+            "irreversibility": 0
+          },
+          "route": {
+            "route": "deep",
+            "reasons": ["objectification is warranted"]
+          },
+          "outcome": "committed",
+          "validation": "Valid",
+          "active_count": 1,
+          "human_approval_supplied": false
+        },
+        {
+          "case": "authority-human",
+          "budget": {
+            "authority": 1,
+            "irreversibility": 0
+          },
+          "route": {
+            "route": "human",
+            "reasons": ["authority boundary requires human gate"]
+          },
+          "outcome": "committed",
+          "validation": "Valid",
+          "active_count": 1,
+          "human_approval_supplied": false
+        },
+        {
+          "case": "irreversibility-human",
+          "budget": {
+            "authority": 0,
+            "irreversibility": 1
+          },
+          "route": {
+            "route": "human",
+            "reasons": ["irreversible action requires human gate"]
+          },
+          "outcome": "committed",
+          "validation": "Valid",
+          "active_count": 1,
+          "human_approval_supplied": false
+        },
+        {
+          "case": "external-veto",
+          "budget": {
+            "authority": 1,
+            "irreversibility": 0
+          },
+          "route": {
+            "route": "human",
+            "reasons": ["authority boundary requires human gate"]
+          },
+          "outcome": "rejected",
+          "validation": "Invalid",
+          "active_count": 0,
+          "human_approval_supplied": false
+        },
+        {
+          "case": "no-validator-evidence",
+          "budget": {
+            "authority": 1,
+            "irreversibility": 0
+          },
+          "route": {
+            "route": "human",
+            "reasons": ["authority boundary requires human gate"]
+          },
+          "outcome": "pending",
+          "validation": "InsufficientEvidence",
+          "active_count": 0,
+          "human_approval_supplied": false
+        }
+      ]
+    }
+  },
+  "X3": {
+    "ref": "c3be4af760e8e7ec2f27184584b1c949484305e0",
+    "originalSha256": "f2e437b0d43d133501424cdecf2c3b281ba0f572974e14859e457c0759580ab5",
+    "firstBytes": [239, 187, 191, 35, 33, 47],
+    "homeProbe": {
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "stdout": "{\"home\":\"[PRAXIS_ROOT]\\\\test-results\\\\stage-closure-20261031\\\\checks-G4akGp\\\\synthetic-home\"}\n",
+      "stderr": ""
+    },
+    "command": "node --permission --allow-fs-read=<synthetic-home> --allow-fs-write=<synthetic-home> --allow-fs-read=<exact-original-script> <exact-original-script> --buffer",
+    "launch": {
+      "exitCode": 0,
+      "signal": null,
+      "error": null,
+      "stdout": "{\"status\":\"ok\",\"bufferSize\":0}\n",
+      "stderr": ""
+    },
+    "idCollisionStatus": "NOT RUN — original startup succeeded; this harness intentionally contains no extra fault runner",
+    "sourceUnchanged": true,
+    "syntheticHomeEntries": [".codex-habit"]
+  },
+  "limits": "No real user data, model, DB, network test or privilege changes. Node permissions apply only to the no-model X3 script, not P1 agent tools. Python isolation is -I/-S plus audited source and fresh paths, not an OS security boundary.",
+  "evidenceSanitization": {
+    "beforeSha256": "5e9a5ebbb895c9688589f5e083e83fd9db43fcbddcc0fe946107cd85126f6d24",
+    "scope": "Replace escaped synthetic-root path in home-probe stdout; no outcome changes",
+    "executedHarnessSha256": "4c27ee378849836317e8a9ff4c9c46f5fe1433b999fca5119ddc0ea4a4263531",
+    "deliveryScript": "The delivered checks.mjs accepts an explicit existing Python path instead of an author-local constant and redacts escaped paths. This interface-only redaction change was not rerun after the data-loss stop. X3 flush completion has a separate immutable receipt."
+  }
+}
