@@ -78,6 +78,32 @@ describe("ContextPlanner", () => {
     );
   });
 
+  it("keeps exposure explanations aligned for a large selected context set", () => {
+    const manyCandidates = Array.from({ length: 512 }, (_, index) => ({
+      ...candidates[0]!,
+      id: `source-${index}`,
+      sourceEventId: `event-${index}`,
+      seq: index + 1,
+      text: "x",
+    }));
+    const plan = new ContextPlanner().plan({
+      ...baseInput,
+      mode: "reindex",
+      candidates: manyCandidates,
+      budget: {
+        maxItems: manyCandidates.length,
+        maxTokens: manyCandidates.length,
+      },
+    });
+
+    expect(plan.exposureProposals).toHaveLength(manyCandidates.length);
+    expect(plan.exposureProposals.map((proposal) => proposal.itemId)).toEqual(
+      plan.selected.map((item) => item.id),
+    );
+    expect(plan.exposureProposals.map((proposal) => proposal.reason)).toEqual(
+      plan.reasons.map((reason) => reason.explanation),
+    );
+  });
   it("implements REUSE delta and invalidation without importing residual logic", () => {
     const planner = new ContextPlanner();
     const previous = planner.plan({

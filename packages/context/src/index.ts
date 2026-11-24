@@ -155,6 +155,7 @@ export class ContextPlanner {
 
     const selected: ContextItem[] = [];
     const reasons: ContextReason[] = [];
+    const exposureProposals: ContextExposureProposal[] = [];
     let usedTokens = 0;
     for (const entry of scored) {
       if (selected.length >= input.budget.maxItems) break;
@@ -179,6 +180,7 @@ export class ContextPlanner {
       };
       selected.push(item);
       usedTokens += tokenEstimate;
+      const explanation = explainScore(entry.source, entry.score, this.config);
       reasons.push({
         itemId: item.id,
         score: entry.score,
@@ -189,12 +191,9 @@ export class ContextPlanner {
           explicitPriority: entry.source.explicitPriority,
           activeRuleRelevance: entry.source.activeRuleRelevance,
         },
-        explanation: explainScore(entry.source, entry.score, this.config),
+        explanation,
       });
-    }
-
-    const exposureProposals: ContextExposureProposal[] = selected.map(
-      (item) => ({
+      exposureProposals.push({
         planId: input.planId,
         rankingVersion: this.config.version,
         generatedAt: input.generatedAt,
@@ -203,11 +202,9 @@ export class ContextPlanner {
         sourceEventId: item.sourceEventId,
         sourceOrigin: item.sourceOrigin,
         stateSeq: input.stateSeq,
-        reason:
-          reasons.find((reason) => reason.itemId === item.id)?.explanation ??
-          "selected",
-      }),
-    );
+        reason: explanation,
+      });
+    }
 
     return {
       classification: "candidate",
