@@ -2,8 +2,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { Buffer } from "node:buffer";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import process from "node:process";
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -231,26 +233,22 @@ fs.writeFileSync(
   JSON.stringify(redact(result), null, 2) + "\n",
   { flag: "wx" },
 );
-console.log(
+process.stdout.write(
   JSON.stringify(
     {
       verdict: result.verdict,
-      rows: rows.map(
-        ({
-          case: name,
-          operations,
-          after,
-          afterFailure,
-          afterRetry,
-          ...flags
-        }) => ({
-          case: name,
-          exits: operations.map((x) => x.exitCode),
-          ...flags,
-        }),
-      ),
+      rows: rows.map((row) => ({
+        case: row.case,
+        exits: row.operations.map((operation) => operation.exitCode),
+        ...Object.fromEntries(
+          Object.entries(row).filter(
+            ([key]) =>
+              !["case", "operations", "after", "afterFailure", "afterRetry"].includes(key),
+          ),
+        ),
+      })),
     },
     null,
     2,
-  ),
+  ) + "\n",
 );
