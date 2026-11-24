@@ -243,7 +243,13 @@ process.stdout.write(
         ...Object.fromEntries(
           Object.entries(row).filter(
             ([key]) =>
-              !["case", "operations", "after", "afterFailure", "afterRetry"].includes(key),
+              ![
+                "case",
+                "operations",
+                "after",
+                "afterFailure",
+                "afterRetry",
+              ].includes(key),
           ),
         ),
       })),
